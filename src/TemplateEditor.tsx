@@ -22,27 +22,88 @@ import TextFieldsIcon from "@mui/icons-material/TextFields";
 import HorizontalRuleIcon from "@mui/icons-material/HorizontalRule";
 import { Rnd, type RndDragCallback, type RndResizeCallback } from "react-rnd";
 
-export type PaperSize = "A4" | "A3" | "Letter" | string;
-export type Orientation = "landscape" | "portrait" | string;
+/**
+ * ✅ Now uses template.paperSize + template.orientation to compute canvas aspect ratio.
+ * Supports ISO A-series + common NA sizes. Unknown sizes fallback to A4.
+ */
 
-export type Background = {
-    url: string;
-    type: "image" | "color";
-    color?: string;
+// -------------------- Paper sizes --------------------
+type Orientation = "portrait" | "landscape" | string;
+type PaperKey =
+    | "A0" | "A1" | "A2" | "A3" | "A4" | "A5" | "A6"
+    | "LETTER" | "LEGAL" | "TABLOID" | "JUNIOR_LEGAL"
+    | "B4_JIS"
+    | "ARCH_A"
+    | "C4";
+
+type PaperSizeDef = { key: PaperKey; label: string; wMm: number; hMm: number };
+
+const PAPER_SIZES: Record<PaperKey, PaperSizeDef> = {
+    A0: { key: "A0", label: "A0", wMm: 841, hMm: 1189 },
+    A1: { key: "A1", label: "A1", wMm: 594, hMm: 841 },
+    A2: { key: "A2", label: "A2", wMm: 420, hMm: 594 },
+    A3: { key: "A3", label: "A3", wMm: 297, hMm: 420 },
+    A4: { key: "A4", label: "A4", wMm: 210, hMm: 297 },
+    A5: { key: "A5", label: "A5", wMm: 148, hMm: 210 },
+    A6: { key: "A6", label: "A6", wMm: 105, hMm: 148 },
+
+    LETTER: { key: "LETTER", label: "Letter (ANSI A)", wMm: 216, hMm: 279 },
+    LEGAL: { key: "LEGAL", label: "Legal", wMm: 216, hMm: 356 },
+    TABLOID: { key: "TABLOID", label: "Tabloid/Ledger (ANSI B)", wMm: 279, hMm: 432 },
+    JUNIOR_LEGAL: { key: "JUNIOR_LEGAL", label: "Junior Legal", wMm: 127, hMm: 203 },
+
+    B4_JIS: { key: "B4_JIS", label: "B4 (JIS)", wMm: 257, hMm: 364 },
+    ARCH_A: { key: "ARCH_A", label: "Arch A", wMm: 229, hMm: 305 },
+    C4: { key: "C4", label: "C4 Envelope", wMm: 229, hMm: 324 },
 };
 
+// template uses "A4" etc; we normalize to our keys
+function normalizePaperKey(paperSize: string | undefined): PaperKey {
+    if (!paperSize) return "A4";
+    const v = paperSize.trim().toUpperCase();
+
+    // ISO A sizes
+    if (/^A[0-6]$/.test(v)) return v as PaperKey;
+
+    // North America and aliases
+    if (v === "LETTER" || v === "ANSI A") return "LETTER";
+    if (v === "LEGAL") return "LEGAL";
+    if (v === "TABLOID" || v === "LEDGER" || v === "ANSI B") return "TABLOID";
+    if (v === "JUNIOR LEGAL" || v === "JUNIOR_LEGAL") return "JUNIOR_LEGAL";
+
+    // Others
+    if (v === "B4" || v === "B4_JIS") return "B4_JIS";
+    if (v === "ARCH A" || v === "ARCH_A") return "ARCH_A";
+    if (v === "C4") return "C4";
+
+    return "A4";
+}
+
+function normalizeOrientation(o: Orientation | undefined): "portrait" | "landscape" {
+    const v = String(o ?? "portrait").toLowerCase();
+    return v === "landscape" ? "landscape" : "portrait";
+}
+
+function getAspectRatioMm(paperKey: PaperKey, orientation: "portrait" | "landscape"): number {
+    const s = PAPER_SIZES[paperKey] ?? PAPER_SIZES.A4;
+    // CSS aspect-ratio expects width/height
+    return orientation === "portrait" ? s.wMm / s.hMm : s.hMm / s.wMm;
+}
+
+// -------------------- Template model types --------------------
+export type Background = { url: string; type: "image" | "color"; color?: string };
 export type BlockType = "text" | "image" | "horizontal-line";
 
 export type BaseBlockStyle = {
-    top?: string; // percent string
-    left?: string; // percent string
-    width?: string; // percent string
-    height?: string; // percent string
+    top?: string;
+    left?: string;
+    width?: string;
+    height?: string;
 };
 
 export type TextBlockStyle = BaseBlockStyle & {
     color?: string;
-    fontSize?: string; // like "35em" in your JSON
+    fontSize?: string;
     fontStyle?: "normal" | "italic" | string;
     textAlign?: "left" | "center" | "right" | string;
     fontFamily?: string;
@@ -50,43 +111,20 @@ export type TextBlockStyle = BaseBlockStyle & {
     textDecoration?: "none" | "underline" | "line-through" | string;
 };
 
-export type LineBlockStyle = BaseBlockStyle & {
-    backgroundColor?: string;
-};
+export type LineBlockStyle = BaseBlockStyle & { backgroundColor?: string };
+export type ImageBlockStyle = BaseBlockStyle;
 
-export type ImageBlockStyle = BaseBlockStyle & {
-    // optionally add objectFit etc later
-};
-
-export type TextBlock = {
-    id: string;
-    type: "text";
-    style: TextBlockStyle;
-    value: string;
-    autoScale?: boolean;
-};
-
-export type ImageBlock = {
-    id: string;
-    type: "image";
-    style: ImageBlockStyle;
-    value: string; // path/url
-};
-
-export type HorizontalLineBlock = {
-    id: string;
-    type: "horizontal-line";
-    style: LineBlockStyle;
-};
-
+export type TextBlock = { id: string; type: "text"; style: TextBlockStyle; value: string; autoScale?: boolean };
+export type ImageBlock = { id: string; type: "image"; style: ImageBlockStyle; value: string };
+export type HorizontalLineBlock = { id: string; type: "horizontal-line"; style: LineBlockStyle };
 export type Block = TextBlock | ImageBlock | HorizontalLineBlock;
 
-export interface Template {
+export type Template = {
     name: string;
     background: Background;
     blocks: Block[];
-    paperSize: PaperSize;
-    orientation: Orientation;
+    paperSize: string; // "A4", "LETTER", ...
+    orientation: Orientation; // "landscape" | "portrait"
     thumbnail?: string;
     isDefault?: boolean;
     createdAt?: string;
@@ -97,64 +135,53 @@ export interface Template {
     type?: string;
 };
 
-export type TemplateEditorProps = {
-    initialTemplate: Template;
-    assetBaseUrl?: string;
-};
+export type TemplateEditorProps = { initialTemplate: Template; assetBaseUrl?: string };
 
 type Size = { w: number; h: number };
 
-// -------------------- Constants / helpers --------------------
-const A4_LANDSCAPE_RATIO = 297 / 210;
-
+// -------------------- helpers --------------------
 function clamp(n: number, min: number, max: number) {
     return Math.max(min, Math.min(max, n));
 }
-
 function pctToPx(pct: string | undefined, totalPx: number): number {
     if (!pct) return 0;
     const v = parseFloat(String(pct).replace("%", ""));
     if (Number.isNaN(v)) return 0;
     return (v / 100) * totalPx;
 }
-
 function pxToPct(px: number, totalPx: number): string {
     if (!totalPx) return "0%";
     return `${(px / totalPx) * 100}%`;
 }
-
 function makeId(): string {
     return `blk_${Math.random().toString(16).slice(2)}_${Date.now()}`;
 }
-
 function deepClone<T>(obj: T): T {
     return JSON.parse(JSON.stringify(obj)) as T;
 }
-
 function normalizeBlock(block: Block): Block {
     const b = deepClone(block);
 
     if (!b.style.top) b.style.top = "10%";
     if (!b.style.left) b.style.left = "10%";
-
     if (!b.style.width) b.style.width = b.type === "horizontal-line" ? "30%" : "20%";
     if (!b.style.height) b.style.height = b.type === "horizontal-line" ? "0.3%" : "8%";
 
     if (b.type === "text") {
         const s = b.style as TextBlockStyle;
-        if (!s.color) s.color = "#333333";
-        if (!s.fontFamily) s.fontFamily = "serif";
-        if (!s.fontSize) s.fontSize = "24em";
-        if (!s.fontStyle) s.fontStyle = "normal";
-        if (!s.textAlign) s.textAlign = "left";
-        if (!s.fontWeight) s.fontWeight = 400;
-        if (!s.textDecoration) s.textDecoration = "none";
+        s.color ??= "#333333";
+        s.fontFamily ??= "serif";
+        s.fontSize ??= "24em";
+        s.fontStyle ??= "normal";
+        s.textAlign ??= "left";
+        s.fontWeight ??= 400;
+        s.textDecoration ??= "none";
     }
 
     if (b.type === "horizontal-line") {
         const s = b.style as LineBlockStyle;
-        if (!s.backgroundColor) s.backgroundColor = "#333333";
-        if (!s.height) s.height = "0.3%";
+        s.backgroundColor ??= "#333333";
+        s.height ??= "0.3%";
     }
 
     return b;
@@ -170,11 +197,8 @@ function isLineBlock(b: Block): b is HorizontalLineBlock {
     return b.type === "horizontal-line";
 }
 
-// -------------------- Component --------------------
-export default function TemplateEditor({
-                                           initialTemplate,
-                                           assetBaseUrl = "",
-                                       }: TemplateEditorProps) {
+// -------------------- component --------------------
+export default function TemplateEditor({ initialTemplate, assetBaseUrl = "" }: TemplateEditorProps) {
     const [template, setTemplate] = useState<Template>(() => {
         const t = deepClone(initialTemplate);
         t.blocks = (t.blocks ?? []).map(normalizeBlock);
@@ -182,15 +206,19 @@ export default function TemplateEditor({
     });
 
     const [selectedId, setSelectedId] = useState<string | null>(null);
+    const selectedBlock = useMemo(
+        () => template.blocks.find((b) => b.id === selectedId) ?? null,
+        [template.blocks, selectedId]
+    );
 
-    const selectedBlock = useMemo<Block | null>(() => {
-        return template.blocks.find((b) => b.id === selectedId) ?? null;
-    }, [template.blocks, selectedId]);
+    const paperKey = normalizePaperKey(template.paperSize);
+    const orientation = normalizeOrientation(template.orientation);
+    const aspectRatio = getAspectRatioMm(paperKey, orientation); // width/height
 
     const canvasOuterRef = useRef<HTMLDivElement | null>(null);
     const [canvasSize, setCanvasSize] = useState<Size>({
         w: 1000,
-        h: 1000 / A4_LANDSCAPE_RATIO,
+        h: 1000 / aspectRatio,
     });
 
     useEffect(() => {
@@ -200,36 +228,30 @@ export default function TemplateEditor({
         const ro = new ResizeObserver(() => {
             const rect = el.getBoundingClientRect();
             const w = rect.width;
-            const h = w / A4_LANDSCAPE_RATIO;
+            const h = w / aspectRatio;
             setCanvasSize({ w, h });
         });
 
         ro.observe(el);
         return () => ro.disconnect();
-    }, []);
+    }, [aspectRatio]);
 
     const bgUrl =
-        template.background?.type === "image"
-            ? `${assetBaseUrl}${template.background.url}`
-            : null;
+        template.background?.type === "image" ? `${assetBaseUrl}${template.background.url}` : null;
 
     function updateBlock(blockId: string, patch: Partial<Block>) {
         setTemplate((prev) => {
             const next = deepClone(prev);
-            next.blocks = next.blocks.map((b) =>
-                b.id === blockId ? ({ ...b, ...patch } as Block) : b
-            );
+            next.blocks = next.blocks.map((b) => (b.id === blockId ? ({ ...b, ...patch } as Block) : b));
             return next;
         });
     }
 
-    function updateBlockStyle(blockId: string, patch: Partial<BaseBlockStyle & any>) {
+    function updateBlockStyle(blockId: string, patch: Partial<BaseBlockStyle & Record<string, unknown>>) {
         setTemplate((prev) => {
             const next = deepClone(prev);
             next.blocks = next.blocks.map((b) =>
-                b.id === blockId
-                    ? ({ ...b, style: { ...(b.style ?? {}), ...patch } } as Block)
-                    : b
+                b.id === blockId ? ({ ...b, style: { ...(b.style ?? {}), ...patch } } as Block) : b
             );
             return next;
         });
@@ -257,31 +279,20 @@ export default function TemplateEditor({
                     textAlign: "left",
                     textDecoration: "none",
                 },
-            } satisfies TextBlock) as TextBlock;
+            });
         } else if (type === "image") {
             block = normalizeBlock({
                 id: makeId(),
                 type: "image",
                 value: "",
-                style: {
-                    top: "10%",
-                    left: "10%",
-                    width: "20%",
-                    height: "20%",
-                },
-            } satisfies ImageBlock) as ImageBlock;
+                style: { top: "10%", left: "10%", width: "20%", height: "20%" },
+            });
         } else {
             block = normalizeBlock({
                 id: makeId(),
                 type: "horizontal-line",
-                style: {
-                    top: "10%",
-                    left: "10%",
-                    width: "30%",
-                    height: "0.3%",
-                    backgroundColor: "#333333",
-                },
-            } satisfies HorizontalLineBlock) as HorizontalLineBlock;
+                style: { top: "10%", left: "10%", width: "30%", height: "0.3%", backgroundColor: "#333333" },
+            });
         }
 
         setTemplate((prev) => ({ ...prev, blocks: [...prev.blocks, block] }));
@@ -298,8 +309,8 @@ export default function TemplateEditor({
         await navigator.clipboard.writeText(JSON.stringify(template, null, 2));
     }
 
-    const onDragStop: RndDragCallback = (e, d) => {
-        // block id stored in data-attr
+    // Drag/resize callbacks (we read id from data-block-id)
+    const onDragStop: RndDragCallback = (_e, d) => {
         const id = (d.node as HTMLElement).dataset.blockId;
         if (!id) return;
         updateBlockStyle(id, {
@@ -308,7 +319,7 @@ export default function TemplateEditor({
         });
     };
 
-    const onResizeStop: RndResizeCallback = (e, direction, ref, delta, position) => {
+    const onResizeStop: RndResizeCallback = (_e, _dir, ref, _delta, position) => {
         const id = (ref as HTMLElement).dataset.blockId;
         if (!id) return;
 
@@ -325,8 +336,8 @@ export default function TemplateEditor({
 
     return (
         <Box sx={{ display: "flex", height: "100vh", bgcolor: "background.default" }}>
-            {/* Left side: canvas */}
-            <Box sx={{ flex: 1, p: 2, overflow: "auto" }}>
+            {/* Left: Canvas */}
+            <Box sx={{ flex: 1, p: 2, overflow: "auto", backgroundColor: "red" }}>
                 <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
                     <Button startIcon={<TextFieldsIcon />} variant="contained" onClick={() => addBlock("text")}>
                         Add Text
@@ -334,7 +345,11 @@ export default function TemplateEditor({
                     <Button startIcon={<ImageIcon />} variant="contained" onClick={() => addBlock("image")}>
                         Add Image
                     </Button>
-                    <Button startIcon={<HorizontalRuleIcon />} variant="contained" onClick={() => addBlock("horizontal-line")}>
+                    <Button
+                        startIcon={<HorizontalRuleIcon />}
+                        variant="contained"
+                        onClick={() => addBlock("horizontal-line")}
+                    >
                         Add Line
                     </Button>
 
@@ -362,6 +377,7 @@ export default function TemplateEditor({
                         borderRadius: 2,
                         boxShadow: 3,
                         bgcolor: "#fff",
+                        backgroundColor:"blue",
                         position: "relative",
                         userSelect: "none",
                     }}
@@ -369,7 +385,7 @@ export default function TemplateEditor({
                     <Box
                         sx={{
                             width: "100%",
-                            aspectRatio: `${A4_LANDSCAPE_RATIO}`,
+                            aspectRatio: `${aspectRatio}`, // ✅ computed from paper + orientation
                             position: "relative",
                             overflow: "hidden",
                             borderRadius: 2,
@@ -403,14 +419,12 @@ export default function TemplateEditor({
                                     onDragStop={onDragStop}
                                     onResizeStop={onResizeStop}
                                     enableResizing
-                                    disableDragging={false}
                                     style={{
                                         outline: isSelected ? "2px solid #1976d2" : "none",
                                         outlineOffset: "2px",
                                         borderRadius: 4,
                                     }}
                                 >
-                                    {/* We store the id on child node for drag/resize callbacks */}
                                     <Box data-block-id={b.id} sx={{ width: "100%", height: "100%" }}>
                                         <BlockRenderer block={b} assetBaseUrl={assetBaseUrl} />
                                     </Box>
@@ -421,10 +435,10 @@ export default function TemplateEditor({
                 </Box>
             </Box>
 
-            {/* Right side: inspector */}
+            {/* Right: Inspector */}
             <Drawer
                 variant="permanent"
-                anchor="right"
+                anchor="left"
                 PaperProps={{ sx: { width: 360, p: 2, borderLeft: "1px solid", borderColor: "divider" } }}
             >
                 <Typography variant="h6">Inspector</Typography>
@@ -437,7 +451,7 @@ export default function TemplateEditor({
                 {selectedBlock ? (
                     <Inspector
                         block={selectedBlock}
-                        onPatch={(patch) => updateBlock(selectedBlock.id, patch as Partial<Block>)}
+                        onPatch={(patch) => updateBlock(selectedBlock.id, patch)}
                         onStylePatch={(patch) => updateBlockStyle(selectedBlock.id, patch)}
                     />
                 ) : (
@@ -461,27 +475,35 @@ export default function TemplateEditor({
                 />
 
                 <Stack direction="row" spacing={1}>
-                    <TextField
-                        fullWidth
-                        label="Paper size"
-                        value={template.paperSize ?? ""}
-                        onChange={(e) => setTemplate((p) => ({ ...p, paperSize: e.target.value }))}
-                    />
-                    <TextField
-                        fullWidth
-                        label="Orientation"
-                        value={template.orientation ?? ""}
-                        onChange={(e) => setTemplate((p) => ({ ...p, orientation: e.target.value }))}
-                    />
-                </Stack>
+                    <FormControl fullWidth>
+                        <InputLabel id="paper-label">Paper size</InputLabel>
+                        <Select
+                            labelId="paper-label"
+                            label="Paper size"
+                            value={paperKey}
+                            onChange={(e: any) => setTemplate((p) => ({ ...p, paperSize: e.target.value }))}
+                        >
+                            {Object.values(PAPER_SIZES).map((p) => (
+                                <MenuItem key={p.key} value={p.key}>
+                                    {p.label}
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
 
-                <TextField
-                    fullWidth
-                    label="Asset base URL"
-                    value={assetBaseUrl}
-                    helperText="Pass this as a prop in real usage."
-                    sx={{ mt: 1.5 }}
-                />
+                    <FormControl fullWidth>
+                        <InputLabel id="ori-label">Orientation</InputLabel>
+                        <Select
+                            labelId="ori-label"
+                            label="Orientation"
+                            value={orientation}
+                            onChange={(e: any) => setTemplate((p) => ({ ...p, orientation: e.target.value }))}
+                        >
+                            <MenuItem value="portrait">portrait</MenuItem>
+                            <MenuItem value="landscape">landscape</MenuItem>
+                        </Select>
+                    </FormControl>
+                </Stack>
 
                 <TextField
                     fullWidth
@@ -495,6 +517,10 @@ export default function TemplateEditor({
                     }
                     sx={{ mt: 1.5 }}
                 />
+
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
+                    Canvas ratio: {aspectRatio.toFixed(4)} (width/height) • {paperKey} • {orientation}
+                </Typography>
             </Drawer>
         </Box>
     );
@@ -505,7 +531,6 @@ function BlockRenderer({ block, assetBaseUrl }: { block: Block; assetBaseUrl: st
     const s = block.style;
 
     if (isTextBlock(block)) {
-        // Your data uses "em"; here we just treat the numeric part as px-like.
         const fontSizeNum = parseFloat(String(s.fontSize ?? "24").replace("em", ""));
         const fontSizePx = clamp(Number.isNaN(fontSizeNum) ? 24 : fontSizeNum, 6, 200);
 
@@ -531,7 +556,7 @@ function BlockRenderer({ block, assetBaseUrl }: { block: Block; assetBaseUrl: st
                     fontSize: `${fontSizePx}px`,
                 }}
             >
-                {block.value ?? ""}
+                {block.value}
             </Box>
         );
     }
@@ -577,7 +602,7 @@ function Inspector({
                    }: {
     block: Block;
     onPatch: (patch: Partial<Block>) => void;
-    onStylePatch: (patch: Partial<BaseBlockStyle & Record<string, any>>) => void;
+    onStylePatch: (patch: Partial<BaseBlockStyle & Record<string, unknown>>) => void;
 }) {
     const s = block.style;
 
@@ -587,12 +612,11 @@ function Inspector({
                 {block.type.toUpperCase()} • {block.id}
             </Typography>
 
-            {/* Value */}
             {block.type !== "horizontal-line" && (
                 <TextField
                     fullWidth
                     label={block.type === "image" ? "Image value (path/url)" : "Text value"}
-                    value={(block as TextBlock | ImageBlock).value ?? ""}
+                    value={("value" in block ? block.value : "") ?? ""}
                     onChange={(e) => onPatch({ value: e.target.value } as Partial<Block>)}
                 />
             )}
@@ -630,9 +654,9 @@ function Inspector({
                         />
 
                         <FormControl fullWidth>
-                            <InputLabel id="font-style-label">Font style</InputLabel>
+                            <InputLabel id="fs-label">Font style</InputLabel>
                             <Select
-                                labelId="font-style-label"
+                                labelId="fs-label"
                                 label="Font style"
                                 value={String(s.fontStyle ?? "normal")}
                                 onChange={(e: any) => onStylePatch({ fontStyle: e.target.value })}
@@ -655,9 +679,9 @@ function Inspector({
                     </ToggleButtonGroup>
 
                     <FormControl fullWidth>
-                        <InputLabel id="decor-label">Decoration</InputLabel>
+                        <InputLabel id="dec-label">Decoration</InputLabel>
                         <Select
-                            labelId="decor-label"
+                            labelId="dec-label"
                             label="Decoration"
                             value={String(s.textDecoration ?? "none")}
                             onChange={(e: any) => onStylePatch({ textDecoration: e.target.value })}
@@ -669,9 +693,9 @@ function Inspector({
                     </FormControl>
 
                     <FormControl fullWidth>
-                        <InputLabel id="autoscale-label">AutoScale</InputLabel>
+                        <InputLabel id="as-label">AutoScale</InputLabel>
                         <Select
-                            labelId="autoscale-label"
+                            labelId="as-label"
                             label="AutoScale"
                             value={String(Boolean(block.autoScale))}
                             onChange={(e: any) => onPatch({ autoScale: e.target.value === "true" } as Partial<Block>)}
@@ -693,16 +717,10 @@ function Inspector({
             )}
 
             <Divider />
-
             <Typography variant="subtitle2">Layout (% values)</Typography>
 
             <Stack direction="row" spacing={1}>
-                <TextField
-                    fullWidth
-                    label="Top"
-                    value={s.top ?? ""}
-                    onChange={(e) => onStylePatch({ top: e.target.value })}
-                />
+                <TextField fullWidth label="Top" value={s.top ?? ""} onChange={(e) => onStylePatch({ top: e.target.value })} />
                 <TextField
                     fullWidth
                     label="Left"
