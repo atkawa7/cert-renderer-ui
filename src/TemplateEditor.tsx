@@ -25,11 +25,6 @@ import TextFieldsIcon from "@mui/icons-material/TextFields";
 import HorizontalRuleIcon from "@mui/icons-material/HorizontalRule";
 import { Rnd, type RndDragCallback, type RndResizeCallback } from "react-rnd";
 
-/**
- * Updates:
- * ✅ Horizontal lines are deletable (Delete button works for any selected block)
- * ✅ Backspace/Delete keys delete selected block (but NOT while typing in text editor/inputs)
- */
 
 type Orientation = "portrait" | "landscape" | string;
 type PaperKey =
@@ -516,12 +511,15 @@ export default function TemplateEditor({ initialTemplate, assetBaseUrl = "" }: T
                                     const isSelected = b.id === selectedId;
                                     const isEditing = b.id === editingId;
                                     const locked = Boolean((b as any).locked);
+                                    const isLine = b.type === "horizontal-line";
+                                    const minHitPx = 16; // clickable height
+                                    const safeH = isLine ? Math.max(h, minHitPx) : h;
 
                                     return (
                                         <Rnd
                                             key={b.id}
                                             data-block-id={b.id}
-                                            size={{ width: w, height: h }}
+                                            size={{ width: w, height: safeH }}
                                             position={{ x, y }}
                                             bounds="parent"
                                             enableResizing={!locked}
@@ -735,7 +733,27 @@ function BlockRenderer({
     }
 
     if (isLineBlock(block)) {
-        return <Box sx={{ width: "100%", height: "100%", bgcolor: block.style.backgroundColor ?? "#333" }} />;
+        return (
+            <Box
+                sx={{
+                    width: "100%",
+                    height: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    px: 0.5,
+                }}
+            >
+                <Box
+                    sx={{
+                        width: "100%",
+                        height: "2px", // actual visible line thickness
+                        bgcolor: block.style.backgroundColor ?? "#333",
+                        borderRadius: 999,
+                    }}
+                />
+            </Box>
+        );
     }
 
     if (isImageBlock(block)) {
