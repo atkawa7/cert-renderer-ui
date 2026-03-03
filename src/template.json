@@ -1,0 +1,333 @@
+{
+  "name": "386_Course_formal_orange_landscape",
+  "background": {
+    "url": "565302e3-5bff-4e5c-8b76-a7f0246fcb4a/certificate-designs/backgrounds/18-07-2024-01:25:09_386_Course_formal_orange_landscape.jpg",
+    "type": "image"
+  },
+  "blocks": [
+    {
+      "type": "text",
+      "style": {
+        "top": "30.918727915194346%",
+        "left": "6.88965%",
+        "color": "#3d3d3d",
+        "width": "55.657875000000004%",
+        "height": "14.575971731448764%",
+        "fontSize": "45em",
+        "fontStyle": "normal",
+        "textAlign": "left",
+        "fontFamily": "Marcellus, serif",
+        "fontWeight": 400,
+        "textDecoration": "none"
+      },
+      "value": "[recipient.name]",
+      "autoScale": false
+    },
+    {
+      "type": "text",
+      "style": {
+        "top": "4.5053003533568905%",
+        "left": "6.8897%",
+        "color": "#3d3d3d",
+        "width": "62.78125%",
+        "height": "21.73144876325088%",
+        "fontSize": "47em",
+        "fontStyle": "normal",
+        "textAlign": "left",
+        "fontFamily": "Marcellus, serif",
+        "fontWeight": 400,
+        "textDecoration": "none"
+      },
+      "value": "Certificate of Course",
+      "autoScale": false
+    },
+    {
+      "type": "text",
+      "style": {
+        "top": "74.36784452296821%",
+        "left": "8.653325%",
+        "color": "#3d3d3d",
+        "width": "21.75%",
+        "height": "2.9151943462897525%",
+        "fontSize": "11em",
+        "fontStyle": "normal",
+        "textAlign": "left",
+        "fontFamily": "Marcellus, serif",
+        "fontWeight": 400,
+        "textDecoration": "none"
+      },
+      "value": "[certificate.uuid]",
+      "autoScale": false
+    },
+    {
+      "type": "text",
+      "style": {
+        "top": "67.30070671378093%",
+        "left": "8.653325%",
+        "color": "#3d3d3d",
+        "width": "22.048875%",
+        "height": "3.4452296819787986%",
+        "fontSize": "13em",
+        "fontStyle": "normal",
+        "textAlign": "left",
+        "fontFamily": "Marcellus, serif",
+        "fontWeight": 400,
+        "textDecoration": "none"
+      },
+      "value": "[certificate.issued_on]",
+      "autoScale": true
+    },
+    {
+      "type": "text",
+      "style": {
+        "top": "26.060070671378092%",
+        "left": "7.231450000000001%",
+        "color": "#60161e",
+        "width": "28.65625%",
+        "height": "4.770318021201414%",
+        "fontSize": "17em",
+        "fontStyle": "normal",
+        "textAlign": "left",
+        "fontFamily": "Marcellus, serif",
+        "fontWeight": 400,
+        "textDecoration": "none"
+      },
+      "value": "Is awarded to",
+      "autoScale": false
+    },
+    {
+      "type": "text",
+      "style": {
+        "top": "85.24734982332156%",
+        "left": "40.809625%",
+        "color": "#3d3d3d",
+        "width": "17.1895%",
+        "height": "4.770318021201414%",
+        "fontSize": "17em",
+        "fontStyle": "normal",
+        "textAlign": "left",
+        "fontFamily": "Marcellus, serif",
+        "fontWeight": 400,
+        "textDecoration": "none"
+      },
+      "value": "Nicholas Harris",
+      "autoScale": false
+    },
+    {
+      "type": "text",
+      "style": {
+        "top": "47.1690812720848%",
+        "left": "7.015625%",
+        "color": "#3d3d3d",
+        "width": "55.03125%",
+        "height": "9.540636042402827%",
+        "fontSize": "17em",
+        "fontStyle": "normal",
+        "textAlign": "left",
+        "fontFamily": "Marcellus, serif",
+        "fontWeight": 400,
+        "textDecoration": "none"
+      },
+      "value": "For successfully completing the",
+      "autoScale": false
+    },
+    {
+      "type": "horizontal-line",
+      "style": {
+        "top": "41.78586572438163%",
+        "left": "7.231920199501247%",
+        "width": "46.875%",
+        "height": "0.17667844522968199%",
+        "backgroundColor": "#3d3d3d"
+      }
+    },
+    {
+      "type": "text",
+      "style": {
+        "top": "89.92932862190813%",
+        "left": "40.903375%",
+        "color": "#a4a4a4",
+        "width": "22.3145%",
+        "height": "4.41696113074205%",
+        "fontSize": "14em",
+        "fontStyle": "normal",
+        "textAlign": "left",
+        "fontFamily": "Marcellus, serif",
+        "fontWeight": 400,
+        "textDecoration": "none"
+      },
+      "value": "Commission Chairman",
+      "autoScale": false
+    },
+    {
+      "type": "text",
+      "style": {
+        "top": "80.91872791519434%",
+        "left": "8.653325%",
+        "color": "#3d3d3d",
+        "width": "23.9395%",
+        "height": "7.420494699646643%",
+        "fontSize": "14em",
+        "fontStyle": "normal",
+        "textAlign": "left",
+        "fontFamily": "Marcellus, serif",
+        "fontWeight": 400,
+        "textDecoration": "none"
+      },
+      "value": "Completed hours: 270",
+      "autoScale": false
+    },
+    {
+      "type": "text",
+      "style": {
+        "top": "11.837455830388691%",
+        "left": "6.88965%",
+        "color": "#3d3d3d",
+        "width": "62.78125%",
+        "height": "21.73144876325088%",
+        "fontSize": "47em",
+        "fontStyle": "normal",
+        "textAlign": "left",
+        "fontFamily": "Marcellus, serif",
+        "fontWeight": 400,
+        "textDecoration": "none"
+      },
+      "value": "Completion",
+      "autoScale": false
+    },
+    {
+      "type": "text",
+      "style": {
+        "top": "52.194699646643116%",
+        "left": "7.202650000000001%",
+        "color": "#e98817",
+        "width": "59.40625000000001%",
+        "height": "18.551236749116608%",
+        "fontSize": "35em",
+        "fontStyle": "normal",
+        "textAlign": "left",
+        "fontFamily": "Marcellus, serif",
+        "fontWeight": 400,
+        "textDecoration": "none"
+      },
+      "value": "Digital Marketing Strategies",
+      "autoScale": false
+    },
+    {
+      "type": "text",
+      "style": {
+        "top": "87.98586572438163%",
+        "left": "8.653325%",
+        "color": "#3d3d3d",
+        "width": "23.9395%",
+        "height": "7.420494699646643%",
+        "fontSize": "14em",
+        "fontStyle": "normal",
+        "textAlign": "left",
+        "fontFamily": "Marcellus, serif",
+        "fontWeight": 400,
+        "textDecoration": "none"
+      },
+      "value": "Score: 100%",
+      "autoScale": false
+    },
+    {
+      "type": "text",
+      "style": {
+        "top": "85.24734982332156%",
+        "left": "71.278375%",
+        "color": "#3d3d3d",
+        "width": "17.1895%",
+        "height": "4.770318021201414%",
+        "fontSize": "17em",
+        "fontStyle": "normal",
+        "textAlign": "left",
+        "fontFamily": "Marcellus, serif",
+        "fontWeight": 400,
+        "textDecoration": "none"
+      },
+      "value": "Emily Davis",
+      "autoScale": false
+    },
+    {
+      "type": "text",
+      "style": {
+        "top": "89.92932862190813%",
+        "left": "71.34175%",
+        "color": "#a4a4a4",
+        "width": "22.3145%",
+        "height": "4.41696113074205%",
+        "fontSize": "14em",
+        "fontStyle": "normal",
+        "textAlign": "left",
+        "fontFamily": "Marcellus, serif",
+        "fontWeight": 400,
+        "textDecoration": "none"
+      },
+      "value": "Chief Marketing Officer",
+      "autoScale": false
+    },
+    {
+      "type": "horizontal-line",
+      "style": {
+        "top": "82.86219081272085%",
+        "left": "40.64837905236908%",
+        "width": "15.25%",
+        "height": "0.17667844522968199%",
+        "backgroundColor": "#442f2f"
+      }
+    },
+    {
+      "type": "horizontal-line",
+      "style": {
+        "top": "82.86219081272085%",
+        "left": "71.340875%",
+        "width": "15.25%",
+        "height": "0.17667844522968199%",
+        "backgroundColor": "#442f2f"
+      }
+    },
+    {
+      "type": "image",
+      "style": {
+        "top": "7.569575971731449%",
+        "left": "73.377875%",
+        "width": "20.576125%"
+      },
+      "value": "565302e3-5bff-4e5c-8b76-a7f0246fcb4a/certificate-designs/images/18-07-2024-01:23:29_tDl5mg5YS2FwyYtFV-qqF-Group 19206.png"
+    },
+    {
+      "type": "image",
+      "style": {
+        "top": "75.26908127208482%",
+        "left": "74.213375%",
+        "width": "9.388675%"
+      },
+      "value": "565302e3-5bff-4e5c-8b76-a7f0246fcb4a/certificate-designs/images/18-07-2024-01:23:51_mp8r3SgIhQsmi2AeHR1DS-Vector 76.png"
+    },
+    {
+      "type": "image",
+      "style": {
+        "top": "75.2678445229682%",
+        "left": "43.458%",
+        "width": "7.291012499999999%"
+      },
+      "value": "565302e3-5bff-4e5c-8b76-a7f0246fcb4a/certificate-designs/images/18-07-2024-01:24:11_5YxB2VUSh3yCA3DzRXAyE-Vector 77.png"
+    }
+  ],
+  "paperSize": "A4",
+  "orientation": "landscape",
+  "thumbnail": "565302e3-5bff-4e5c-8b76-a7f0246fcb4a/certificate-designs/previews/01j32sj6vbebxhw6psjpyhskez-1721302106393.png",
+  "isDefault": true,
+  "createdAt": "2024-07-18T11:27:43.981Z",
+  "updatedAt": "2025-03-19T11:00:22.784Z",
+  "metadata": {
+    "lang": "en",
+    "color": "orange",
+    "style": "formal",
+    "category": "course"
+  },
+  "id": "01j32sj6vbebxhw6psjpyhskez",
+  "workspaceId": "01epm6gyst0t4q1fnc376sgw6e",
+  "type": "certificate"
+}
