@@ -26,13 +26,9 @@ import HorizontalRuleIcon from "@mui/icons-material/HorizontalRule";
 import { Rnd, type RndDragCallback, type RndResizeCallback } from "react-rnd";
 
 /**
- * Full working file:
- * - Canvas ALWAYS visible (explicit height, border, shadow)
- * - Drag & drop from palette onto canvas (custom MIME + text/plain fallback)
- * - Click selects (blue border), unselected has dashed border
- * - Drag & resize via react-rnd
- * - Double-click text to edit inline
- * - Inspector (left) edits styles and values
+ * Updates:
+ * ✅ Horizontal lines are deletable (Delete button works for any selected block)
+ * ✅ Backspace/Delete keys delete selected block (but NOT while typing in text editor/inputs)
  */
 
 type Orientation = "portrait" | "landscape" | string;
@@ -83,19 +79,17 @@ function normalizeOrientation(o?: Orientation): "portrait" | "landscape" {
 
 function getAspectRatioMm(paperKey: PaperKey, orientation: "portrait" | "landscape"): number {
     const s = PAPER_SIZES[paperKey] ?? PAPER_SIZES.A4;
-    // CSS aspect-ratio expects width/height
     return orientation === "portrait" ? s.wMm / s.hMm : s.hMm / s.wMm;
 }
 
 // ---------------- Template model types ----------------
 export type Background = { url: string; type: "image" | "color"; color?: string };
 export type BlockType = "text" | "image" | "horizontal-line";
-
 export type BaseBlockStyle = { top?: string; left?: string; width?: string; height?: string };
 
 export type TextBlockStyle = BaseBlockStyle & {
     color?: string;
-    fontSize?: string; // e.g. "35em" from your JSON; we treat numeric as px-ish
+    fontSize?: string;
     fontStyle?: "normal" | "italic" | string;
     textAlign?: "left" | "center" | "right" | string;
     fontFamily?: string;
@@ -116,9 +110,7 @@ export type TextBlock = {
 };
 
 export type ImageBlock = { id: string; type: "image"; style: ImageBlockStyle; value: string; locked?: boolean };
-
 export type HorizontalLineBlock = { id: string; type: "horizontal-line"; style: LineBlockStyle; locked?: boolean };
-
 export type Block = TextBlock | ImageBlock | HorizontalLineBlock;
 
 export type Template = {
@@ -203,15 +195,11 @@ const DEFAULT_NEW_SIZES: Record<BlockType, { wPct: number; hPct: number }> = {
 export default function TemplateEditor({ initialTemplate, assetBaseUrl = "" }: TemplateEditorProps) {
     const [template, setTemplate] = useState<Template>(() => {
         const t = deepClone(initialTemplate);
-
         t.blocks = (t.blocks ?? []).map((b) => {
             if (!(b as any).id) (b as any).id = makeId();
             return normalizeBlock(b);
         });
-
-        // ensure bg exists
         if (!t.background) t.background = { type: "color", url: "", color: "#ffffff" };
-
         return t;
     });
 
@@ -232,7 +220,7 @@ export default function TemplateEditor({ initialTemplate, assetBaseUrl = "" }: T
 
     const [canvasSize, setCanvasSize] = useState<Size>({ w: 900, h: 900 / aspectRatio });
 
-    // measure the outer width and derive height
+    // measure outer width => derive inner height
     useEffect(() => {
         const el = canvasOuterRef.current;
         if (!el) return;
@@ -285,20 +273,47 @@ export default function TemplateEditor({ initialTemplate, assetBaseUrl = "" }: T
         setEditingId(null);
     }
 
+    // ✅ Backspace/Delete handler (only when NOT typing in an input/contentEditable)
+    useEffect(() => {
+        function isTypingTarget(el: EventTarget | null): boolean {
+            if (!(el instanceof HTMLElement)) return false;
+            const tag = el.tagName.toLowerCase();
+            if (tag === "input" || tag === "textarea" || tag === "select") return true;
+            if (el.isContentEditable) return true;
+            // MUI TextField wraps inputs; if user clicks inside, activeElement will be input anyway
+            return false;
+        }
+
+        function onKeyDown(e: KeyboardEvent) {
+            if (!selectedId) return;
+
+            if (e.key !== "Backspace" && e.key !== "Delete") return;
+
+            // don't delete blocks while user is editing text on canvas or typing in inspector
+            const active = document.activeElement;
+            if (isTypingTarget(active)) return;
+
+            e.preventDefault();
+            deleteSelected();
+        }
+
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedId, template.blocks]);
+
     // ---------- Palette DnD ----------
     function onPaletteDragStart(e: React.DragEvent, type: BlockType) {
         const payload: PalettePayload = { type };
         const s = JSON.stringify(payload);
 
-        // ✅ set BOTH (some browsers ignore custom MIME only)
         e.dataTransfer.setData(DND_MIME, s);
         e.dataTransfer.setData("text/plain", s);
-
         e.dataTransfer.effectAllowed = "copy";
     }
 
     function onCanvasDragOver(e: React.DragEvent) {
-        e.preventDefault(); // ✅ allow drop
+        e.preventDefault();
         e.dataTransfer.dropEffect = "copy";
     }
 
@@ -383,7 +398,7 @@ export default function TemplateEditor({ initialTemplate, assetBaseUrl = "" }: T
 
     // ---------- RND drag/resize ----------
     const onDragStop: RndDragCallback = (_e, d) => {
-        const id = (d.node as HTMLElement).dataset.blockId; // ✅ now set on Rnd root
+        const id = (d.node as HTMLElement).dataset.blockId;
         if (!id) return;
 
         updateBlockStyle(id, {
@@ -393,7 +408,7 @@ export default function TemplateEditor({ initialTemplate, assetBaseUrl = "" }: T
     };
 
     const onResizeStop: RndResizeCallback = (_e, _dir, ref, _delta, position) => {
-        const id = (ref as HTMLElement).dataset.blockId; // ✅ now set on Rnd root
+        const id = (ref as HTMLElement).dataset.blockId;
         if (!id) return;
 
         const newW = (ref as HTMLElement).offsetWidth;
@@ -409,10 +424,7 @@ export default function TemplateEditor({ initialTemplate, assetBaseUrl = "" }: T
 
     return (
         <Box sx={{ display: "flex", height: "100vh", bgcolor: "#f3f5f7" }}>
-            {/* LEFT: palette + inspector */}
-
-
-            {/* RIGHT: canvas area */}
+            {/* CENTER: canvas */}
             <Box sx={{ flex: 1, p: 10, overflow: "auto", width: "65vw" }}>
                 <Box
                     sx={{
@@ -434,9 +446,7 @@ export default function TemplateEditor({ initialTemplate, assetBaseUrl = "" }: T
                             backgroundPosition: "0 0, 12px 12px",
                         }}
                     >
-                        {/* Outer: measurable width */}
                         <Box ref={canvasOuterRef} sx={{ width: "min(1200px, 100%)", mx: "auto" }}>
-                            {/* Inner: actual page (explicit height => always visible) */}
                             <Box
                                 ref={canvasInnerRef}
                                 onDragOver={onCanvasDragOver}
@@ -449,7 +459,7 @@ export default function TemplateEditor({ initialTemplate, assetBaseUrl = "" }: T
                                 }}
                                 sx={{
                                     width: "100%",
-                                    height: `${canvasSize.h}px`, // ✅ force visible
+                                    height: `${canvasSize.h}px`,
                                     position: "relative",
                                     borderRadius: 2,
                                     overflow: "hidden",
@@ -461,7 +471,6 @@ export default function TemplateEditor({ initialTemplate, assetBaseUrl = "" }: T
                                     backgroundPosition: "center",
                                 }}
                             >
-                                {/* Drop hint - pointerEvents none so it doesn't block drop */}
                                 <Typography
                                     variant="caption"
                                     sx={{
@@ -479,7 +488,6 @@ export default function TemplateEditor({ initialTemplate, assetBaseUrl = "" }: T
                                     Drop components here
                                 </Typography>
 
-                                {/* quick debug */}
                                 <Typography
                                     variant="caption"
                                     sx={{
@@ -512,7 +520,7 @@ export default function TemplateEditor({ initialTemplate, assetBaseUrl = "" }: T
                                     return (
                                         <Rnd
                                             key={b.id}
-                                            data-block-id={b.id} // ✅ important for callbacks
+                                            data-block-id={b.id}
                                             size={{ width: w, height: h }}
                                             position={{ x, y }}
                                             bounds="parent"
@@ -556,16 +564,17 @@ export default function TemplateEditor({ initialTemplate, assetBaseUrl = "" }: T
                 </Box>
             </Box>
 
+            {/* RIGHT: palette + inspector */}
             <Drawer
                 variant="permanent"
                 anchor="right"
                 PaperProps={{
-                    sx: { width: "300px", p: 2, borderRight: "1px solid", borderColor: "divider" },
+                    sx: { width: "300px", p: 2, borderLeft: "1px solid", borderColor: "divider" },
                 }}
             >
                 <Typography variant="h6">Template Editor</Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    Drag components onto the canvas. Click to select. Double-click text to edit.
+                    Drag components onto the canvas. Click to select. Double-click text to edit. Backspace/Delete removes selection.
                 </Typography>
 
                 <Divider sx={{ mb: 2 }} />
@@ -577,11 +586,7 @@ export default function TemplateEditor({ initialTemplate, assetBaseUrl = "" }: T
                 <Stack spacing={1}>
                     <PaletteItem icon={<TextFieldsIcon />} label="Text" onDragStart={(e) => onPaletteDragStart(e, "text")} />
                     <PaletteItem icon={<AddPhotoAlternateIcon />} label="Image" onDragStart={(e) => onPaletteDragStart(e, "image")} />
-                    <PaletteItem
-                        icon={<HorizontalRuleIcon />}
-                        label="Horizontal line"
-                        onDragStart={(e) => onPaletteDragStart(e, "horizontal-line")}
-                    />
+                    <PaletteItem icon={<HorizontalRuleIcon />} label="Horizontal line" onDragStart={(e) => onPaletteDragStart(e, "horizontal-line")} />
                 </Stack>
 
                 <Divider sx={{ my: 2 }} />
@@ -663,6 +668,7 @@ export default function TemplateEditor({ initialTemplate, assetBaseUrl = "" }: T
                     <Button startIcon={<ContentCopyIcon />} variant="outlined" onClick={copyJson}>
                         Copy JSON
                     </Button>
+                    {/* ✅ Delete button now deletes ANY selected block, including horizontal-line */}
                     <Button startIcon={<DeleteIcon />} color="error" variant="outlined" onClick={deleteSelected} disabled={!selectedId}>
                         Delete
                     </Button>
@@ -775,7 +781,6 @@ function EditableText({
     const s = block.style;
     const ref = useRef<HTMLDivElement | null>(null);
 
-    // treat "35em" numeric part as px-ish
     const fontSizeNum = parseFloat(String(s.fontSize ?? "24").replace("em", ""));
     const fontSizePx = clamp(Number.isNaN(fontSizeNum) ? 24 : fontSizeNum, 6, 200);
 
@@ -804,8 +809,7 @@ function EditableText({
                 textAlign: s.textAlign ?? "left",
                 display: "flex",
                 alignItems: "center",
-                justifyContent:
-                    s.textAlign === "center" ? "center" : s.textAlign === "right" ? "flex-end" : "flex-start",
+                justifyContent: s.textAlign === "center" ? "center" : s.textAlign === "right" ? "flex-end" : "flex-start",
                 px: 0.5,
                 overflow: "hidden",
                 whiteSpace: "pre-wrap",
@@ -881,11 +885,26 @@ function Inspector({
             {isTextBlock(block) && (
                 <>
                     <Stack direction="row" spacing={1}>
-                        <TextField fullWidth label="Color" value={block.style.color ?? ""} onChange={(e) => onStylePatch({ color: e.target.value })} />
-                        <TextField fullWidth label='Font size ("35em")' value={block.style.fontSize ?? ""} onChange={(e) => onStylePatch({ fontSize: e.target.value })} />
+                        <TextField
+                            fullWidth
+                            label="Color"
+                            value={block.style.color ?? ""}
+                            onChange={(e) => onStylePatch({ color: e.target.value })}
+                        />
+                        <TextField
+                            fullWidth
+                            label='Font size ("35em")'
+                            value={block.style.fontSize ?? ""}
+                            onChange={(e) => onStylePatch({ fontSize: e.target.value })}
+                        />
                     </Stack>
 
-                    <TextField fullWidth label="Font family" value={block.style.fontFamily ?? ""} onChange={(e) => onStylePatch({ fontFamily: e.target.value })} />
+                    <TextField
+                        fullWidth
+                        label="Font family"
+                        value={block.style.fontFamily ?? ""}
+                        onChange={(e) => onStylePatch({ fontFamily: e.target.value })}
+                    />
 
                     <ToggleButtonGroup
                         value={String(block.style.textAlign ?? "left")}
