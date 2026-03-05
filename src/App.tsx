@@ -6,7 +6,7 @@ export default function App() {
     return (
         <TemplateEditor
             initialTemplate={templateJson as any}
-            assetBaseUrl="https://your-cdn-or-s3/"
+            assetBaseUrl="https://certifier-production-amplify.s3.eu-west-1.amazonaws.com/public/"
         />
     );
 }

@@ -25,6 +25,9 @@ import TextFieldsIcon from "@mui/icons-material/TextFields";
 import HorizontalRuleIcon from "@mui/icons-material/HorizontalRule";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import EditIcon from "@mui/icons-material/Edit";
+import { InputAdornment } from "@mui/material";
+import RemoveIcon from "@mui/icons-material/Remove";
+import AddIcon from "@mui/icons-material/Add";
 import { Rnd, type RndDragCallback, type RndResizeCallback } from "react-rnd";
 
 type Orientation = "portrait" | "landscape" | string;
@@ -76,6 +79,21 @@ function normalizeOrientation(o?: Orientation): "portrait" | "landscape" {
 function getAspectRatioMm(paperKey: PaperKey, orientation: "portrait" | "landscape"): number {
     const s = PAPER_SIZES[paperKey] ?? PAPER_SIZES.A4;
     return orientation === "portrait" ? s.wMm / s.hMm : s.hMm / s.wMm; // width/height
+}
+
+function parseEmToNumber(v?: string, fallback = 24): number {
+    if (!v) return fallback;
+    const n = parseFloat(String(v).replace("em", "").trim());
+    return Number.isFinite(n) ? n : fallback;
+}
+
+function toEm(n: number): string {
+    // keep it clean like "35em"
+    return `${Math.round(n)}em`;
+}
+
+function clampNum(n: number, min: number, max: number) {
+    return Math.max(min, Math.min(max, n));
 }
 
 // ---------------- Template model types ----------------
@@ -211,12 +229,14 @@ export default function TemplateEditor({
     // ✅ Preview toggle
     const [previewMode, setPreviewMode] = useState<boolean>(defaultPreview);
 
-    const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [editingId, setEditingId] = useState<string | null>(null);
 
+    const primarySelectedId = selectedIds.length ? selectedIds[selectedIds.length - 1] : null;
+
     const selectedBlock = useMemo(
-        () => template.blocks.find((b) => b.id === selectedId) ?? null,
-        [template.blocks, selectedId]
+        () => template.blocks.find((b) => b.id === primarySelectedId) ?? null,
+        [template.blocks, primarySelectedId]
     );
 
     const paperKey = normalizePaperKey(template.paperSize);
@@ -275,15 +295,17 @@ export default function TemplateEditor({
     }
 
     function deleteSelected() {
-        if (!selectedId) return;
-        setTemplate((prev) => ({ ...prev, blocks: prev.blocks.filter((b) => b.id !== selectedId) }));
-        setSelectedId(null);
+        if (!selectedIds.length) return;
+        setTemplate((prev) => ({
+            ...prev,
+            blocks: prev.blocks.filter((b) => !selectedIds.includes(b.id)),
+        }));
+        setSelectedIds([]);
         setEditingId(null);
     }
 
-    // ✅ Backspace/Delete handler (only when NOT typing in an input/contentEditable)
     useEffect(() => {
-        function isTypingTarget(el: EventTarget | null): boolean {
+        function isTypingTarget(el: Element | null): boolean {
             if (!(el instanceof HTMLElement)) return false;
             const tag = el.tagName.toLowerCase();
             if (tag === "input" || tag === "textarea" || tag === "select") return true;
@@ -292,22 +314,28 @@ export default function TemplateEditor({
         }
 
         function onKeyDown(e: KeyboardEvent) {
-            if (previewMode) return; // ✅ preview = no editing shortcuts
-            if (!selectedId) return;
-
-            if (e.key !== "Backspace" && e.key !== "Delete") return;
+            if (previewMode) return;
 
             const active = document.activeElement;
             if (isTypingTarget(active)) return;
 
-            e.preventDefault();
-            deleteSelected();
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a") {
+                e.preventDefault();
+                setSelectedIds(template.blocks.map((b) => b.id));
+                setEditingId(null);
+                return;
+            }
+
+            if ((e.key === "Backspace" || e.key === "Delete") && selectedIds.length) {
+                e.preventDefault();
+                deleteSelected();
+            }
         }
 
         window.addEventListener("keydown", onKeyDown);
         return () => window.removeEventListener("keydown", onKeyDown);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedId, previewMode, template.blocks]);
+    }, [previewMode, selectedIds, template.blocks]);
 
     // ---------- Palette DnD ----------
     function onPaletteDragStart(e: React.DragEvent, type: BlockType) {
@@ -442,10 +470,45 @@ export default function TemplateEditor({
         });
     };
 
+    const selectionBoundsPx = useMemo(() => {
+        if (previewMode) return null;
+        if (!selectedIds.length) return null;
+
+        const selectedBlocks = template.blocks
+            .filter((b) => selectedIds.includes(b.id))
+            .map(normalizeBlock);
+
+        if (!selectedBlocks.length) return null;
+
+        const rects = selectedBlocks.map((b) => {
+            const x = pctToPx(b.style.left, canvasSize.w);
+            const y = pctToPx(b.style.top, canvasSize.h);
+            const w = pctToPx(b.style.width, canvasSize.w);
+
+            const isLine = b.type === "horizontal-line";
+            const hRaw = pctToPx(b.style.height, canvasSize.h);
+            const h = isLine ? Math.max(hRaw, 16) : hRaw;
+
+            return { x, y, w, h };
+        });
+
+        const left = Math.min(...rects.map((r) => r.x));
+        const top = Math.min(...rects.map((r) => r.y));
+        const right = Math.max(...rects.map((r) => r.x + r.w));
+        const bottom = Math.max(...rects.map((r) => r.y + r.h));
+
+        return {
+            left,
+            top,
+            width: right - left,
+            height: bottom - top,
+        };
+    }, [previewMode, selectedIds, template.blocks, canvasSize.w, canvasSize.h]);
+
     // When entering preview: clear selection + editing
     useEffect(() => {
         if (previewMode) {
-            setSelectedId(null);
+            setSelectedIds([]);
             setEditingId(null);
         }
     }, [previewMode]);
@@ -480,10 +543,14 @@ export default function TemplateEditor({
                                 onDrop={onCanvasDrop}
                                 onMouseDown={(e) => {
                                     if (previewMode) return;
-                                    if (e.target === e.currentTarget) {
-                                        setSelectedId(null);
-                                        setEditingId(null);
-                                    }
+                                    if (e.target !== e.currentTarget) return;
+
+                                    // ✅ if user is multi-selecting, don't clear everything
+                                    const isMultiSelectGesture = (e as any).shiftKey || (e as any).ctrlKey || (e as any).metaKey;
+                                    if (isMultiSelectGesture) return;
+
+                                    setSelectedIds([]);
+                                    setEditingId(null);
                                 }}
                                 sx={{
                                     width: "100%",
@@ -499,6 +566,7 @@ export default function TemplateEditor({
                                     backgroundPosition: "center",
                                 }}
                             >
+
                                 {/* Hints only in edit mode */}
                                 {!previewMode && (
                                     <>
@@ -538,6 +606,55 @@ export default function TemplateEditor({
                                     </>
                                 )}
 
+
+                                {selectionBoundsPx && (
+                                    <Box
+                                        sx={{
+                                            position: "absolute",
+                                            left: selectionBoundsPx.left,
+                                            top: selectionBoundsPx.top,
+                                            width: selectionBoundsPx.width,
+                                            height: selectionBoundsPx.height,
+                                            pointerEvents: "none",
+                                            zIndex: 50,
+                                        }}
+                                    >
+                                        {/* optional outline around multi-selection */}
+                                        <Box
+                                            sx={{
+                                                position: "absolute",
+                                                inset: 0,
+                                                border: "2px solid rgba(25,118,210,0.6)",
+                                                borderRadius: 2,
+                                            }}
+                                        />
+
+                                        {/* overlay delete button */}
+                                        <Box
+                                            sx={{
+                                                position: "absolute",
+                                                top: -14,
+                                                right: -14,
+                                                pointerEvents: "auto",
+                                            }}
+                                            onMouseDown={(e) => e.stopPropagation()}
+                                        >
+                                            <IconButton
+                                                size="small"
+                                                onClick={deleteSelected}
+                                                sx={{
+                                                    bgcolor: "#fff",
+                                                    border: "1px solid rgba(0,0,0,0.15)",
+                                                    boxShadow: "0 6px 20px rgba(0,0,0,0.15)",
+                                                    "&:hover": { bgcolor: "#fff" },
+                                                }}
+                                                title="Delete selected"
+                                            >
+                                                <DeleteIcon fontSize="small" />
+                                            </IconButton>
+                                        </Box>
+                                    </Box>
+                                )}
                                 {template.blocks.map((raw) => {
                                     const b = normalizeBlock(raw);
 
@@ -546,7 +663,7 @@ export default function TemplateEditor({
                                     const w = pctToPx(b.style.width, canvasSize.w);
                                     const h = pctToPx(b.style.height, canvasSize.h);
 
-                                    const isSelected = !previewMode && b.id === selectedId;
+                                    const isSelected = !previewMode && selectedIds.includes(b.id);
                                     const isEditing = !previewMode && b.id === editingId;
                                     const locked = Boolean((b as any).locked);
 
@@ -568,9 +685,18 @@ export default function TemplateEditor({
                                             enableResizing={allowInteract}
                                             disableDragging={!allowInteract}
                                             onMouseDown={(e) => {
-                                                if (!allowEdit) return;
+                                                if (previewMode) return;
                                                 e.stopPropagation();
-                                                setSelectedId(b.id);
+
+                                                const toggle = e.shiftKey || e.ctrlKey || e.metaKey;
+
+                                                if (toggle) {
+                                                    setSelectedIds((prev) =>
+                                                        prev.includes(b.id) ? prev.filter((x) => x !== b.id) : [...prev, b.id]
+                                                    );
+                                                } else {
+                                                    setSelectedIds([b.id]); // normal click = single select
+                                                }
                                             }}
                                             onDoubleClick={(e) => {
                                                 if (!allowEdit) return;
@@ -762,7 +888,7 @@ export default function TemplateEditor({
                         color="error"
                         variant="outlined"
                         onClick={deleteSelected}
-                        disabled={previewMode || !selectedId}
+                        disabled={previewMode || selectedIds.length == 0}
                     >
                         Delete
                     </Button>
@@ -1023,18 +1149,79 @@ function Inspector({
 
             {isTextBlock(block) && (
                 <>
-                    <Stack direction="row" spacing={1}>
+                    {/* Color + font size row */}
+                    <Stack direction="row" spacing={1} alignItems="center">
+                        {/* ✅ Color picker */}
                         <TextField
                             fullWidth
                             label="Color"
-                            value={block.style.color ?? ""}
+                            value={block.style.color ?? "#333333"}
                             onChange={(e) => onStylePatch({ color: e.target.value })}
+                            InputProps={{
+                                startAdornment: (
+                                    <InputAdornment position="start">
+                                        <Box
+                                            component="input"
+                                            type="color"
+                                            value={block.style.color ?? "#333333"}
+                                            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                                                onStylePatch({ color: e.target.value })
+                                            }
+                                            onClick={(e) => e.stopPropagation()}
+                                            style={{
+                                                width: 28,
+                                                height: 28,
+                                                padding: 0,
+                                                border: "none",
+                                                background: "transparent",
+                                                cursor: "pointer",
+                                            }}
+                                        />
+                                    </InputAdornment>
+                                ),
+                            }}
                         />
+
+                        {/* ✅ Font size stepper */}
                         <TextField
-                            fullWidth
-                            label='Font size ("35em")'
-                            value={block.style.fontSize ?? ""}
+                            label="Font"
+                            value={block.style.fontSize ?? "24em"}
                             onChange={(e) => onStylePatch({ fontSize: e.target.value })}
+                            sx={{ width: 130 }}
+                            inputProps={{ inputMode: "numeric" }}
+                            InputProps={{
+                                startAdornment: (
+                                    <InputAdornment position="start">
+                                        <IconButton
+                                            size="small"
+                                            onMouseDown={(e) => e.preventDefault()}
+                                            onClick={() => {
+                                                const cur = parseEmToNumber(block.style.fontSize, 24);
+                                                const next = clampNum(cur - 1, 6, 220);
+                                                onStylePatch({ fontSize: toEm(next) });
+                                            }}
+                                        >
+                                            <RemoveIcon fontSize="small" />
+                                        </IconButton>
+                                    </InputAdornment>
+                                ),
+                                endAdornment: (
+                                    <InputAdornment position="end">
+                                        <IconButton
+                                            size="small"
+                                            onMouseDown={(e) => e.preventDefault()}
+                                            onClick={() => {
+                                                const cur = parseEmToNumber(block.style.fontSize, 24);
+                                                const next = clampNum(cur + 1, 6, 220);
+                                                onStylePatch({ fontSize: toEm(next) });
+                                            }}
+                                        >
+                                            <AddIcon fontSize="small" />
+                                        </IconButton>
+                                    </InputAdornment>
+                                ),
+                            }}
+                            helperText="em"
                         />
                     </Stack>
 
