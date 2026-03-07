@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
     Alert,
     Box,
@@ -80,8 +80,10 @@ function EditorPage({ mode }: { mode: "new" | "edit" }) {
     const [loading, setLoading] = useState(mode === "edit");
     const [saving, setSaving] = useState(false);
     const [rendering, setRendering] = useState(false);
+    const [persistingSession, setPersistingSession] = useState(false);
     const [statusMsg, setStatusMsg] = useState<string | null>(null);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
+    const persistInFlightRef = useRef(false);
 
     useEffect(() => {
         if (mode !== "edit") return;
@@ -140,6 +142,30 @@ function EditorPage({ mode }: { mode: "new" | "edit" }) {
             setErrorMsg(err?.message || "Failed to save template");
         } finally {
             setSaving(false);
+        }
+    }
+
+    async function handlePersistSession(next: Template) {
+        if (persistInFlightRef.current) return;
+        persistInFlightRef.current = true;
+        setPersistingSession(true);
+        try {
+            const payload = {
+                name: (next.name || "").trim() || "Untitled Template",
+                template: next,
+            };
+            if (templateId) {
+                await updateTemplateById(templateId, payload);
+            } else {
+                const created = await createTemplate(payload);
+                setTemplateId(created.id);
+                navigate(`/templates/${created.id}/edit`, { replace: true });
+            }
+        } catch {
+            // explicit Save continues to surface full errors; autosave failures stay silent
+        } finally {
+            persistInFlightRef.current = false;
+            setPersistingSession(false);
         }
     }
 
@@ -208,7 +234,7 @@ function EditorPage({ mode }: { mode: "new" | "edit" }) {
                 <Button variant="contained" size="small" component={RouterLink} to="/templates">
                     Back to templates
                 </Button>
-                {(saving || rendering) && <CircularProgress size={18} />}
+                {(saving || rendering || persistingSession) && <CircularProgress size={18} />}
             </Box>
             {(statusMsg || errorMsg) && (
                 <Box sx={{ position: "fixed", top: 14, left: SIDEBAR_WIDTH + 188, right: 360, zIndex: 2000 }}>
@@ -225,6 +251,8 @@ function EditorPage({ mode }: { mode: "new" | "edit" }) {
                 onRenderTemplate={handleRenderTemplate}
                 renderButtonLabel={rendering ? "Rendering..." : "Render PDF (XSL-FO)"}
                 defaultRenderDataJson={`{\n  "recipient": { "name": "Jane Doe" },\n  "certificate": { "uuid": "CERT-2026-0001", "issued_on": "2026-03-07" }\n}`}
+                sessionStorageKey={`renderer.template.session.${templateId ?? "new"}`}
+                onPersistSession={handlePersistSession}
             />
         </Box>
     );

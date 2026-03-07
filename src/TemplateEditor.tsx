@@ -155,6 +155,9 @@ export type TemplateEditorProps = {
     onRenderTemplate?: (template: Template, data: unknown) => void | Promise<void>;
     renderButtonLabel?: string;
     defaultRenderDataJson?: string;
+    sessionStorageKey?: string;
+    onPersistSession?: (template: Template) => void | Promise<void>;
+    persistDebounceMs?: number;
 };
 
 type Size = { w: number; h: number };
@@ -258,6 +261,9 @@ export default function TemplateEditor({
                                            onRenderTemplate,
                                            renderButtonLabel = "Render PDF",
                                            defaultRenderDataJson = "{}",
+                                           sessionStorageKey,
+                                           onPersistSession,
+                                           persistDebounceMs = 1200,
                                        }: TemplateEditorProps) {
     const [template, setTemplate] = useState<Template>(() => normalizeTemplate(initialTemplate));
 
@@ -284,6 +290,7 @@ export default function TemplateEditor({
     const redoStackRef = useRef<Template[]>([]);
     const prevTemplateRef = useRef<Template>(deepClone(template));
     const suppressHistoryRef = useRef<boolean>(false);
+    const skipFirstPersistRef = useRef<boolean>(true);
     const [historyTick, setHistoryTick] = useState(0);
     const canUndo = useMemo(() => undoStackRef.current.length > 0, [historyTick]);
     const canRedo = useMemo(() => redoStackRef.current.length > 0, [historyTick]);
@@ -596,6 +603,33 @@ export default function TemplateEditor({
         setSelectedIds([blockId]);
     }
 
+    function nudgeSelectedBy(deltaX: number, deltaY: number) {
+        if (!selectedIds.length || previewMode) return;
+        setTemplate((prev) => ({
+            ...prev,
+            blocks: prev.blocks.map((b) => {
+                if (!selectedIds.includes(b.id)) return b;
+                const normalized = normalizeBlock(b);
+                const w = pctToPx(normalized.style.width, canvasSize.w);
+                const h = pctToPx(normalized.style.height, canvasSize.h);
+                const x = pctToPx(normalized.style.left, canvasSize.w);
+                const y = pctToPx(normalized.style.top, canvasSize.h);
+
+                const nextX = clamp(x + deltaX, 0, Math.max(canvasSize.w - w, 0));
+                const nextY = clamp(y + deltaY, 0, Math.max(canvasSize.h - h, 0));
+
+                return {
+                    ...b,
+                    style: {
+                        ...(b.style ?? {}),
+                        left: pxToPct(nextX, canvasSize.w),
+                        top: pxToPct(nextY, canvasSize.h),
+                    },
+                };
+            }),
+        }));
+    }
+
     function alignSelected(mode: AlignMode) {
         if (previewMode || selectedIds.length < 2) return;
 
@@ -708,6 +742,18 @@ export default function TemplateEditor({
             if ((e.key === "Backspace" || e.key === "Delete") && selectedIds.length) {
                 e.preventDefault();
                 deleteSelected();
+                return;
+            }
+
+            if (
+                (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "ArrowLeft" || e.key === "ArrowRight")
+                && selectedIds.length
+            ) {
+                e.preventDefault();
+                const step = e.shiftKey ? 10 : 1;
+                const dx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
+                const dy = e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0;
+                nudgeSelectedBy(dx, dy);
             }
         }
 
@@ -841,6 +887,61 @@ export default function TemplateEditor({
             setEditingId(null);
         }
     }, [previewMode]);
+
+    useEffect(() => {
+        if (!sessionStorageKey) return;
+        try {
+            const raw = localStorage.getItem(sessionStorageKey);
+            if (!raw) return;
+            const parsed = JSON.parse(raw) as { template?: Template };
+            if (!parsed?.template) return;
+            const restored = normalizeTemplate(parsed.template);
+            setTemplate(restored);
+            prevTemplateRef.current = deepClone(restored);
+            undoStackRef.current = [];
+            redoStackRef.current = [];
+            setSelectedIds([]);
+            setEditingId(null);
+            setHistoryTick((v) => v + 1);
+            suppressHistoryRef.current = true;
+        } catch {
+            // ignore broken local draft payload
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sessionStorageKey]);
+
+    useEffect(() => {
+        if (!sessionStorageKey) return;
+        try {
+            localStorage.setItem(
+                sessionStorageKey,
+                JSON.stringify({
+                    updatedAt: new Date().toISOString(),
+                    template,
+                })
+            );
+            const indexKey = "renderer.template.session.index";
+            const raw = localStorage.getItem(indexKey);
+            const list = raw ? (JSON.parse(raw) as string[]) : [];
+            if (!list.includes(sessionStorageKey)) {
+                localStorage.setItem(indexKey, JSON.stringify([...list, sessionStorageKey]));
+            }
+        } catch {
+            // ignore storage quota/security errors
+        }
+    }, [sessionStorageKey, template]);
+
+    useEffect(() => {
+        if (!onPersistSession) return;
+        if (skipFirstPersistRef.current) {
+            skipFirstPersistRef.current = false;
+            return;
+        }
+        const handle = window.setTimeout(() => {
+            void onPersistSession(deepClone(template));
+        }, persistDebounceMs);
+        return () => window.clearTimeout(handle);
+    }, [template, onPersistSession, persistDebounceMs]);
 
     return (
         <Box sx={{ display: "flex", height: "100vh", bgcolor: "#f3f5f7" }}>
