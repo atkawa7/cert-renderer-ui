@@ -90,6 +90,12 @@ function parseEmToNumber(v?: string, fallback = 24): number {
     return Number.isFinite(n) ? n : fallback;
 }
 
+function parseLineHeightToNumber(v?: string | number, fallback = 1.1): number {
+    if (v === null || v === undefined) return fallback;
+    const n = parseFloat(String(v).replace("em", "").replace("px", "").trim());
+    return Number.isFinite(n) ? n : fallback;
+}
+
 function toEm(n: number): string {
     // keep it clean like "35em"
     return `${Math.round(n)}em`;
@@ -107,6 +113,7 @@ export type BaseBlockStyle = { top?: string; left?: string; width?: string; heig
 export type TextBlockStyle = BaseBlockStyle & {
     color?: string;
     fontSize?: string;
+    lineHeight?: string | number;
     fontStyle?: "normal" | "italic" | string;
     textAlign?: "left" | "center" | "right" | string;
     fontFamily?: string;
@@ -186,6 +193,7 @@ function normalizeBlock(block: Block): Block {
         s.color ??= "#333333";
         s.fontFamily ??= "serif";
         s.fontSize ??= "24em";
+        s.lineHeight ??= "1.1";
         s.fontStyle ??= "normal";
         s.textAlign ??= "left";
         s.fontWeight ??= 400;
@@ -238,6 +246,7 @@ const DEFAULT_NEW_SIZES: Record<BlockType, { wPct: number; hPct: number }> = {
     image: { wPct: 20, hPct: 20 },
     "horizontal-line": { wPct: 30, hPct: 0.6 },
 };
+const PALETTE_WIDTH_PX = 320;
 
 // ---------------- Component ----------------
 export default function TemplateEditor({
@@ -255,6 +264,7 @@ export default function TemplateEditor({
     // ✅ Preview toggle
     const [previewMode, setPreviewMode] = useState<boolean>(defaultPreview);
     const [gridEnabled, setGridEnabled] = useState<boolean>(false);
+    const [zoomPct, setZoomPct] = useState<number>(100);
     const gridSizePx = 20;
 
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -292,23 +302,29 @@ export default function TemplateEditor({
     const canvasOuterRef = useRef<HTMLDivElement | null>(null);
     const canvasInnerRef = useRef<HTMLDivElement | null>(null);
 
+    const [canvasBaseWidth, setCanvasBaseWidth] = useState<number>(900);
     const [canvasSize, setCanvasSize] = useState<Size>({ w: 900, h: 900 / aspectRatio });
 
-    // measure outer width => derive inner height
+    // measure outer width
     useEffect(() => {
         const el = canvasOuterRef.current;
         if (!el) return;
 
         const ro = new ResizeObserver(() => {
             const rect = el.getBoundingClientRect();
-            const w = rect.width;
-            const h = w / aspectRatio;
-            setCanvasSize({ w, h });
+            setCanvasBaseWidth(Math.max(rect.width, 320));
         });
 
         ro.observe(el);
         return () => ro.disconnect();
-    }, [aspectRatio]);
+    }, []);
+
+    useEffect(() => {
+        const zoom = zoomPct / 100;
+        const w = canvasBaseWidth * zoom;
+        const h = w / aspectRatio;
+        setCanvasSize({ w, h });
+    }, [canvasBaseWidth, aspectRatio, zoomPct]);
 
     const bgUrl = template.background?.type === "image" ? `${assetBaseUrl}${template.background.url}` : null;
 
@@ -416,6 +432,7 @@ export default function TemplateEditor({
                     color: "#333333",
                     fontFamily: "serif",
                     fontSize: "24em",
+                    lineHeight: "1.1",
                     fontWeight: 400,
                     fontStyle: "normal",
                     textAlign: "left",
@@ -827,10 +844,10 @@ export default function TemplateEditor({
 
     return (
         <Box sx={{ display: "flex", height: "100vh", bgcolor: "#f3f5f7" }}>
-            <Box sx={{ flex: 1, p: 10, overflow: "auto", width: "65vw" }}>
+            <Box sx={{ flex: 1, p: 3, pr: `${PALETTE_WIDTH_PX + 24}px`, overflow: "auto", minWidth: 0 }}>
                 <Box
                     sx={{
-                        minHeight: "calc(100vh - 48px)",
+                        minHeight: "calc(100vh - 32px)",
                         display: "flex",
                         justifyContent: "center",
                         alignItems: "flex-start",
@@ -848,7 +865,7 @@ export default function TemplateEditor({
                             backgroundPosition: "0 0, 12px 12px",
                         }}
                     >
-                        <Box ref={canvasOuterRef} sx={{ width: "min(1200px, 100%)", mx: "auto" }}>
+                        <Box ref={canvasOuterRef} sx={{ width: "min(1200px, 100%)", mx: "auto", overflowX: "auto" }}>
                             <Box
                                 ref={canvasInnerRef}
                                 onDragOver={onCanvasDragOver}
@@ -873,7 +890,7 @@ export default function TemplateEditor({
                                     setEditingId(null);
                                 }}
                                 sx={{
-                                    width: "100%",
+                                    width: `${canvasSize.w}px`,
                                     height: `${canvasSize.h}px`,
                                     position: "relative",
                                     borderRadius: 2,
@@ -1087,7 +1104,7 @@ export default function TemplateEditor({
                 variant="permanent"
                 anchor="right"
                 PaperProps={{
-                    sx: { width: "320px", p: 2, borderLeft: "1px solid", borderColor: "divider" },
+                    sx: { width: `${PALETTE_WIDTH_PX}px`, p: 2, borderLeft: "1px solid", borderColor: "divider" },
                 }}
             >
                 <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
@@ -1179,6 +1196,29 @@ export default function TemplateEditor({
                 )}
 
                 <Divider sx={{ my: 2 }} />
+
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                    Zoom
+                </Typography>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+                    <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => setZoomPct((z) => clampNum(z - 10, 25, 300))}
+                    >
+                        -
+                    </Button>
+                    <Button size="small" variant="outlined" onClick={() => setZoomPct(100)}>
+                        {zoomPct}%
+                    </Button>
+                    <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => setZoomPct((z) => clampNum(z + 10, 25, 300))}
+                    >
+                        +
+                    </Button>
+                </Stack>
 
                 <Typography variant="subtitle2" sx={{ mb: 1 }}>
                     Canvas Grid
@@ -1740,7 +1780,7 @@ function EditableText({
                 px: 0.5,
                 overflow: "hidden",
                 whiteSpace: "pre-wrap",
-                lineHeight: 1.1,
+                lineHeight: parseLineHeightToNumber(s.lineHeight, 1.1),
                 fontSize: `${fontSizePx}px`,
             }}
         >
@@ -1960,6 +2000,13 @@ function Inspector({
                         label="Font family"
                         value={block.style.fontFamily ?? ""}
                         onChange={(e) => onStylePatch({ fontFamily: e.target.value })}
+                    />
+                    <TextField
+                        fullWidth
+                        label="Line height"
+                        value={String(block.style.lineHeight ?? "1.1")}
+                        onChange={(e) => onStylePatch({ lineHeight: e.target.value })}
+                        helperText="Examples: 1.1, 1.3, 1.6"
                     />
 
                     <ToggleButtonGroup
