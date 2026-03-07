@@ -143,6 +143,11 @@ export type TemplateEditorProps = {
     assetBaseUrl?: string;
     /** Start in preview mode? */
     defaultPreview?: boolean;
+    onSaveTemplate?: (template: Template) => void | Promise<void>;
+    saveButtonLabel?: string;
+    onRenderTemplate?: (template: Template, data: unknown) => void | Promise<void>;
+    renderButtonLabel?: string;
+    defaultRenderDataJson?: string;
 };
 
 type Size = { w: number; h: number };
@@ -239,6 +244,11 @@ export default function TemplateEditor({
                                            initialTemplate,
                                            assetBaseUrl = "",
                                            defaultPreview = false,
+                                           onSaveTemplate,
+                                           saveButtonLabel = "Save",
+                                           onRenderTemplate,
+                                           renderButtonLabel = "Render PDF",
+                                           defaultRenderDataJson = "{}",
                                        }: TemplateEditorProps) {
     const [template, setTemplate] = useState<Template>(() => normalizeTemplate(initialTemplate));
 
@@ -249,6 +259,9 @@ export default function TemplateEditor({
 
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [editingId, setEditingId] = useState<string | null>(null);
+    const [savingExternal, setSavingExternal] = useState<boolean>(false);
+    const [renderingExternal, setRenderingExternal] = useState<boolean>(false);
+    const [renderDataJson, setRenderDataJson] = useState<string>(defaultRenderDataJson);
     const importInputRef = useRef<HTMLInputElement | null>(null);
     const [contextMenu, setContextMenu] = useState<{
         mouseX: number;
@@ -453,6 +466,36 @@ export default function TemplateEditor({
 
     function closeContextMenu() {
         setContextMenu(null);
+    }
+
+    async function handleSaveAction() {
+        if (!onSaveTemplate) {
+            saveTemplateJson();
+            return;
+        }
+        try {
+            setSavingExternal(true);
+            await onSaveTemplate(deepClone(template));
+        } finally {
+            setSavingExternal(false);
+        }
+    }
+
+    async function handleRenderAction() {
+        if (!onRenderTemplate) return;
+        let parsedData: unknown;
+        try {
+            parsedData = JSON.parse(renderDataJson || "{}");
+        } catch {
+            window.alert("Render data must be valid JSON.");
+            return;
+        }
+        try {
+            setRenderingExternal(true);
+            await onRenderTemplate(deepClone(template), parsedData);
+        } finally {
+            setRenderingExternal(false);
+        }
     }
 
     function saveTemplateJson() {
@@ -1356,8 +1399,8 @@ export default function TemplateEditor({
                     <Button startIcon={<ContentCopyIcon />} variant="outlined" onClick={copyJson}>
                         Copy JSON
                     </Button>
-                    <Button variant="outlined" onClick={saveTemplateJson}>
-                        Save
+                    <Button variant="outlined" onClick={handleSaveAction} disabled={savingExternal}>
+                        {savingExternal ? "Saving..." : saveButtonLabel}
                     </Button>
                     <Button variant="outlined" onClick={() => importInputRef.current?.click()}>
                         Import
@@ -1372,6 +1415,28 @@ export default function TemplateEditor({
                         Delete
                     </Button>
                 </Stack>
+                {onRenderTemplate && (
+                    <>
+                        <TextField
+                            fullWidth
+                            multiline
+                            minRows={4}
+                            maxRows={8}
+                            label="Render Data (JSON)"
+                            value={renderDataJson}
+                            onChange={(e) => setRenderDataJson(e.target.value)}
+                            sx={{ mt: 1.5 }}
+                        />
+                        <Button
+                            variant="contained"
+                            onClick={handleRenderAction}
+                            disabled={renderingExternal}
+                            sx={{ mt: 1 }}
+                        >
+                            {renderingExternal ? "Rendering..." : renderButtonLabel}
+                        </Button>
+                    </>
+                )}
 
                 <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
                     Canvas ratio: {aspectRatio.toFixed(4)} (w/h)
