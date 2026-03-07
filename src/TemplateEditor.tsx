@@ -545,7 +545,6 @@ export default function TemplateEditor({
                                     if (previewMode) return;
                                     if (e.target !== e.currentTarget) return;
 
-                                    // ✅ if user is multi-selecting, don't clear everything
                                     const isMultiSelectGesture = (e as any).shiftKey || (e as any).ctrlKey || (e as any).metaKey;
                                     if (isMultiSelectGesture) return;
 
@@ -942,6 +941,19 @@ function PaletteItem({
     );
 }
 
+function isDataUrl(value?: string): boolean {
+    return /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(String(value ?? "").trim());
+}
+function isAbsoluteUrl(value?: string): boolean {
+    return /^(https?:)?\/\//i.test(String(value ?? "").trim());
+}
+function resolveImageSrc(value: string | undefined, assetBaseUrl = ""): string {
+    const src = String(value ?? "").trim();
+    if (!src) return "";
+    if (isDataUrl(src) || isAbsoluteUrl(src)) return src;
+    return `${assetBaseUrl}${src}`;
+}
+
 // -------------------- Block Renderer --------------------
 function BlockRenderer({
                            block,
@@ -996,7 +1008,7 @@ function BlockRenderer({
     }
 
     if (isImageBlock(block)) {
-        const url = block.value ? `${assetBaseUrl}${block.value}` : "";
+        const url = resolveImageSrc(block.value, assetBaseUrl);
         return (
             <Box
                 sx={{
@@ -1015,7 +1027,7 @@ function BlockRenderer({
                 ) : (
                     !previewMode && (
                         <Typography variant="caption" color="text.secondary">
-                            Image (set URL/value in inspector)
+                            Image (set URL, relative path, or data URL in inspector)
                         </Typography>
                     )
                 )}
@@ -1125,6 +1137,23 @@ function Inspector({
 }) {
     const s = block.style;
     const locked = Boolean((block as any).locked);
+    const imageUploadInputRef = useRef<HTMLInputElement | null>(null);
+
+    function onSelectImageFile(e: React.ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0];
+        if (!file || !isImageBlock(block)) return;
+
+        const reader = new FileReader();
+        reader.onload = () => {
+            const result = typeof reader.result === "string" ? reader.result : "";
+            if (!result) return;
+            onPatch({ value: result } as Partial<Block>);
+        };
+        reader.readAsDataURL(file);
+
+        // allow selecting the same file again
+        e.target.value = "";
+    }
 
     return (
         <Stack spacing={1.5}>
@@ -1145,6 +1174,55 @@ function Inspector({
                     onChange={(e) => onPatch({ value: e.target.value } as Partial<Block>)}
                     helperText={block.type === "text" ? "Tip: double-click text on canvas to edit inline." : undefined}
                 />
+            )}
+
+            {isImageBlock(block) && (
+                <>
+                    <Stack direction="row" spacing={1}>
+                        <Button
+                            variant="outlined"
+                            startIcon={<AddPhotoAlternateIcon />}
+                            onClick={() => imageUploadInputRef.current?.click()}
+                        >
+                            Upload image
+                        </Button>
+                        <Button
+                            variant="text"
+                            color="inherit"
+                            onClick={() => onPatch({ value: "" } as Partial<Block>)}
+                        >
+                            Clear
+                        </Button>
+                    </Stack>
+
+                    <Box
+                        component="input"
+                        ref={imageUploadInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={onSelectImageFile}
+                        sx={{ display: "none" }}
+                    />
+
+                    {Boolean(block.value) && (
+                        <Box
+                            sx={{
+                                width: "100%",
+                                height: 120,
+                                borderRadius: 1,
+                                border: "1px solid rgba(0,0,0,0.15)",
+                                bgcolor: "rgba(0,0,0,0.03)",
+                                overflow: "hidden",
+                            }}
+                        >
+                            <img
+                                src={resolveImageSrc(block.value, "")}
+                                alt="Selected block"
+                                style={{ width: "100%", height: "100%", objectFit: "contain" }}
+                            />
+                        </Box>
+                    )}
+                </>
             )}
 
             {isTextBlock(block) && (
