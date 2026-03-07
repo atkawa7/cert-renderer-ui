@@ -202,6 +202,11 @@ function isImageBlock(b: Block): b is ImageBlock {
 function isLineBlock(b: Block): b is HorizontalLineBlock {
     return b.type === "horizontal-line";
 }
+function blockTypeLabel(b: Block): string {
+    if (b.type === "text") return "Text";
+    if (b.type === "image") return "Image";
+    return "Line";
+}
 
 // ---------------- Drag payload ----------------
 type PalettePayload = { type: BlockType };
@@ -307,6 +312,30 @@ export default function TemplateEditor({
         }));
         setSelectedIds([]);
         setEditingId(null);
+    }
+
+    function moveSelectedLayers(direction: "front" | "back") {
+        if (!selectedIds.length || previewMode) return;
+        setTemplate((prev) => {
+            const selectedSet = new Set(selectedIds);
+            const selected = prev.blocks.filter((b) => selectedSet.has(b.id));
+            const others = prev.blocks.filter((b) => !selectedSet.has(b.id));
+            const nextBlocks = direction === "front" ? [...others, ...selected] : [...selected, ...others];
+            return { ...prev, blocks: nextBlocks };
+        });
+    }
+
+    function moveLayer(blockId: string, direction: "front" | "back") {
+        if (previewMode) return;
+        setTemplate((prev) => {
+            const idx = prev.blocks.findIndex((b) => b.id === blockId);
+            if (idx < 0) return prev;
+            const block = prev.blocks[idx];
+            const others = prev.blocks.filter((b) => b.id !== blockId);
+            const nextBlocks = direction === "front" ? [...others, block] : [block, ...others];
+            return { ...prev, blocks: nextBlocks };
+        });
+        setSelectedIds([blockId]);
     }
 
     function alignSelected(mode: AlignMode) {
@@ -961,6 +990,85 @@ export default function TemplateEditor({
                     >
                         Bottom
                     </Button>
+                </Stack>
+
+                <Divider sx={{ my: 2 }} />
+
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                    Layers
+                </Typography>
+                <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
+                    <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => moveSelectedLayers("front")}
+                        disabled={previewMode || selectedIds.length === 0}
+                    >
+                        Send to front
+                    </Button>
+                    <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => moveSelectedLayers("back")}
+                        disabled={previewMode || selectedIds.length === 0}
+                    >
+                        Send to back
+                    </Button>
+                </Stack>
+
+                <Stack spacing={0.5} sx={{ maxHeight: 220, overflow: "auto", pr: 0.5 }}>
+                    {[...template.blocks].reverse().map((b, idx) => {
+                        const selected = selectedIds.includes(b.id);
+                        return (
+                            <Stack
+                                key={b.id}
+                                direction="row"
+                                alignItems="center"
+                                justifyContent="space-between"
+                                sx={{
+                                    px: 1,
+                                    py: 0.75,
+                                    borderRadius: 1,
+                                    border: "1px solid rgba(0,0,0,0.12)",
+                                    bgcolor: selected ? "rgba(25,118,210,0.08)" : "#fff",
+                                    cursor: previewMode ? "default" : "pointer",
+                                }}
+                                onClick={() => {
+                                    if (previewMode) return;
+                                    setSelectedIds([b.id]);
+                                    setEditingId(null);
+                                }}
+                            >
+                                <Typography variant="caption" sx={{ pr: 1 }}>
+                                    {template.blocks.length - idx}. {blockTypeLabel(b)}
+                                </Typography>
+                                <Stack direction="row" spacing={0.5}>
+                                    <Button
+                                        size="small"
+                                        variant="text"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            moveLayer(b.id, "front");
+                                        }}
+                                        disabled={previewMode}
+                                    >
+                                        Front
+                                    </Button>
+                                    <Button
+                                        size="small"
+                                        variant="text"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            moveLayer(b.id, "back");
+                                        }}
+                                        disabled={previewMode}
+                                    >
+                                        Back
+                                    </Button>
+                                </Stack>
+                            </Stack>
+                        );
+                    })}
                 </Stack>
 
                 <Divider sx={{ my: 2 }} />
