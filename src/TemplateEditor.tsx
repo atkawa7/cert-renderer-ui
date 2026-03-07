@@ -430,7 +430,7 @@ export default function TemplateEditor({
         }
 
         setTemplate((prev) => ({ ...prev, blocks: [...prev.blocks, block] }));
-        setSelectedId(id);
+        setSelectedIds([id]);
         setEditingId(payload.type === "text" ? id : null);
     }
 
