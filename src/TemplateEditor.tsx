@@ -6,11 +6,13 @@ import {
     Divider,
     Drawer,
     FormControl,
+    FormControlLabel,
     IconButton,
     InputLabel,
     MenuItem,
     Select,
     Stack,
+    Switch,
     TextField,
     ToggleButton,
     ToggleButtonGroup,
@@ -143,6 +145,7 @@ export type TemplateEditorProps = {
 };
 
 type Size = { w: number; h: number };
+type AlignMode = "left" | "h-center" | "right" | "top" | "v-center" | "bottom";
 
 // ---------------- Helpers ----------------
 function clamp(n: number, min: number, max: number) {
@@ -228,6 +231,8 @@ export default function TemplateEditor({
 
     // ✅ Preview toggle
     const [previewMode, setPreviewMode] = useState<boolean>(defaultPreview);
+    const [gridEnabled, setGridEnabled] = useState<boolean>(false);
+    const gridSizePx = 20;
 
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -302,6 +307,60 @@ export default function TemplateEditor({
         }));
         setSelectedIds([]);
         setEditingId(null);
+    }
+
+    function alignSelected(mode: AlignMode) {
+        if (previewMode || selectedIds.length < 2) return;
+
+        setTemplate((prev) => {
+            const selected = prev.blocks.filter((b) => selectedIds.includes(b.id)).map(normalizeBlock);
+            if (selected.length < 2) return prev;
+
+            const rects = selected.map((b) => {
+                const x = pctToPx(b.style.left, canvasSize.w);
+                const y = pctToPx(b.style.top, canvasSize.h);
+                const w = pctToPx(b.style.width, canvasSize.w);
+                const h = pctToPx(b.style.height, canvasSize.h);
+                return { id: b.id, x, y, w, h };
+            });
+
+            const bounds = {
+                left: Math.min(...rects.map((r) => r.x)),
+                top: Math.min(...rects.map((r) => r.y)),
+                right: Math.max(...rects.map((r) => r.x + r.w)),
+                bottom: Math.max(...rects.map((r) => r.y + r.h)),
+            };
+            const centerX = (bounds.left + bounds.right) / 2;
+            const centerY = (bounds.top + bounds.bottom) / 2;
+
+            const patchMap = new Map<string, Partial<BaseBlockStyle>>();
+            rects.forEach((r) => {
+                let nx = r.x;
+                let ny = r.y;
+
+                if (mode === "left") nx = bounds.left;
+                if (mode === "h-center") nx = centerX - r.w / 2;
+                if (mode === "right") nx = bounds.right - r.w;
+
+                if (mode === "top") ny = bounds.top;
+                if (mode === "v-center") ny = centerY - r.h / 2;
+                if (mode === "bottom") ny = bounds.bottom - r.h;
+
+                patchMap.set(r.id, {
+                    left: pxToPct(clamp(nx, 0, canvasSize.w - r.w), canvasSize.w),
+                    top: pxToPct(clamp(ny, 0, canvasSize.h - r.h), canvasSize.h),
+                });
+            });
+
+            return {
+                ...prev,
+                blocks: prev.blocks.map((b) => {
+                    const patch = patchMap.get(b.id);
+                    if (!patch) return b;
+                    return { ...b, style: { ...(b.style ?? {}), ...patch } };
+                }),
+            };
+        });
     }
 
     useEffect(() => {
@@ -565,6 +624,18 @@ export default function TemplateEditor({
                                     backgroundPosition: "center",
                                 }}
                             >
+                                {gridEnabled && (
+                                    <Box
+                                        sx={{
+                                            position: "absolute",
+                                            inset: 0,
+                                            pointerEvents: "none",
+                                            backgroundImage:
+                                                "linear-gradient(to right, rgba(25,118,210,0.16) 1px, transparent 1px), linear-gradient(to bottom, rgba(25,118,210,0.16) 1px, transparent 1px)",
+                                            backgroundSize: `${gridSizePx}px ${gridSizePx}px`,
+                                        }}
+                                    />
+                                )}
 
                                 {/* Hints only in edit mode */}
                                 {!previewMode && (
@@ -681,6 +752,8 @@ export default function TemplateEditor({
                                             size={{ width: w, height: safeH }}
                                             position={{ x, y }}
                                             bounds="parent"
+                                            dragGrid={gridEnabled ? [gridSizePx, gridSizePx] : undefined}
+                                            resizeGrid={gridEnabled ? [gridSizePx, gridSizePx] : undefined}
                                             enableResizing={allowInteract}
                                             disableDragging={!allowInteract}
                                             onMouseDown={(e) => {
@@ -814,6 +887,81 @@ export default function TemplateEditor({
                         No element selected.
                     </Typography>
                 )}
+
+                <Divider sx={{ my: 2 }} />
+
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                    Canvas Grid
+                </Typography>
+                <FormControlLabel
+                    control={
+                        <Switch
+                            checked={gridEnabled}
+                            onChange={(_, checked) => setGridEnabled(checked)}
+                            disabled={previewMode}
+                        />
+                    }
+                    label="Enable grid + snap"
+                />
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+                    Grid size: {gridSizePx}px
+                </Typography>
+
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                    Align Selection
+                </Typography>
+                <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
+                    <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => alignSelected("left")}
+                        disabled={previewMode || selectedIds.length < 2}
+                    >
+                        Left
+                    </Button>
+                    <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => alignSelected("h-center")}
+                        disabled={previewMode || selectedIds.length < 2}
+                    >
+                        Center
+                    </Button>
+                    <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => alignSelected("right")}
+                        disabled={previewMode || selectedIds.length < 2}
+                    >
+                        Right
+                    </Button>
+                </Stack>
+                <Stack direction="row" spacing={1}>
+                    <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => alignSelected("top")}
+                        disabled={previewMode || selectedIds.length < 2}
+                    >
+                        Top
+                    </Button>
+                    <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => alignSelected("v-center")}
+                        disabled={previewMode || selectedIds.length < 2}
+                    >
+                        Middle
+                    </Button>
+                    <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => alignSelected("bottom")}
+                        disabled={previewMode || selectedIds.length < 2}
+                    >
+                        Bottom
+                    </Button>
+                </Stack>
 
                 <Divider sx={{ my: 2 }} />
 
