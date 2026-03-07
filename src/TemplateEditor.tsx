@@ -9,6 +9,7 @@ import {
     FormControlLabel,
     IconButton,
     InputLabel,
+    Menu,
     MenuItem,
     Select,
     Stack,
@@ -241,6 +242,13 @@ export default function TemplateEditor({
 
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [editingId, setEditingId] = useState<string | null>(null);
+    const [contextMenu, setContextMenu] = useState<{
+        mouseX: number;
+        mouseY: number;
+        canvasX: number;
+        canvasY: number;
+        targetBlockId: string | null;
+    } | null>(null);
 
     const primarySelectedId = selectedIds.length ? selectedIds[selectedIds.length - 1] : null;
 
@@ -312,6 +320,124 @@ export default function TemplateEditor({
         }));
         setSelectedIds([]);
         setEditingId(null);
+    }
+
+    function duplicateSelected() {
+        if (!selectedIds.length || previewMode) return;
+        setTemplate((prev) => {
+            const selectedSet = new Set(selectedIds);
+            const toDuplicate = prev.blocks.filter((b) => selectedSet.has(b.id)).map(normalizeBlock);
+            if (!toDuplicate.length) return prev;
+
+            const duplicates = toDuplicate.map((b) => {
+                const top = pctToPx(b.style.top, canvasSize.h);
+                const left = pctToPx(b.style.left, canvasSize.w);
+                const width = pctToPx(b.style.width, canvasSize.w);
+                const height = pctToPx(b.style.height, canvasSize.h);
+                const offsetX = Math.min(left + 12, Math.max(canvasSize.w - width, 0));
+                const offsetY = Math.min(top + 12, Math.max(canvasSize.h - height, 0));
+
+                return {
+                    ...b,
+                    id: makeId(),
+                    style: {
+                        ...(b.style ?? {}),
+                        left: pxToPct(offsetX, canvasSize.w),
+                        top: pxToPct(offsetY, canvasSize.h),
+                    },
+                    locked: false,
+                } as Block;
+            });
+
+            return { ...prev, blocks: [...prev.blocks, ...duplicates] };
+        });
+    }
+
+    function setSelectedLocked(nextLocked: boolean) {
+        if (!selectedIds.length || previewMode) return;
+        setTemplate((prev) => ({
+            ...prev,
+            blocks: prev.blocks.map((b) => (selectedIds.includes(b.id) ? ({ ...b, locked: nextLocked } as Block) : b)),
+        }));
+    }
+
+    function createBlockAt(type: BlockType, x: number, y: number): Block {
+        const { wPct, hPct } = DEFAULT_NEW_SIZES[type];
+        const wPx = (wPct / 100) * canvasSize.w;
+        const hPx = (hPct / 100) * canvasSize.h;
+        const leftPx = clamp(x - wPx / 2, 0, Math.max(canvasSize.w - wPx, 0));
+        const topPx = clamp(y - hPx / 2, 0, Math.max(canvasSize.h - hPx, 0));
+
+        const baseStyle: BaseBlockStyle = {
+            left: pxToPct(leftPx, canvasSize.w),
+            top: pxToPct(topPx, canvasSize.h),
+            width: `${wPct}%`,
+            height: `${hPct}%`,
+        };
+
+        const id = makeId();
+        if (type === "text") {
+            return normalizeBlock({
+                id,
+                type: "text",
+                value: "Double-click to edit",
+                autoScale: false,
+                locked: false,
+                style: {
+                    ...baseStyle,
+                    color: "#333333",
+                    fontFamily: "serif",
+                    fontSize: "24em",
+                    fontWeight: 400,
+                    fontStyle: "normal",
+                    textAlign: "left",
+                    textDecoration: "none",
+                },
+            });
+        }
+        if (type === "image") {
+            return normalizeBlock({
+                id,
+                type: "image",
+                value: "",
+                locked: false,
+                style: { ...baseStyle },
+            });
+        }
+        return normalizeBlock({
+            id,
+            type: "horizontal-line",
+            locked: false,
+            style: { ...baseStyle, backgroundColor: "#333333" },
+        });
+    }
+
+    function addBlockAt(type: BlockType, x: number, y: number) {
+        if (previewMode) return;
+        const block = createBlockAt(type, x, y);
+        setTemplate((prev) => ({ ...prev, blocks: [...prev.blocks, block] }));
+        setSelectedIds([block.id]);
+        setEditingId(type === "text" ? block.id : null);
+    }
+
+    function openContextMenu(e: React.MouseEvent, targetBlockId: string | null) {
+        if (previewMode) return;
+        const inner = canvasInnerRef.current;
+        if (!inner) return;
+        const rect = inner.getBoundingClientRect();
+        const canvasX = clamp(e.clientX - rect.left, 0, rect.width);
+        const canvasY = clamp(e.clientY - rect.top, 0, rect.height);
+        setContextMenu({
+            mouseX: e.clientX + 2,
+            mouseY: e.clientY - 6,
+            canvasX,
+            canvasY,
+            targetBlockId,
+        });
+    }
+
+    function closeContextMenu() {
+        setContextMenu(null);
     }
 
     function moveSelectedLayers(direction: "front" | "back") {
@@ -465,61 +591,11 @@ export default function TemplateEditor({
         const x = clamp(e.clientX - rect.left, 0, rect.width);
         const y = clamp(e.clientY - rect.top, 0, rect.height);
 
-        const { wPct, hPct } = DEFAULT_NEW_SIZES[payload.type];
-        const wPx = (wPct / 100) * rect.width;
-        const hPx = (hPct / 100) * rect.height;
-
-        const leftPx = clamp(x - wPx / 2, 0, rect.width - wPx);
-        const topPx = clamp(y - hPx / 2, 0, rect.height - hPx);
-
-        const baseStyle: BaseBlockStyle = {
-            left: pxToPct(leftPx, rect.width),
-            top: pxToPct(topPx, rect.height),
-            width: `${wPct}%`,
-            height: `${hPct}%`,
-        };
-
-        const id = makeId();
-        let block: Block;
-
-        if (payload.type === "text") {
-            block = normalizeBlock({
-                id,
-                type: "text",
-                value: "Double-click to edit",
-                autoScale: false,
-                locked: false,
-                style: {
-                    ...baseStyle,
-                    color: "#333333",
-                    fontFamily: "serif",
-                    fontSize: "24em",
-                    fontWeight: 400,
-                    fontStyle: "normal",
-                    textAlign: "left",
-                    textDecoration: "none",
-                },
-            });
-        } else if (payload.type === "image") {
-            block = normalizeBlock({
-                id,
-                type: "image",
-                value: "",
-                locked: false,
-                style: { ...baseStyle },
-            });
-        } else {
-            block = normalizeBlock({
-                id,
-                type: "horizontal-line",
-                locked: false,
-                style: { ...baseStyle, backgroundColor: "#333333" },
-            });
-        }
+        const block = createBlockAt(payload.type, x, y);
 
         setTemplate((prev) => ({ ...prev, blocks: [...prev.blocks, block] }));
-        setSelectedIds([id]);
-        setEditingId(payload.type === "text" ? id : null);
+        setSelectedIds([block.id]);
+        setEditingId(payload.type === "text" ? block.id : null);
     }
 
     // ---------- RND drag/resize ----------
@@ -629,6 +705,15 @@ export default function TemplateEditor({
                                 ref={canvasInnerRef}
                                 onDragOver={onCanvasDragOver}
                                 onDrop={onCanvasDrop}
+                                onContextMenu={(e) => {
+                                    if (previewMode) return;
+                                    e.preventDefault();
+                                    if (e.target === e.currentTarget) {
+                                        setSelectedIds([]);
+                                        setEditingId(null);
+                                        openContextMenu(e, null);
+                                    }
+                                }}
                                 onMouseDown={(e) => {
                                     if (previewMode) return;
                                     if (e.target !== e.currentTarget) return;
@@ -798,6 +883,16 @@ export default function TemplateEditor({
                                                 } else {
                                                     setSelectedIds([b.id]); // normal click = single select
                                                 }
+                                            }}
+                                            onContextMenu={(e) => {
+                                                if (previewMode) return;
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                if (!selectedIds.includes(b.id)) {
+                                                    setSelectedIds([b.id]);
+                                                    setEditingId(null);
+                                                }
+                                                openContextMenu(e, b.id);
                                             }}
                                             onDoubleClick={(e) => {
                                                 if (!allowEdit) return;
@@ -1153,6 +1248,102 @@ export default function TemplateEditor({
                     Canvas ratio: {aspectRatio.toFixed(4)} (w/h)
                 </Typography>
             </Drawer>
+
+            <Menu
+                open={Boolean(contextMenu)}
+                onClose={closeContextMenu}
+                anchorReference="anchorPosition"
+                anchorPosition={
+                    contextMenu ? { top: contextMenu.mouseY, left: contextMenu.mouseX } : undefined
+                }
+            >
+                <MenuItem
+                    onClick={() => {
+                        if (!contextMenu) return;
+                        addBlockAt("text", contextMenu.canvasX, contextMenu.canvasY);
+                        closeContextMenu();
+                    }}
+                >
+                    Add text
+                </MenuItem>
+                <MenuItem
+                    onClick={() => {
+                        if (!contextMenu) return;
+                        addBlockAt("image", contextMenu.canvasX, contextMenu.canvasY);
+                        closeContextMenu();
+                    }}
+                >
+                    Add image
+                </MenuItem>
+                <MenuItem
+                    onClick={() => {
+                        if (!contextMenu) return;
+                        addBlockAt("horizontal-line", contextMenu.canvasX, contextMenu.canvasY);
+                        closeContextMenu();
+                    }}
+                >
+                    Add line
+                </MenuItem>
+
+                {selectedIds.length > 0 && <Divider />}
+
+                {selectedIds.length > 0 && (
+                    <MenuItem
+                        onClick={() => {
+                            duplicateSelected();
+                            closeContextMenu();
+                        }}
+                    >
+                        Duplicate selected
+                    </MenuItem>
+                )}
+                {selectedIds.length > 0 && (
+                    <MenuItem
+                        onClick={() => {
+                            const selectedBlocksNow = template.blocks.filter((b) => selectedIds.includes(b.id));
+                            const shouldLock = selectedBlocksNow.some((b) => !Boolean((b as any).locked));
+                            setSelectedLocked(shouldLock);
+                            closeContextMenu();
+                        }}
+                    >
+                        {template.blocks
+                            .filter((b) => selectedIds.includes(b.id))
+                            .every((b) => Boolean((b as any).locked))
+                            ? "Unlock selected"
+                            : "Lock selected"}
+                    </MenuItem>
+                )}
+                {selectedIds.length > 0 && (
+                    <MenuItem
+                        onClick={() => {
+                            moveSelectedLayers("front");
+                            closeContextMenu();
+                        }}
+                    >
+                        Send to front
+                    </MenuItem>
+                )}
+                {selectedIds.length > 0 && (
+                    <MenuItem
+                        onClick={() => {
+                            moveSelectedLayers("back");
+                            closeContextMenu();
+                        }}
+                    >
+                        Send to back
+                    </MenuItem>
+                )}
+                {selectedIds.length > 0 && (
+                    <MenuItem
+                        onClick={() => {
+                            deleteSelected();
+                            closeContextMenu();
+                        }}
+                    >
+                        Delete selected
+                    </MenuItem>
+                )}
+            </Menu>
         </Box>
     );
 }
