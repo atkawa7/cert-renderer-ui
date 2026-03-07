@@ -32,6 +32,8 @@ import { InputAdornment } from "@mui/material";
 import RemoveIcon from "@mui/icons-material/Remove";
 import AddIcon from "@mui/icons-material/Add";
 import { Rnd, type RndDragCallback, type RndResizeCallback } from "react-rnd";
+import { useConfirm } from "./components/ConfirmDialogProvider";
+import { convertTemplateToDesignDraft, type DesignCreateDraft } from "./designCatalog";
 
 type Orientation = "portrait" | "landscape" | string;
 type PaperKey =
@@ -155,6 +157,8 @@ export type TemplateEditorProps = {
     onRenderTemplate?: (template: Template, data: unknown) => void | Promise<void>;
     renderButtonLabel?: string;
     defaultRenderDataJson?: string;
+    onConvertToDesign?: (design: DesignCreateDraft) => void | Promise<void>;
+    convertToDesignLabel?: string;
     sessionStorageKey?: string;
     onPersistSession?: (template: Template) => void | Promise<void>;
     persistDebounceMs?: number;
@@ -261,10 +265,13 @@ export default function TemplateEditor({
                                            onRenderTemplate,
                                            renderButtonLabel = "Render PDF",
                                            defaultRenderDataJson = "{}",
+                                           onConvertToDesign,
+                                           convertToDesignLabel = "Convert to Design",
                                            sessionStorageKey,
                                            onPersistSession,
                                            persistDebounceMs = 1200,
                                        }: TemplateEditorProps) {
+    const confirm = useConfirm();
     const [template, setTemplate] = useState<Template>(() => normalizeTemplate(initialTemplate));
 
     // ✅ Preview toggle
@@ -277,6 +284,7 @@ export default function TemplateEditor({
     const [editingId, setEditingId] = useState<string | null>(null);
     const [savingExternal, setSavingExternal] = useState<boolean>(false);
     const [renderingExternal, setRenderingExternal] = useState<boolean>(false);
+    const [convertingDesign, setConvertingDesign] = useState<boolean>(false);
     const [renderDataJson, setRenderDataJson] = useState<string>(defaultRenderDataJson);
     const importInputRef = useRef<HTMLInputElement | null>(null);
     const [contextMenu, setContextMenu] = useState<{
@@ -363,8 +371,16 @@ export default function TemplateEditor({
         await navigator.clipboard.writeText(JSON.stringify(template, null, 2));
     }
 
-    function deleteSelected() {
+    async function deleteSelected() {
         if (!selectedIds.length) return;
+        const ok = await confirm({
+            title: "Delete Selected Blocks",
+            message: `Delete ${selectedIds.length} selected item${selectedIds.length > 1 ? "s" : ""}?`,
+            confirmText: "Delete",
+            cancelText: "Cancel",
+            destructive: true,
+        });
+        if (!ok) return;
         setTemplate((prev) => ({
             ...prev,
             blocks: prev.blocks.filter((b) => !selectedIds.includes(b.id)),
@@ -519,6 +535,19 @@ export default function TemplateEditor({
             await onRenderTemplate(deepClone(template), parsedData);
         } finally {
             setRenderingExternal(false);
+        }
+    }
+
+    async function handleConvertToDesignAction() {
+        if (!onConvertToDesign) return;
+        try {
+            setConvertingDesign(true);
+            const draft = convertTemplateToDesignDraft(deepClone(template), {
+                assetBaseUrl,
+            });
+            await onConvertToDesign(draft);
+        } finally {
+            setConvertingDesign(false);
         }
     }
 
@@ -1543,6 +1572,15 @@ export default function TemplateEditor({
                     <Button variant="outlined" onClick={handleSaveAction} disabled={savingExternal}>
                         {savingExternal ? "Saving..." : saveButtonLabel}
                     </Button>
+                    {onConvertToDesign && (
+                        <Button
+                            variant="outlined"
+                            onClick={handleConvertToDesignAction}
+                            disabled={convertingDesign}
+                        >
+                            {convertingDesign ? "Converting..." : convertToDesignLabel}
+                        </Button>
+                    )}
                     <Button variant="outlined" onClick={() => importInputRef.current?.click()}>
                         Import
                     </Button>

@@ -18,6 +18,37 @@ export type TemplateDetail = {
 
 type PageResponse<T> = {
     content: T[];
+    number: number;
+    size: number;
+    totalElements: number;
+    totalPages: number;
+};
+
+export type PagedResult<T> = {
+    items: T[];
+    page: number;
+    size: number;
+    totalElements: number;
+    totalPages: number;
+};
+
+export type DesignSummary = {
+    id: string;
+    name: string;
+    description?: string;
+    thumbnailUrl: string;
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type DesignDetail = {
+    id: string;
+    name: string;
+    description?: string;
+    thumbnailUrl: string;
+    template: Template;
+    createdAt: string;
+    updatedAt: string;
 };
 
 const API_BASE = appConfig.rendererApiBase;
@@ -46,6 +77,43 @@ export async function listTemplates(query = "", page = 0, size = 50): Promise<Te
     return data.content ?? [];
 }
 
+export async function listDesigns(query = "", page = 0, size = 12): Promise<PagedResult<DesignSummary>> {
+    const params = new URLSearchParams();
+    if (query.trim()) params.set("query", query.trim());
+    params.set("page", String(page));
+    params.set("size", String(size));
+    const data = await apiFetch<PageResponse<DesignSummary>>(`/designs?${params.toString()}`);
+    return {
+        items: data.content ?? [],
+        page: data.number ?? page,
+        size: data.size ?? size,
+        totalElements: data.totalElements ?? 0,
+        totalPages: data.totalPages ?? 0,
+    };
+}
+
+export async function getDesignById(id: string): Promise<DesignDetail> {
+    return await apiFetch<DesignDetail>(`/designs/${id}`);
+}
+
+export async function createDesign(payload: {
+    name: string;
+    description?: string;
+    thumbnailUrl: string;
+    template: Template;
+}): Promise<DesignDetail> {
+    return await apiFetch<DesignDetail>("/designs", {
+        method: "POST",
+        body: JSON.stringify(payload),
+    });
+}
+
+export async function deleteDesignById(id: string): Promise<void> {
+    await apiFetch<void>(`/designs/${id}`, {
+        method: "DELETE",
+    });
+}
+
 export async function getTemplateById(id: string): Promise<TemplateDetail> {
     return await apiFetch<TemplateDetail>(`/templates/${id}`);
 }
@@ -64,6 +132,12 @@ export async function updateTemplateById(
     return await apiFetch<TemplateDetail>(`/templates/${id}`, {
         method: "PUT",
         body: JSON.stringify(payload),
+    });
+}
+
+export async function deleteTemplateById(id: string): Promise<void> {
+    await apiFetch<void>(`/templates/${id}`, {
+        method: "DELETE",
     });
 }
 
