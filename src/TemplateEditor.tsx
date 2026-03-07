@@ -111,7 +111,7 @@ function clampNum(n: number, min: number, max: number) {
 }
 
 // ---------------- Template model types ----------------
-export type Background = { url: string; type: "image" | "color"; color?: string };
+export type Background = { url: string; type: "image" | "color" | "svg"; color?: string; svg?: string };
 export type BlockType = "text" | "image" | "horizontal-line";
 export type BaseBlockStyle = { top?: string; left?: string; width?: string; height?: string };
 
@@ -241,7 +241,23 @@ function normalizeTemplate(input: Template): Template {
         if (!(b as any).id) (b as any).id = makeId();
         return normalizeBlock(b as Block);
     });
-    if (!t.background) t.background = { type: "color", url: "", color: "#ffffff" };
+    if (!t.background) {
+        t.background = { type: "color", url: "", color: "#ffffff", svg: "" };
+    } else {
+        const bg = t.background as Background;
+        bg.url ??= "";
+        bg.color ??= "#ffffff";
+        bg.svg ??= "";
+        if (!bg.type) {
+            if ((bg.svg ?? "").trim()) {
+                bg.type = "svg";
+            } else if ((bg.url ?? "").trim()) {
+                bg.type = "image";
+            } else {
+                bg.type = "color";
+            }
+        }
+    }
     t.name ??= "";
     t.paperSize ??= "A4";
     t.orientation ??= "portrait";
@@ -354,7 +370,18 @@ export default function TemplateEditor({
         setCanvasSize({ w, h });
     }, [canvasBaseWidth, aspectRatio, zoomPct]);
 
-    const bgUrl = template.background?.type === "image" ? `${assetBaseUrl}${template.background.url}` : null;
+    const bgUrl = useMemo(() => {
+        const bg = template.background as Background | undefined;
+        if (!bg) return null;
+        if (bg.type === "svg" && (bg.svg ?? "").trim()) {
+            return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(bg.svg ?? "")}`;
+        }
+        if (bg.type === "image") {
+            return resolveImageSrc(bg.url, assetBaseUrl) || null;
+        }
+        return null;
+    }, [template.background, assetBaseUrl]);
+    const bgType = (template.background?.type ?? "color") as Background["type"];
 
     function updateBlock(blockId: string, patch: Partial<Block>) {
         setTemplate((prev) => {
@@ -1210,7 +1237,10 @@ export default function TemplateEditor({
                                     position: "relative",
                                     borderRadius: 2,
                                     overflow: "hidden",
-                                    bgcolor: "#fff",
+                                    bgcolor:
+                                        bgType === "color"
+                                            ? ((template.background as Background | undefined)?.color || "#ffffff")
+                                            : "#fff",
                                     border: "2px solid rgba(0,0,0,0.2)",
                                     boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
                                     backgroundImage: bgUrl ? `url("${bgUrl}")` : "none",
@@ -1580,21 +1610,87 @@ export default function TemplateEditor({
 
                 <TextField
                     fullWidth
-                    label="Background URL"
-                    value={template.background?.url ?? ""}
+                    select
+                    label="Background Type"
+                    value={bgType}
                     onChange={(e) =>
                         setTemplate((p) => ({
                             ...p,
                             background: {
-                                ...(p.background ?? { type: "image", url: "" }),
-                                type: "image",
-                                url: e.target.value,
+                                ...(p.background ?? { type: "color", color: "#ffffff", url: "", svg: "" }),
+                                type: e.target.value as Background["type"],
                             },
                         }))
                     }
                     sx={{ mt: 1 }}
                     disabled={previewMode}
-                />
+                >
+                    <MenuItem value="color">Color</MenuItem>
+                    <MenuItem value="image">Image</MenuItem>
+                    <MenuItem value="svg">SVG</MenuItem>
+                </TextField>
+
+                {bgType === "image" && (
+                    <TextField
+                        fullWidth
+                        label="Background URL"
+                        value={template.background?.url ?? ""}
+                        onChange={(e) =>
+                            setTemplate((p) => ({
+                                ...p,
+                                background: {
+                                    ...(p.background ?? { type: "image", url: "" }),
+                                    type: "image",
+                                    url: e.target.value,
+                                },
+                            }))
+                        }
+                        sx={{ mt: 1 }}
+                        disabled={previewMode}
+                    />
+                )}
+
+                {bgType === "svg" && (
+                    <TextField
+                        fullWidth
+                        label="Background SVG"
+                        multiline
+                        minRows={6}
+                        value={(template.background as Background | undefined)?.svg ?? ""}
+                        onChange={(e) =>
+                            setTemplate((p) => ({
+                                ...p,
+                                background: {
+                                    ...(p.background ?? { type: "svg", svg: "", url: "", color: "#ffffff" }),
+                                    type: "svg",
+                                    svg: e.target.value,
+                                },
+                            }))
+                        }
+                        sx={{ mt: 1 }}
+                        disabled={previewMode}
+                    />
+                )}
+
+                {bgType === "color" && (
+                    <TextField
+                        fullWidth
+                        label="Background Color"
+                        value={template.background?.color ?? "#ffffff"}
+                        onChange={(e) =>
+                            setTemplate((p) => ({
+                                ...p,
+                                background: {
+                                    ...(p.background ?? { type: "color", color: "#ffffff", url: "", svg: "" }),
+                                    type: "color",
+                                    color: e.target.value,
+                                },
+                            }))
+                        }
+                        sx={{ mt: 1 }}
+                        disabled={previewMode}
+                    />
+                )}
 
                 <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
                     Canvas ratio: {aspectRatio.toFixed(4)} (w/h)

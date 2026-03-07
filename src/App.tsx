@@ -8,6 +8,10 @@ import {
     CardContent,
     CardMedia,
     CircularProgress,
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogTitle,
     Divider,
     Drawer,
     List,
@@ -55,7 +59,7 @@ function toEditorTemplate(detail: TemplateDetail): Template {
     const template = (detail.template ?? {}) as Partial<Template>;
     return {
         name: template.name ?? detail.name ?? "",
-        background: (template.background ?? { type: "color", color: "#ffffff", url: "" }) as Template["background"],
+        background: (template.background ?? { type: "color", color: "#ffffff", url: "", svg: "" }) as Template["background"],
         blocks: (template.blocks ?? []) as Template["blocks"],
         paperSize: template.paperSize ?? "A4",
         orientation: template.orientation ?? "portrait",
@@ -64,7 +68,11 @@ function toEditorTemplate(detail: TemplateDetail): Template {
 
 function makeNewTemplate(): Template {
     return {
-        name: `Template copy`,
+        name: "Template copy",
+        background: { type: "color", color: "#ffffff", url: "", svg: "" } as Template["background"],
+        blocks: [],
+        paperSize: "A4",
+        orientation: "portrait",
     };
 }
 
@@ -349,6 +357,145 @@ function EditorPage({ mode }: { mode: "new" | "edit" }) {
     );
 }
 
+type DesignFormState = {
+    name: string;
+    description: string;
+    thumbnailUrl: string;
+    templateJson: string;
+};
+
+function DesignCreateDialog({
+    open,
+    creating,
+    form,
+    onFormChange,
+    onClose,
+    onSubmit,
+}: {
+    open: boolean;
+    creating: boolean;
+    form: DesignFormState;
+    onFormChange: (next: DesignFormState) => void;
+    onClose: () => void;
+    onSubmit: () => void;
+}) {
+    return (
+        <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+            <DialogTitle>Add Design</DialogTitle>
+            <DialogContent>
+                <Stack spacing={1.5} sx={{ pt: 1 }}>
+                    <TextField
+                        size="small"
+                        label="Name"
+                        value={form.name}
+                        onChange={(e) => onFormChange({ ...form, name: e.target.value })}
+                    />
+                    <TextField
+                        size="small"
+                        label="Description"
+                        value={form.description}
+                        onChange={(e) => onFormChange({ ...form, description: e.target.value })}
+                    />
+                    <TextField
+                        size="small"
+                        label="Thumbnail URL"
+                        value={form.thumbnailUrl}
+                        onChange={(e) => onFormChange({ ...form, thumbnailUrl: e.target.value })}
+                    />
+                    <TextField
+                        size="small"
+                        label="Template JSON"
+                        multiline
+                        minRows={10}
+                        value={form.templateJson}
+                        onChange={(e) => onFormChange({ ...form, templateJson: e.target.value })}
+                    />
+                </Stack>
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={onClose} disabled={creating}>
+                    Cancel
+                </Button>
+                <Button variant="contained" onClick={onSubmit} disabled={creating}>
+                    {creating ? "Creating..." : "Add Design"}
+                </Button>
+            </DialogActions>
+        </Dialog>
+    );
+}
+
+function DesignImagePreviewDialog({
+    imageUrl,
+    title,
+    onClose,
+}: {
+    imageUrl: string | null;
+    title: string;
+    onClose: () => void;
+}) {
+    return (
+        <Dialog open={Boolean(imageUrl)} onClose={onClose} maxWidth="lg" fullWidth>
+            <DialogTitle>{title}</DialogTitle>
+            <DialogContent>
+                {imageUrl && (
+                    <Box
+                        component="img"
+                        src={imageUrl}
+                        alt={title}
+                        sx={{ width: "100%", maxHeight: "75vh", objectFit: "contain", display: "block" }}
+                    />
+                )}
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={onClose}>Close</Button>
+            </DialogActions>
+        </Dialog>
+    );
+}
+
+function DesignCardItem({
+    design,
+    deleting,
+    onUse,
+    onDelete,
+    onPreview,
+}: {
+    design: DesignSummary;
+    deleting: boolean;
+    onUse: () => void;
+    onDelete: () => void;
+    onPreview: () => void;
+}) {
+    return (
+        <Card sx={{ width: 340, borderRadius: 3 }}>
+            <CardMedia
+                component="img"
+                height="180"
+                image={design.thumbnailUrl}
+                alt={design.name}
+                onClick={onPreview}
+                sx={{ objectFit: "cover", bgcolor: "#f1f4f8", cursor: "zoom-in" }}
+            />
+            <CardContent>
+                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                    {design.name}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                    {design.description || "-"}
+                </Typography>
+            </CardContent>
+            <CardActions sx={{ px: 2, pb: 2 }}>
+                <Button fullWidth variant="contained" onClick={onUse}>
+                    Use Design
+                </Button>
+                <Button fullWidth variant="outlined" color="error" onClick={onDelete} disabled={deleting}>
+                    {deleting ? "Deleting..." : "Delete"}
+                </Button>
+            </CardActions>
+        </Card>
+    );
+}
+
 function DesignsPage() {
     const navigate = useNavigate();
     const confirm = useConfirm();
@@ -360,11 +507,16 @@ function DesignsPage() {
     const [loading, setLoading] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [creating, setCreating] = useState(false);
+    const [createDialogOpen, setCreateDialogOpen] = useState(false);
     const [deletingId, setDeletingId] = useState<string | null>(null);
-    const [name, setName] = useState("");
-    const [description, setDescription] = useState("");
-    const [thumbnailUrl, setThumbnailUrl] = useState("");
-    const [templateJson, setTemplateJson] = useState(JSON.stringify({}));
+    const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+    const [previewTitle, setPreviewTitle] = useState("Design Preview");
+    const [form, setForm] = useState<DesignFormState>({
+        name: "",
+        description: "",
+        thumbnailUrl: "",
+        templateJson: JSON.stringify({}),
+    });
 
     async function loadDesignPage(targetPage = page, targetQuery = query) {
         setLoading(true);
@@ -390,16 +542,20 @@ function DesignsPage() {
         setCreating(true);
         setErrorMsg(null);
         try {
-            const parsedTemplate = JSON.parse(templateJson) as Template;
+            const parsedTemplate = JSON.parse(form.templateJson) as Template;
             await createDesign({
-                name: name.trim() || "Untitled Design",
-                description: description.trim(),
-                thumbnailUrl: thumbnailUrl.trim(),
+                name: form.name.trim() || "Untitled Design",
+                description: form.description.trim(),
+                thumbnailUrl: form.thumbnailUrl.trim(),
                 template: parsedTemplate,
             });
-            setName("");
-            setDescription("");
-            setThumbnailUrl("");
+            setForm({
+                name: "",
+                description: "",
+                thumbnailUrl: "",
+                templateJson: JSON.stringify({}),
+            });
+            setCreateDialogOpen(false);
             await loadDesignPage(0, query);
         } catch (err: any) {
             setErrorMsg(err?.message || "Failed to create design");
@@ -439,52 +595,18 @@ function DesignsPage() {
                         Manage design library and create editable templates from each design.
                     </Typography>
                 </Box>
-                <Button variant="outlined" component={RouterLink} to="/templates/new">
-                    Start Blank
-                </Button>
-            </Stack>
-
-            <Card sx={{ p: 2, mb: 2, borderRadius: 3 }}>
-                <Stack spacing={1.5}>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                <Stack direction="row" spacing={1}>
+                    <Button variant="contained" onClick={() => setCreateDialogOpen(true)}>
                         Add Design
-                    </Typography>
-                    <TextField
-                        size="small"
-                        label="Name"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                    />
-                    <TextField
-                        size="small"
-                        label="Description"
-                        value={description}
-                        onChange={(e) => setDescription(e.target.value)}
-                    />
-                    <TextField
-                        size="small"
-                        label="Thumbnail URL"
-                        value={thumbnailUrl}
-                        onChange={(e) => setThumbnailUrl(e.target.value)}
-                    />
-                    <TextField
-                        size="small"
-                        label="Template JSON"
-                        multiline
-                        minRows={8}
-                        value={templateJson}
-                        onChange={(e) => setTemplateJson(e.target.value)}
-                    />
-                    <Stack direction="row" spacing={1}>
-                        <Button variant="contained" onClick={handleCreateDesign} disabled={creating}>
-                            {creating ? "Creating..." : "Add Design"}
-                        </Button>
-                        <Button variant="outlined" onClick={() => loadDesignPage(page, query)} disabled={loading}>
-                            Refresh
-                        </Button>
-                    </Stack>
+                    </Button>
+                    <Button variant="outlined" component={RouterLink} to="/templates/new">
+                        Start Blank
+                    </Button>
+                    <Button variant="outlined" onClick={() => loadDesignPage(page, query)} disabled={loading}>
+                        Refresh
+                    </Button>
                 </Stack>
-            </Card>
+            </Stack>
 
             <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
                 <TextField
@@ -516,41 +638,17 @@ function DesignsPage() {
             ) : (
                 <Stack direction="row" flexWrap="wrap" gap={2}>
                     {designs.map((design) => (
-                        <Card key={design.id} sx={{ width: 340, borderRadius: 3 }}>
-                        <CardMedia
-                            component="img"
-                            height="180"
-                            image={design.thumbnailUrl}
-                            alt={design.name}
-                            sx={{ objectFit: "cover", bgcolor: "#f1f4f8" }}
+                        <DesignCardItem
+                            key={design.id}
+                            design={design}
+                            deleting={deletingId === design.id}
+                            onUse={() => navigate(`/templates/new?design=${encodeURIComponent(design.id)}`)}
+                            onDelete={() => void handleDeleteDesign(design.id, design.name)}
+                            onPreview={() => {
+                                setPreviewImageUrl(design.thumbnailUrl);
+                                setPreviewTitle(design.name);
+                            }}
                         />
-                        <CardContent>
-                            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                                {design.name}
-                            </Typography>
-                            <Typography variant="body2" color="text.secondary">
-                                {design.description || "-"}
-                            </Typography>
-                        </CardContent>
-                        <CardActions sx={{ px: 2, pb: 2 }}>
-                            <Button
-                                fullWidth
-                                variant="contained"
-                                onClick={() => navigate(`/templates/new?design=${encodeURIComponent(design.id)}`)}
-                            >
-                                Use Design
-                            </Button>
-                            <Button
-                                fullWidth
-                                variant="outlined"
-                                color="error"
-                                onClick={() => void handleDeleteDesign(design.id, design.name)}
-                                disabled={deletingId === design.id}
-                            >
-                                {deletingId === design.id ? "Deleting..." : "Delete"}
-                            </Button>
-                        </CardActions>
-                    </Card>
                     ))}
                 </Stack>
             )}
@@ -564,6 +662,26 @@ function DesignsPage() {
                     shape="rounded"
                 />
             </Stack>
+
+            <DesignCreateDialog
+                open={createDialogOpen}
+                creating={creating}
+                form={form}
+                onFormChange={setForm}
+                onClose={() => {
+                    if (creating) return;
+                    setCreateDialogOpen(false);
+                }}
+                onSubmit={handleCreateDesign}
+            />
+            <DesignImagePreviewDialog
+                imageUrl={previewImageUrl}
+                title={previewTitle}
+                onClose={() => {
+                    setPreviewImageUrl(null);
+                    setPreviewTitle("Design Preview");
+                }}
+            />
         </Box>
     );
 }
