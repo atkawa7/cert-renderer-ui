@@ -208,6 +208,21 @@ function blockTypeLabel(b: Block): string {
     if (b.type === "image") return "Image";
     return "Line";
 }
+function normalizeTemplate(input: Template): Template {
+    const t = deepClone(input);
+    t.blocks = (t.blocks ?? []).map((b) => {
+        if (!(b as any).id) (b as any).id = makeId();
+        return normalizeBlock(b as Block);
+    });
+    if (!t.background) t.background = { type: "color", url: "", color: "#ffffff" };
+    t.name ??= "";
+    t.paperSize ??= "A4";
+    t.orientation ??= "portrait";
+    return t;
+}
+function templatesEqual(a: Template, b: Template): boolean {
+    return JSON.stringify(a) === JSON.stringify(b);
+}
 
 // ---------------- Drag payload ----------------
 type PalettePayload = { type: BlockType };
@@ -225,15 +240,7 @@ export default function TemplateEditor({
                                            assetBaseUrl = "",
                                            defaultPreview = false,
                                        }: TemplateEditorProps) {
-    const [template, setTemplate] = useState<Template>(() => {
-        const t = deepClone(initialTemplate);
-        t.blocks = (t.blocks ?? []).map((b) => {
-            if (!(b as any).id) (b as any).id = makeId();
-            return normalizeBlock(b);
-        });
-        if (!t.background) t.background = { type: "color", url: "", color: "#ffffff" };
-        return t;
-    });
+    const [template, setTemplate] = useState<Template>(() => normalizeTemplate(initialTemplate));
 
     // ✅ Preview toggle
     const [previewMode, setPreviewMode] = useState<boolean>(defaultPreview);
@@ -242,6 +249,7 @@ export default function TemplateEditor({
 
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [editingId, setEditingId] = useState<string | null>(null);
+    const importInputRef = useRef<HTMLInputElement | null>(null);
     const [contextMenu, setContextMenu] = useState<{
         mouseX: number;
         mouseY: number;
@@ -249,6 +257,13 @@ export default function TemplateEditor({
         canvasY: number;
         targetBlockId: string | null;
     } | null>(null);
+    const undoStackRef = useRef<Template[]>([]);
+    const redoStackRef = useRef<Template[]>([]);
+    const prevTemplateRef = useRef<Template>(deepClone(template));
+    const suppressHistoryRef = useRef<boolean>(false);
+    const [historyTick, setHistoryTick] = useState(0);
+    const canUndo = useMemo(() => undoStackRef.current.length > 0, [historyTick]);
+    const canRedo = useMemo(() => redoStackRef.current.length > 0, [historyTick]);
 
     const primarySelectedId = selectedIds.length ? selectedIds[selectedIds.length - 1] : null;
 
@@ -440,6 +455,63 @@ export default function TemplateEditor({
         setContextMenu(null);
     }
 
+    function saveTemplateJson() {
+        const pretty = JSON.stringify(template, null, 2);
+        const blob = new Blob([pretty], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        const base = (template.name || "template").trim().replace(/[^a-zA-Z0-9._-]+/g, "_");
+        a.href = url;
+        a.download = `${base || "template"}.json`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+    }
+
+    function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = () => {
+            try {
+                const text = String(reader.result ?? "");
+                const raw = JSON.parse(text) as Template;
+                const next = normalizeTemplate(raw);
+                setTemplate(next);
+                setSelectedIds([]);
+                setEditingId(null);
+            } catch {
+                window.alert("Invalid JSON file.");
+            }
+        };
+        reader.readAsText(file);
+        e.target.value = "";
+    }
+
+    function undo() {
+        const prev = undoStackRef.current.pop();
+        if (!prev) return;
+        redoStackRef.current.push(deepClone(template));
+        suppressHistoryRef.current = true;
+        setTemplate(deepClone(prev));
+        setSelectedIds([]);
+        setEditingId(null);
+        setHistoryTick((v) => v + 1);
+    }
+
+    function redo() {
+        const next = redoStackRef.current.pop();
+        if (!next) return;
+        undoStackRef.current.push(deepClone(template));
+        suppressHistoryRef.current = true;
+        setTemplate(deepClone(next));
+        setSelectedIds([]);
+        setEditingId(null);
+        setHistoryTick((v) => v + 1);
+    }
+
     function moveSelectedLayers(direction: "front" | "back") {
         if (!selectedIds.length || previewMode) return;
         setTemplate((prev) => {
@@ -519,6 +591,23 @@ export default function TemplateEditor({
     }
 
     useEffect(() => {
+        if (suppressHistoryRef.current) {
+            suppressHistoryRef.current = false;
+            prevTemplateRef.current = deepClone(template);
+            return;
+        }
+
+        const prev = prevTemplateRef.current;
+        if (!templatesEqual(prev, template)) {
+            undoStackRef.current.push(deepClone(prev));
+            if (undoStackRef.current.length > 100) undoStackRef.current.shift();
+            redoStackRef.current = [];
+            prevTemplateRef.current = deepClone(template);
+            setHistoryTick((v) => v + 1);
+        }
+    }, [template]);
+
+    useEffect(() => {
         function isTypingTarget(el: Element | null): boolean {
             if (!(el instanceof HTMLElement)) return false;
             const tag = el.tagName.toLowerCase();
@@ -540,6 +629,22 @@ export default function TemplateEditor({
                 return;
             }
 
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+                e.preventDefault();
+                if (e.shiftKey) {
+                    redo();
+                } else {
+                    undo();
+                }
+                return;
+            }
+
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
+                e.preventDefault();
+                redo();
+                return;
+            }
+
             if ((e.key === "Backspace" || e.key === "Delete") && selectedIds.length) {
                 e.preventDefault();
                 deleteSelected();
@@ -549,7 +654,7 @@ export default function TemplateEditor({
         window.addEventListener("keydown", onKeyDown);
         return () => window.removeEventListener("keydown", onKeyDown);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [previewMode, selectedIds, template.blocks]);
+    }, [previewMode, selectedIds, template]);
 
     // ---------- Palette DnD ----------
     function onPaletteDragStart(e: React.DragEvent, type: BlockType) {
@@ -944,14 +1049,32 @@ export default function TemplateEditor({
             >
                 <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
                     <Typography variant="h6">Template Editor</Typography>
-                    <Button
-                        size="small"
-                        variant={previewMode ? "contained" : "outlined"}
-                        startIcon={previewMode ? <EditIcon /> : <VisibilityIcon />}
-                        onClick={() => setPreviewMode((v) => !v)}
-                    >
-                        {previewMode ? "Edit" : "Preview"}
-                    </Button>
+                    <Stack direction="row" spacing={1}>
+                        <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={undo}
+                            disabled={!canUndo}
+                        >
+                            Undo
+                        </Button>
+                        <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={redo}
+                            disabled={!canRedo}
+                        >
+                            Redo
+                        </Button>
+                        <Button
+                            size="small"
+                            variant={previewMode ? "contained" : "outlined"}
+                            startIcon={previewMode ? <EditIcon /> : <VisibilityIcon />}
+                            onClick={() => setPreviewMode((v) => !v)}
+                        >
+                            {previewMode ? "Edit" : "Preview"}
+                        </Button>
+                    </Stack>
                 </Stack>
 
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -1233,6 +1356,12 @@ export default function TemplateEditor({
                     <Button startIcon={<ContentCopyIcon />} variant="outlined" onClick={copyJson}>
                         Copy JSON
                     </Button>
+                    <Button variant="outlined" onClick={saveTemplateJson}>
+                        Save
+                    </Button>
+                    <Button variant="outlined" onClick={() => importInputRef.current?.click()}>
+                        Import
+                    </Button>
                     <Button
                         startIcon={<DeleteIcon />}
                         color="error"
@@ -1247,6 +1376,17 @@ export default function TemplateEditor({
                 <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
                     Canvas ratio: {aspectRatio.toFixed(4)} (w/h)
                 </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: "block" }}>
+                    Undo: Cmd/Ctrl+Z, Redo: Cmd/Ctrl+Shift+Z or Cmd/Ctrl+Y
+                </Typography>
+                <Box
+                    component="input"
+                    ref={importInputRef}
+                    type="file"
+                    accept="application/json,.json"
+                    onChange={handleImportFile}
+                    sx={{ display: "none" }}
+                />
             </Drawer>
 
             <Menu
