@@ -3,6 +3,10 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
     Box,
     Button,
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogTitle,
     Divider,
     Drawer,
     FormControl,
@@ -20,7 +24,6 @@ import {
     Typography,
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
-import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import LockIcon from "@mui/icons-material/Lock";
 import LockOpenIcon from "@mui/icons-material/LockOpen";
 import AddPhotoAlternateIcon from "@mui/icons-material/AddPhotoAlternate";
@@ -159,6 +162,10 @@ export type TemplateEditorProps = {
     defaultRenderDataJson?: string;
     onConvertToDesign?: (design: DesignCreateDraft) => void | Promise<void>;
     convertToDesignLabel?: string;
+    onBackToTemplates?: () => void;
+    onDeleteTemplate?: () => void | Promise<void>;
+    deleteTemplateLabel?: string;
+    deletingTemplate?: boolean;
     sessionStorageKey?: string;
     onPersistSession?: (template: Template) => void | Promise<void>;
     persistDebounceMs?: number;
@@ -267,6 +274,10 @@ export default function TemplateEditor({
                                            defaultRenderDataJson = "{}",
                                            onConvertToDesign,
                                            convertToDesignLabel = "Convert to Design",
+                                           onBackToTemplates,
+                                           onDeleteTemplate,
+                                           deleteTemplateLabel = "Delete Template",
+                                           deletingTemplate = false,
                                            sessionStorageKey,
                                            onPersistSession,
                                            persistDebounceMs = 1200,
@@ -286,6 +297,8 @@ export default function TemplateEditor({
     const [renderingExternal, setRenderingExternal] = useState<boolean>(false);
     const [convertingDesign, setConvertingDesign] = useState<boolean>(false);
     const [renderDataJson, setRenderDataJson] = useState<string>(defaultRenderDataJson);
+    const [renderDialogOpen, setRenderDialogOpen] = useState<boolean>(false);
+    const [renderDialogError, setRenderDialogError] = useState<string | null>(null);
     const importInputRef = useRef<HTMLInputElement | null>(null);
     const [contextMenu, setContextMenu] = useState<{
         mouseX: number;
@@ -488,6 +501,10 @@ export default function TemplateEditor({
         setEditingId(type === "text" ? block.id : null);
     }
 
+    function addBlockCentered(type: BlockType) {
+        addBlockAt(type, canvasSize.w / 2, canvasSize.h / 2);
+    }
+
     function openContextMenu(e: React.MouseEvent, targetBlockId: string | null) {
         if (previewMode) return;
         const inner = canvasInnerRef.current;
@@ -527,12 +544,14 @@ export default function TemplateEditor({
         try {
             parsedData = JSON.parse(renderDataJson || "{}");
         } catch {
-            window.alert("Render data must be valid JSON.");
+            setRenderDialogError("Render data must be valid JSON.");
             return;
         }
         try {
+            setRenderDialogError(null);
             setRenderingExternal(true);
             await onRenderTemplate(deepClone(template), parsedData);
+            setRenderDialogOpen(false);
         } finally {
             setRenderingExternal(false);
         }
@@ -977,7 +996,173 @@ export default function TemplateEditor({
             <Box sx={{ flex: 1, p: 3, pr: `${PALETTE_WIDTH_PX + 24}px`, overflow: "auto", minWidth: 0 }}>
                 <Box
                     sx={{
-                        minHeight: "calc(100vh - 32px)",
+                        position: "sticky",
+                        top: 0,
+                        zIndex: 20,
+                        mb: 2,
+                        p: 1.25,
+                        borderRadius: 2,
+                        border: "1px solid rgba(0,0,0,0.1)",
+                        bgcolor: "rgba(255,255,255,0.92)",
+                        backdropFilter: "blur(6px)",
+                    }}
+                >
+                    <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: "wrap", rowGap: 1 }}>
+                        <Typography variant="subtitle2" sx={{ minWidth: 120 }}>
+                            Template Toolbar
+                        </Typography>
+                        <Button size="small" variant="outlined" onClick={undo} disabled={!canUndo}>
+                            Undo
+                        </Button>
+                        <Button size="small" variant="outlined" onClick={redo} disabled={!canRedo}>
+                            Redo
+                        </Button>
+                        <Button
+                            size="small"
+                            variant={previewMode ? "contained" : "outlined"}
+                            startIcon={previewMode ? <EditIcon /> : <VisibilityIcon />}
+                            onClick={() => setPreviewMode((v) => !v)}
+                        >
+                            {previewMode ? "Edit" : "Preview"}
+                        </Button>
+                        <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+                        <Button
+                            size="small"
+                            variant="outlined"
+                            startIcon={<TextFieldsIcon />}
+                            draggable={!previewMode}
+                            onDragStart={(e) => onPaletteDragStart(e, "text")}
+                            onClick={() => addBlockCentered("text")}
+                            disabled={previewMode}
+                        >
+                            Text
+                        </Button>
+                        <Button
+                            size="small"
+                            variant="outlined"
+                            startIcon={<AddPhotoAlternateIcon />}
+                            draggable={!previewMode}
+                            onDragStart={(e) => onPaletteDragStart(e, "image")}
+                            onClick={() => addBlockCentered("image")}
+                            disabled={previewMode}
+                        >
+                            Image
+                        </Button>
+                        <Button
+                            size="small"
+                            variant="outlined"
+                            startIcon={<HorizontalRuleIcon />}
+                            draggable={!previewMode}
+                            onDragStart={(e) => onPaletteDragStart(e, "horizontal-line")}
+                            onClick={() => addBlockCentered("horizontal-line")}
+                            disabled={previewMode}
+                        >
+                            Line
+                        </Button>
+                        <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+                        <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={() => setZoomPct((z) => clampNum(z - 10, 25, 300))}
+                        >
+                            -
+                        </Button>
+                        <Button size="small" variant="outlined" onClick={() => setZoomPct(100)}>
+                            {zoomPct}%
+                        </Button>
+                        <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={() => setZoomPct((z) => clampNum(z + 10, 25, 300))}
+                        >
+                            +
+                        </Button>
+                        <FormControlLabel
+                            sx={{ ml: 0.5 }}
+                            control={
+                                <Switch
+                                    size="small"
+                                    checked={gridEnabled}
+                                    onChange={(_, checked) => setGridEnabled(checked)}
+                                    disabled={previewMode}
+                                />
+                            }
+                            label="Grid"
+                        />
+                        <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+                        <Button size="small" variant="outlined" onClick={copyJson}>
+                            Copy JSON
+                        </Button>
+                        <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={() => importInputRef.current?.click()}
+                        >
+                            Import
+                        </Button>
+                        {onConvertToDesign && (
+                            <Button
+                                size="small"
+                                variant="outlined"
+                                onClick={handleConvertToDesignAction}
+                                disabled={convertingDesign}
+                            >
+                                {convertingDesign ? "Converting..." : convertToDesignLabel}
+                            </Button>
+                        )}
+                        <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={handleSaveAction}
+                            disabled={savingExternal}
+                        >
+                            {savingExternal ? "Saving..." : saveButtonLabel}
+                        </Button>
+                        <Button
+                            size="small"
+                            startIcon={<DeleteIcon />}
+                            color="error"
+                            variant="outlined"
+                            onClick={deleteSelected}
+                            disabled={previewMode || selectedIds.length === 0}
+                        >
+                            Delete
+                        </Button>
+                        {onRenderTemplate && (
+                            <Button
+                                size="small"
+                                variant="contained"
+                                onClick={() => {
+                                    setRenderDialogError(null);
+                                    setRenderDialogOpen(true);
+                                }}
+                                disabled={renderingExternal}
+                            >
+                                {renderingExternal ? "Rendering..." : renderButtonLabel}
+                            </Button>
+                        )}
+                        <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+                        {onBackToTemplates && (
+                            <Button size="small" variant="contained" onClick={onBackToTemplates}>
+                                Back to templates
+                            </Button>
+                        )}
+                        {onDeleteTemplate && (
+                            <Button
+                                size="small"
+                                variant="outlined"
+                                color="error"
+                                onClick={onDeleteTemplate}
+                                disabled={deletingTemplate}
+                            >
+                                {deletingTemplate ? "Deleting..." : deleteTemplateLabel}
+                            </Button>
+                        )}
+                    </Stack>
+                </Box>
+                <Box
+                    sx={{
+                        minHeight: "calc(100vh - 120px)",
                         display: "flex",
                         justifyContent: "center",
                         alignItems: "flex-start",
@@ -1237,71 +1422,15 @@ export default function TemplateEditor({
                     sx: { width: `${PALETTE_WIDTH_PX}px`, p: 2, borderLeft: "1px solid", borderColor: "divider" },
                 }}
             >
-                <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
-                    <Typography variant="h6">Template Editor</Typography>
-                    <Stack direction="row" spacing={1}>
-                        <Button
-                            size="small"
-                            variant="outlined"
-                            onClick={undo}
-                            disabled={!canUndo}
-                        >
-                            Undo
-                        </Button>
-                        <Button
-                            size="small"
-                            variant="outlined"
-                            onClick={redo}
-                            disabled={!canRedo}
-                        >
-                            Redo
-                        </Button>
-                        <Button
-                            size="small"
-                            variant={previewMode ? "contained" : "outlined"}
-                            startIcon={previewMode ? <EditIcon /> : <VisibilityIcon />}
-                            onClick={() => setPreviewMode((v) => !v)}
-                        >
-                            {previewMode ? "Edit" : "Preview"}
-                        </Button>
-                    </Stack>
-                </Stack>
+                <Typography variant="h6" sx={{ mb: 1 }}>Inspector Panel</Typography>
 
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                     {previewMode
-                        ? "Preview mode: borders/handles hidden. Interactions disabled."
-                        : "Edit mode: drag components onto the canvas. Click to select. Double-click text to edit. Backspace/Delete removes selection."}
+                        ? "Preview mode is active. Inspector is read-only."
+                        : "Select blocks on the canvas to edit style, layer order and template settings."}
                 </Typography>
 
                 <Divider sx={{ mb: 2 }} />
-
-                {/* Components (disabled in preview) */}
-                <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                    Components (drag onto canvas)
-                </Typography>
-
-                <Stack spacing={1} sx={{ opacity: previewMode ? 0.5 : 1 }}>
-                    <PaletteItem
-                        disabled={previewMode}
-                        icon={<TextFieldsIcon />}
-                        label="Text"
-                        onDragStart={(e) => onPaletteDragStart(e, "text")}
-                    />
-                    <PaletteItem
-                        disabled={previewMode}
-                        icon={<AddPhotoAlternateIcon />}
-                        label="Image"
-                        onDragStart={(e) => onPaletteDragStart(e, "image")}
-                    />
-                    <PaletteItem
-                        disabled={previewMode}
-                        icon={<HorizontalRuleIcon />}
-                        label="Horizontal line"
-                        onDragStart={(e) => onPaletteDragStart(e, "horizontal-line")}
-                    />
-                </Stack>
-
-                <Divider sx={{ my: 2 }} />
 
                 {/* Inspector */}
                 <Typography variant="subtitle2" sx={{ mb: 1 }}>
@@ -1324,48 +1453,6 @@ export default function TemplateEditor({
                         No element selected.
                     </Typography>
                 )}
-
-                <Divider sx={{ my: 2 }} />
-
-                <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                    Zoom
-                </Typography>
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-                    <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={() => setZoomPct((z) => clampNum(z - 10, 25, 300))}
-                    >
-                        -
-                    </Button>
-                    <Button size="small" variant="outlined" onClick={() => setZoomPct(100)}>
-                        {zoomPct}%
-                    </Button>
-                    <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={() => setZoomPct((z) => clampNum(z + 10, 25, 300))}
-                    >
-                        +
-                    </Button>
-                </Stack>
-
-                <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                    Canvas Grid
-                </Typography>
-                <FormControlLabel
-                    control={
-                        <Switch
-                            checked={gridEnabled}
-                            onChange={(_, checked) => setGridEnabled(checked)}
-                            disabled={previewMode}
-                        />
-                    }
-                    label="Enable grid + snap"
-                />
-                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
-                    Grid size: {gridSizePx}px
-                </Typography>
 
                 <Typography variant="subtitle2" sx={{ mb: 1 }}>
                     Align Selection
@@ -1446,62 +1533,6 @@ export default function TemplateEditor({
                         Send to back
                     </Button>
                 </Stack>
-
-                <Stack spacing={0.5} sx={{ maxHeight: 220, overflow: "auto", pr: 0.5 }}>
-                    {[...template.blocks].reverse().map((b, idx) => {
-                        const selected = selectedIds.includes(b.id);
-                        return (
-                            <Stack
-                                key={b.id}
-                                direction="row"
-                                alignItems="center"
-                                justifyContent="space-between"
-                                sx={{
-                                    px: 1,
-                                    py: 0.75,
-                                    borderRadius: 1,
-                                    border: "1px solid rgba(0,0,0,0.12)",
-                                    bgcolor: selected ? "rgba(25,118,210,0.08)" : "#fff",
-                                    cursor: previewMode ? "default" : "pointer",
-                                }}
-                                onClick={() => {
-                                    if (previewMode) return;
-                                    setSelectedIds([b.id]);
-                                    setEditingId(null);
-                                }}
-                            >
-                                <Typography variant="caption" sx={{ pr: 1 }}>
-                                    {template.blocks.length - idx}. {blockTypeLabel(b)}
-                                </Typography>
-                                <Stack direction="row" spacing={0.5}>
-                                    <Button
-                                        size="small"
-                                        variant="text"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            moveLayer(b.id, "front");
-                                        }}
-                                        disabled={previewMode}
-                                    >
-                                        Front
-                                    </Button>
-                                    <Button
-                                        size="small"
-                                        variant="text"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            moveLayer(b.id, "back");
-                                        }}
-                                        disabled={previewMode}
-                                    >
-                                        Back
-                                    </Button>
-                                </Stack>
-                            </Stack>
-                        );
-                    })}
-                </Stack>
-
                 <Divider sx={{ my: 2 }} />
 
                 {/* Template settings */}
@@ -1564,58 +1595,6 @@ export default function TemplateEditor({
                     sx={{ mt: 1 }}
                     disabled={previewMode}
                 />
-
-                <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
-                    <Button startIcon={<ContentCopyIcon />} variant="outlined" onClick={copyJson}>
-                        Copy JSON
-                    </Button>
-                    <Button variant="outlined" onClick={handleSaveAction} disabled={savingExternal}>
-                        {savingExternal ? "Saving..." : saveButtonLabel}
-                    </Button>
-                    {onConvertToDesign && (
-                        <Button
-                            variant="outlined"
-                            onClick={handleConvertToDesignAction}
-                            disabled={convertingDesign}
-                        >
-                            {convertingDesign ? "Converting..." : convertToDesignLabel}
-                        </Button>
-                    )}
-                    <Button variant="outlined" onClick={() => importInputRef.current?.click()}>
-                        Import
-                    </Button>
-                    <Button
-                        startIcon={<DeleteIcon />}
-                        color="error"
-                        variant="outlined"
-                        onClick={deleteSelected}
-                        disabled={previewMode || selectedIds.length == 0}
-                    >
-                        Delete
-                    </Button>
-                </Stack>
-                {onRenderTemplate && (
-                    <>
-                        <TextField
-                            fullWidth
-                            multiline
-                            minRows={4}
-                            maxRows={8}
-                            label="Render Data (JSON)"
-                            value={renderDataJson}
-                            onChange={(e) => setRenderDataJson(e.target.value)}
-                            sx={{ mt: 1.5 }}
-                        />
-                        <Button
-                            variant="contained"
-                            onClick={handleRenderAction}
-                            disabled={renderingExternal}
-                            sx={{ mt: 1 }}
-                        >
-                            {renderingExternal ? "Rendering..." : renderButtonLabel}
-                        </Button>
-                    </>
-                )}
 
                 <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
                     Canvas ratio: {aspectRatio.toFixed(4)} (w/h)
@@ -1728,46 +1707,49 @@ export default function TemplateEditor({
                     </MenuItem>
                 )}
             </Menu>
-        </Box>
-    );
-}
-
-// -------------------- Palette Item --------------------
-function PaletteItem({
-                         icon,
-                         label,
-                         onDragStart,
-                         disabled = false,
-                     }: {
-    icon: React.ReactNode;
-    label: string;
-    onDragStart: (e: React.DragEvent) => void;
-    disabled?: boolean;
-}) {
-    return (
-        <Box
-            draggable={!disabled}
-            onDragStart={(e) => {
-                if (disabled) return;
-                onDragStart(e);
-            }}
-            sx={{
-                display: "flex",
-                alignItems: "center",
-                gap: 1,
-                px: 1.2,
-                py: 1,
-                borderRadius: 2,
-                border: "1px solid rgba(0,0,0,0.15)",
-                bgcolor: "#fff",
-                cursor: disabled ? "not-allowed" : "grab",
-                boxShadow: "0 2px 10px rgba(0,0,0,0.06)",
-                opacity: disabled ? 0.6 : 1,
-                "&:active": { cursor: disabled ? "not-allowed" : "grabbing" },
-            }}
-        >
-            {icon}
-            <Typography variant="body2">{label}</Typography>
+            <Dialog
+                open={renderDialogOpen}
+                onClose={() => {
+                    if (renderingExternal) return;
+                    setRenderDialogOpen(false);
+                    setRenderDialogError(null);
+                }}
+                maxWidth="sm"
+                fullWidth
+            >
+                <DialogTitle>Render PDF</DialogTitle>
+                <DialogContent>
+                    <TextField
+                        fullWidth
+                        multiline
+                        minRows={8}
+                        maxRows={12}
+                        label="Render Data (JSON)"
+                        value={renderDataJson}
+                        onChange={(e) => setRenderDataJson(e.target.value)}
+                        sx={{ mt: 1 }}
+                    />
+                    {renderDialogError && (
+                        <Typography color="error" variant="body2" sx={{ mt: 1 }}>
+                            {renderDialogError}
+                        </Typography>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button
+                        onClick={() => {
+                            setRenderDialogOpen(false);
+                            setRenderDialogError(null);
+                        }}
+                        disabled={renderingExternal}
+                    >
+                        Cancel
+                    </Button>
+                    <Button onClick={handleRenderAction} variant="contained" disabled={renderingExternal}>
+                        {renderingExternal ? "Rendering..." : "Render PDF"}
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Box>
     );
 }

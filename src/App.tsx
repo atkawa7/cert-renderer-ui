@@ -319,35 +319,8 @@ function EditorPage({ mode }: { mode: "new" | "edit" }) {
 
     return (
         <Box>
-            <Box
-                sx={{
-                    position: "fixed",
-                    top: 14,
-                    left: SIDEBAR_WIDTH + 22,
-                    zIndex: 2000,
-                    display: "flex",
-                    gap: 1,
-                    alignItems: "center",
-                }}
-            >
-                <Button variant="contained" size="small" component={RouterLink} to="/templates">
-                    Back to templates
-                </Button>
-                {mode  === 'edit' && (
-                    <Button
-                        variant="outlined"
-                        color="error"
-                        size="small"
-                        onClick={handleDeleteTemplate}
-                        disabled={deleting}
-                    >
-                        Delete template
-                    </Button>
-                )}
-                {(saving || rendering || persistingSession || deleting) && <CircularProgress size={18} />}
-            </Box>
             {(statusMsg || errorMsg) && (
-                <Box sx={{ position: "fixed", top: 14, left: SIDEBAR_WIDTH + 188, right: 360, zIndex: 2000 }}>
+                <Box sx={{ position: "fixed", top: 14, left: SIDEBAR_WIDTH + 22, right: 360, zIndex: 2000 }}>
                     {statusMsg && <Alert severity="info" sx={{ mb: errorMsg ? 1 : 0 }}>{statusMsg}</Alert>}
                     {errorMsg && <Alert severity="error">{errorMsg}</Alert>}
                 </Box>
@@ -362,6 +335,9 @@ function EditorPage({ mode }: { mode: "new" | "edit" }) {
                 renderButtonLabel={rendering ? "Rendering..." : "Render PDF (XSL-FO)"}
                 defaultRenderDataJson={`{\n  "recipient": { "name": "Jane Doe" },\n  "certificate": { "uuid": "CERT-2026-0001", "issued_on": "2026-03-07" }\n}`}
                 onConvertToDesign={handleConvertTemplateToDesign}
+                onBackToTemplates={() => navigate("/templates")}
+                onDeleteTemplate={mode === "edit" ? handleDeleteTemplate : undefined}
+                deletingTemplate={deleting}
                 sessionStorageKey={
                     templateId
                         ? `renderer.template.session.${templateId}`
