@@ -5,13 +5,17 @@ import {
     Button,
     CircularProgress,
     Divider,
+    Drawer,
     List,
     ListItemButton,
     ListItemText,
     Stack,
     TextField,
+    Toolbar,
     Typography,
 } from "@mui/material";
+import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
+import AddBoxOutlinedIcon from "@mui/icons-material/AddBoxOutlined";
 import TemplateEditor, { type Template } from "./TemplateEditor";
 import fallbackTemplateJson from "./template.json";
 import {
@@ -24,12 +28,10 @@ import {
     updateTemplateById,
 } from "./templateApi";
 import { appConfig } from "./appConfig";
+import { Link as RouterLink, Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom";
 
-type EditingSession = {
-    id: string | null;
-    template: Template;
-};
 const ASSET_BASE_URL = "https://certifier-production-amplify.s3.eu-west-1.amazonaws.com/public/";
+const SIDEBAR_WIDTH = 260;
 
 function formatDate(value?: string): string {
     if (!value) return "-";
@@ -42,7 +44,7 @@ function toEditorTemplate(detail: TemplateDetail): Template {
     const template = (detail.template ?? {}) as Partial<Template>;
     return {
         name: template.name ?? detail.name ?? "",
-        background: template.background as Template["background"],
+        background: (template.background ?? { type: "color", color: "#ffffff", url: "" }) as Template["background"],
         blocks: (template.blocks ?? []) as Template["blocks"],
         paperSize: template.paperSize ?? "A4",
         orientation: template.orientation ?? "portrait",
@@ -57,19 +59,184 @@ function makeNewTemplate(): Template {
     };
 }
 
-export default function App() {
+function downloadPdfBlob(fileBaseName: string, blob: Blob) {
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const fileBase = (fileBaseName.trim() || "template").replace(/[^a-zA-Z0-9._-]+/g, "_");
+    a.href = blobUrl;
+    a.download = `${fileBase}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(blobUrl);
+}
+
+function EditorPage({ mode }: { mode: "new" | "edit" }) {
+    const navigate = useNavigate();
+    const { id } = useParams<{ id: string }>();
+
+    const [template, setTemplate] = useState<Template | null>(mode === "new" ? makeNewTemplate() : null);
+    const [templateId, setTemplateId] = useState<string | null>(mode === "edit" ? id ?? null : null);
+    const [loading, setLoading] = useState(mode === "edit");
+    const [saving, setSaving] = useState(false);
+    const [rendering, setRendering] = useState(false);
+    const [statusMsg, setStatusMsg] = useState<string | null>(null);
+    const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (mode !== "edit") return;
+        if (!id) {
+            setErrorMsg("Missing template id");
+            setLoading(false);
+            return;
+        }
+
+        let cancelled = false;
+        setLoading(true);
+        setErrorMsg(null);
+        setStatusMsg(null);
+
+        getTemplateById(id)
+            .then((detail) => {
+                if (cancelled) return;
+                setTemplate(toEditorTemplate(detail));
+                setTemplateId(detail.id);
+            })
+            .catch((err: any) => {
+                if (cancelled) return;
+                setErrorMsg(err?.message || "Failed to load template");
+            })
+            .finally(() => {
+                if (!cancelled) setLoading(false);
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [id, mode]);
+
+    async function handleSaveTemplate(next: Template) {
+        setSaving(true);
+        setStatusMsg(null);
+        setErrorMsg(null);
+        try {
+            const payload = {
+                name: (next.name || "").trim() || "Untitled Template",
+                template: next,
+            };
+            const saved = templateId
+                ? await updateTemplateById(templateId, payload)
+                : await createTemplate(payload);
+
+            const editorModel = toEditorTemplate(saved);
+            setTemplate(editorModel);
+            setTemplateId(saved.id);
+            setStatusMsg("Template saved");
+
+            if (!templateId) {
+                navigate(`/templates/${saved.id}/edit`, { replace: true });
+            }
+        } catch (err: any) {
+            setErrorMsg(err?.message || "Failed to save template");
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    async function handleRenderTemplate(next: Template, data: unknown) {
+        setRendering(true);
+        setStatusMsg(null);
+        setErrorMsg(null);
+        try {
+            const pdf = await renderTemplatePdf({
+                template: next,
+                data,
+                assetBaseUrl: ASSET_BASE_URL,
+                fileName: (next.name || "template").trim(),
+            });
+            downloadPdfBlob(next.name || "template", pdf);
+            setStatusMsg("PDF rendered");
+        } catch (err: any) {
+            setErrorMsg(err?.message || "Failed to render PDF");
+        } finally {
+            setRendering(false);
+        }
+    }
+
+    const editorKey = useMemo(
+        () => `${mode}-${templateId ?? "new"}`,
+        [mode, templateId]
+    );
+
+    if (loading) {
+        return (
+            <Box sx={{ p: 3 }}>
+                <Stack direction="row" spacing={1} alignItems="center">
+                    <CircularProgress size={18} />
+                    <Typography>Loading template...</Typography>
+                </Stack>
+            </Box>
+        );
+    }
+
+    if (errorMsg && !template) {
+        return (
+            <Box sx={{ p: 3 }}>
+                <Alert severity="error" sx={{ mb: 2 }}>{errorMsg}</Alert>
+                <Button variant="contained" component={RouterLink} to="/templates">
+                    Back to templates
+                </Button>
+            </Box>
+        );
+    }
+
+    if (!template) return null;
+
+    return (
+        <Box>
+            <Box
+                sx={{
+                    position: "fixed",
+                    top: 14,
+                    left: SIDEBAR_WIDTH + 22,
+                    zIndex: 2000,
+                    display: "flex",
+                    gap: 1,
+                    alignItems: "center",
+                }}
+            >
+                <Button variant="contained" size="small" component={RouterLink} to="/templates">
+                    Back to templates
+                </Button>
+                {(saving || rendering) && <CircularProgress size={18} />}
+            </Box>
+            {(statusMsg || errorMsg) && (
+                <Box sx={{ position: "fixed", top: 14, left: SIDEBAR_WIDTH + 188, right: 360, zIndex: 2000 }}>
+                    {statusMsg && <Alert severity="info" sx={{ mb: errorMsg ? 1 : 0 }}>{statusMsg}</Alert>}
+                    {errorMsg && <Alert severity="error">{errorMsg}</Alert>}
+                </Box>
+            )}
+            <TemplateEditor
+                key={editorKey}
+                initialTemplate={template}
+                assetBaseUrl={ASSET_BASE_URL}
+                onSaveTemplate={handleSaveTemplate}
+                saveButtonLabel={saving ? "Saving..." : "Save to backend"}
+                onRenderTemplate={handleRenderTemplate}
+                renderButtonLabel={rendering ? "Rendering..." : "Render PDF (XSL-FO)"}
+                defaultRenderDataJson={`{\n  "recipient": { "name": "Jane Doe" },\n  "certificate": { "uuid": "CERT-2026-0001", "issued_on": "2026-03-07" }\n}`}
+            />
+        </Box>
+    );
+}
+
+function TemplatesListPage() {
+    const navigate = useNavigate();
     const [templates, setTemplates] = useState<TemplateSummary[]>([]);
     const [query, setQuery] = useState("");
     const [loadingList, setLoadingList] = useState(false);
-    const [listError, setListError] = useState<string | null>(null);
-    const [session, setSession] = useState<EditingSession | null>(null);
-    const [editorSeed, setEditorSeed] = useState(0);
-    const [saving, setSaving] = useState(false);
-    const [statusMsg, setStatusMsg] = useState<string | null>(null);
     const [loadingEditor, setLoadingEditor] = useState(false);
-    const [rendering, setRendering] = useState(false);
-
-    const apiBase = appConfig.rendererApiBase;
+    const [listError, setListError] = useState<string | null>(null);
 
     async function loadTemplates() {
         setLoadingList(true);
@@ -89,122 +256,9 @@ export default function App() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    async function startEdit(id: string) {
+    function openEditor(id: string) {
         setLoadingEditor(true);
-        setStatusMsg(null);
-        try {
-            const detail = await getTemplateById(id);
-            setSession({ id: detail.id, template: toEditorTemplate(detail) });
-            setEditorSeed((n) => n + 1);
-        } catch (err: any) {
-            setStatusMsg(err?.message || "Failed to open template for editing");
-        } finally {
-            setLoadingEditor(false);
-        }
-    }
-
-    function startCreateNew() {
-        setSession({ id: null, template: makeNewTemplate() });
-        setEditorSeed((n) => n + 1);
-        setStatusMsg(null);
-    }
-
-    async function handleSaveTemplate(next: Template) {
-        setSaving(true);
-        setStatusMsg(null);
-        try {
-            const payload = {
-                name: (next.name || "").trim() || "Untitled Template",
-                template: next,
-            };
-            const saved = session?.id
-                ? await updateTemplateById(session.id, payload)
-                : await createTemplate(payload);
-            setSession({ id: saved.id, template: toEditorTemplate(saved) });
-            await loadTemplates();
-            setStatusMsg("Template saved");
-        } catch (err: any) {
-            setStatusMsg(err?.message || "Failed to save template");
-        } finally {
-            setSaving(false);
-        }
-    }
-
-    async function handleRenderTemplate(next: Template, data: unknown) {
-        setRendering(true);
-        setStatusMsg(null);
-        try {
-            const pdf = await renderTemplatePdf({
-                template: next,
-                data,
-                assetBaseUrl: ASSET_BASE_URL,
-                fileName: (next.name || "template").trim(),
-            });
-            const blobUrl = URL.createObjectURL(pdf);
-            const a = document.createElement("a");
-            const fileBase = ((next.name || "template").trim() || "template").replace(/[^a-zA-Z0-9._-]+/g, "_");
-            a.href = blobUrl;
-            a.download = `${fileBase}.pdf`;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            URL.revokeObjectURL(blobUrl);
-            setStatusMsg("PDF rendered");
-        } catch (err: any) {
-            setStatusMsg(err?.message || "Failed to render PDF");
-        } finally {
-            setRendering(false);
-        }
-    }
-
-    const editorKey = useMemo(
-        () => `${session?.id ?? "new"}-${editorSeed}`,
-        [session?.id, editorSeed]
-    );
-
-    if (session) {
-        return (
-            <Box>
-                <Box
-                    sx={{
-                        position: "fixed",
-                        top: 14,
-                        left: 14,
-                        zIndex: 2000,
-                        display: "flex",
-                        gap: 1,
-                        alignItems: "center",
-                    }}
-                >
-                    <Button
-                        variant="contained"
-                        size="small"
-                        onClick={() => {
-                            setSession(null);
-                            setStatusMsg(null);
-                        }}
-                    >
-                        Back to templates
-                    </Button>
-                    {(saving || rendering) && <CircularProgress size={18} />}
-                </Box>
-                {statusMsg && (
-                    <Box sx={{ position: "fixed", top: 14, left: 180, right: 360, zIndex: 2000 }}>
-                        <Alert severity="info">{statusMsg}</Alert>
-                    </Box>
-                )}
-                <TemplateEditor
-                    key={editorKey}
-                    initialTemplate={session.template}
-                    assetBaseUrl={ASSET_BASE_URL}
-                    onSaveTemplate={handleSaveTemplate}
-                    saveButtonLabel={saving ? "Saving..." : "Save to backend"}
-                    onRenderTemplate={handleRenderTemplate}
-                    renderButtonLabel={rendering ? "Rendering..." : "Render PDF (XSL-FO)"}
-                    defaultRenderDataJson={`{\n  "recipient": { "name": "Jane Doe" },\n  "certificate": { "uuid": "CERT-2026-0001", "issued_on": "2026-03-07" }\n}`}
-                />
-            </Box>
-        );
+        navigate(`/templates/${id}/edit`);
     }
 
     return (
@@ -213,11 +267,11 @@ export default function App() {
                 <Box>
                     <Typography variant="h5">Templates</Typography>
                     <Typography variant="body2" color="text.secondary">
-                        Environment: {appConfig.env} | Backend: {apiBase}
+                        Environment: {appConfig.env} | Backend: {appConfig.rendererApiBase}
                     </Typography>
                 </Box>
                 <Stack direction="row" spacing={1}>
-                    <Button variant="contained" onClick={startCreateNew}>
+                    <Button variant="contained" component={RouterLink} to="/templates/new">
                         New template
                     </Button>
                     <Button variant="outlined" onClick={loadTemplates} disabled={loadingList}>
@@ -247,11 +301,6 @@ export default function App() {
                     {listError}
                 </Alert>
             )}
-            {statusMsg && (
-                <Alert severity="info" sx={{ mb: 2 }}>
-                    {statusMsg}
-                </Alert>
-            )}
 
             <Divider sx={{ mb: 1 }} />
             {loadingList ? (
@@ -266,19 +315,17 @@ export default function App() {
             ) : (
                 <List disablePadding>
                     {templates.map((item) => (
-                        <ListItemButton key={item.id} onClick={() => startEdit(item.id)} disabled={loadingEditor}>
+                        <ListItemButton key={item.id} onClick={() => openEditor(item.id)} disabled={loadingEditor}>
                             <ListItemText
                                 primary={item.name}
-                                secondary={`Updated: ${formatDate(item.updatedAt)}  |  Created: ${formatDate(
-                                    item.createdAt
-                                )}`}
+                                secondary={`Updated: ${formatDate(item.updatedAt)}  |  Created: ${formatDate(item.createdAt)}`}
                             />
                             <Button
                                 size="small"
                                 variant="outlined"
                                 onClick={(e) => {
                                     e.stopPropagation();
-                                    startEdit(item.id);
+                                    openEditor(item.id);
                                 }}
                                 disabled={loadingEditor}
                             >
@@ -288,6 +335,51 @@ export default function App() {
                     ))}
                 </List>
             )}
+        </Box>
+    );
+}
+
+export default function App() {
+    return (
+        <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "#f4f6fb" }}>
+            <Drawer
+                variant="permanent"
+                sx={{
+                    width: SIDEBAR_WIDTH,
+                    flexShrink: 0,
+                    ["& .MuiDrawer-paper"]: {
+                        width: SIDEBAR_WIDTH,
+                        boxSizing: "border-box",
+                        borderRight: "1px solid rgba(0,0,0,0.08)",
+                    },
+                }}
+            >
+                <Toolbar>
+                    <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                        Renderer UI
+                    </Typography>
+                </Toolbar>
+                <Divider />
+                <List>
+                    <ListItemButton component={RouterLink} to="/templates">
+                        <DescriptionOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
+                        <ListItemText primary="Templates" />
+                    </ListItemButton>
+                    <ListItemButton component={RouterLink} to="/templates/new">
+                        <AddBoxOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
+                        <ListItemText primary="New Template" />
+                    </ListItemButton>
+                </List>
+            </Drawer>
+
+            <Box component="main" sx={{ flex: 1, minWidth: 0, minHeight: "100vh" }}>
+                <Routes>
+                    <Route path="/" element={<Navigate to="/templates" replace />} />
+                    <Route path="/templates" element={<TemplatesListPage />} />
+                    <Route path="/templates/new" element={<EditorPage mode="new" />} />
+                    <Route path="/templates/:id/edit" element={<EditorPage mode="edit" />} />
+                </Routes>
+            </Box>
         </Box>
     );
 }
