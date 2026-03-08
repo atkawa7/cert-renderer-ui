@@ -1,0 +1,161 @@
+import { useEffect, useState } from "react";
+import {
+    Alert,
+    Box,
+    Button,
+    CircularProgress,
+    Divider,
+    List,
+    ListItemButton,
+    ListItemText,
+    Stack,
+    TextField,
+    Typography,
+} from "@mui/material";
+import { Link as RouterLink, useNavigate } from "react-router-dom";
+import { appConfig } from "../appConfig";
+import { deleteTemplateById, listTemplates, type TemplateSummary } from "../templateApi";
+import { useConfirm } from "../components/ConfirmDialogProvider";
+
+function formatDate(value?: string): string {
+    if (!value) return "-";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return value;
+    return d.toLocaleString();
+}
+
+export default function TemplatesListPage() {
+    const navigate = useNavigate();
+    const confirm = useConfirm();
+    const [templates, setTemplates] = useState<TemplateSummary[]>([]);
+    const [query, setQuery] = useState("");
+    const [loadingList, setLoadingList] = useState(false);
+    const [loadingEditor, setLoadingEditor] = useState(false);
+    const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [listError, setListError] = useState<string | null>(null);
+
+    async function loadTemplates() {
+        setLoadingList(true);
+        setListError(null);
+        try {
+            const items = await listTemplates(query);
+            setTemplates(items);
+        } catch (err: any) {
+            setListError(err?.message || "Failed to load templates");
+        } finally {
+            setLoadingList(false);
+        }
+    }
+
+    useEffect(() => {
+        void loadTemplates();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    function openEditor(id: string) {
+        setLoadingEditor(true);
+        navigate(`/templates/${id}/edit`);
+    }
+
+    async function deleteTemplate(id: string) {
+        const template = templates.find((t) => t.id === id);
+        const label = (template?.name || "this template").trim();
+        const ok = await confirm({
+            title: "Delete Template",
+            message: `Delete \"${label}\"? This action cannot be undone.`,
+            confirmText: "Delete",
+            cancelText: "Cancel",
+            destructive: true,
+        });
+        if (!ok) return;
+        setDeletingId(id);
+        setListError(null);
+        try {
+            await deleteTemplateById(id);
+            await loadTemplates();
+        } catch (err: any) {
+            setListError(err?.message || "Failed to delete template");
+        } finally {
+            setDeletingId(null);
+        }
+    }
+
+    return (
+        <Box sx={{ p: 3, maxWidth: 980, mx: "auto" }}>
+            <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+                <Box>
+                    <Typography variant="h5">Templates</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                        Environment: {appConfig.env} | Backend: {appConfig.rendererApiBase}
+                    </Typography>
+                </Box>
+                <Stack direction="row" spacing={1}>
+                    <Button variant="contained" component={RouterLink} to="/designs">Create from design</Button>
+                    <Button variant="outlined" component={RouterLink} to="/templates/new">Blank template</Button>
+                    <Button variant="outlined" onClick={() => void loadTemplates()} disabled={loadingList}>Refresh</Button>
+                </Stack>
+            </Stack>
+
+            <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
+                <TextField
+                    fullWidth
+                    size="small"
+                    label="Search templates"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === "Enter") void loadTemplates();
+                    }}
+                />
+                <Button variant="outlined" onClick={() => void loadTemplates()} disabled={loadingList}>Search</Button>
+            </Stack>
+
+            {listError && <Alert severity="error" sx={{ mb: 2 }}>{listError}</Alert>}
+
+            <Divider sx={{ mb: 1 }} />
+            {loadingList ? (
+                <Stack direction="row" alignItems="center" spacing={1} sx={{ py: 2 }}>
+                    <CircularProgress size={18} />
+                    <Typography>Loading templates...</Typography>
+                </Stack>
+            ) : templates.length === 0 ? (
+                <Typography color="text.secondary" sx={{ py: 2 }}>No templates found.</Typography>
+            ) : (
+                <List disablePadding>
+                    {templates.map((item) => (
+                        <ListItemButton key={item.id} onClick={() => openEditor(item.id)} disabled={loadingEditor}>
+                            <ListItemText
+                                primary={item.name}
+                                secondary={`Updated: ${formatDate(item.updatedAt)}  |  Created: ${formatDate(item.createdAt)}`}
+                            />
+                            <Button
+                                size="small"
+                                variant="outlined"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    openEditor(item.id);
+                                }}
+                                disabled={loadingEditor}
+                            >
+                                Edit
+                            </Button>
+                            <Button
+                                size="small"
+                                variant="outlined"
+                                color="error"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    void deleteTemplate(item.id);
+                                }}
+                                disabled={deletingId === item.id}
+                                sx={{ ml: 1 }}
+                            >
+                                {deletingId === item.id ? "Deleting..." : "Delete"}
+                            </Button>
+                        </ListItemButton>
+                    ))}
+                </List>
+            )}
+        </Box>
+    );
+}
