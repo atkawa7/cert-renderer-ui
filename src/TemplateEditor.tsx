@@ -27,6 +27,8 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import AddPhotoAlternateIcon from "@mui/icons-material/AddPhotoAlternate";
 import TextFieldsIcon from "@mui/icons-material/TextFields";
 import HorizontalRuleIcon from "@mui/icons-material/HorizontalRule";
+import FormatListBulletedIcon from "@mui/icons-material/FormatListBulleted";
+import TableChartIcon from "@mui/icons-material/TableChart";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import EditIcon from "@mui/icons-material/Edit";
 import { Rnd, type RndDragCallback, type RndResizeCallback } from "react-rnd";
@@ -92,8 +94,18 @@ function clampNum(n: number, min: number, max: number) {
 
 // ---------------- Template model types ----------------
 export type Background = { url: string; type: "image" | "color" | "svg"; color?: string; svg?: string };
-export type BlockType = "text" | "image" | "horizontal-line";
-export type BaseBlockStyle = { top?: string; left?: string; width?: string; height?: string };
+export type BlockType = "text" | "image" | "horizontal-line" | "list" | "table";
+export type BaseBlockStyle = {
+    top?: string;
+    left?: string;
+    width?: string;
+    height?: string;
+    borderStyle?: "none" | "solid" | "dashed" | "dotted" | string;
+    borderColor?: string;
+    borderWidth?: string;
+    borderRadius?: string;
+    padding?: string;
+};
 
 export type TextBlockStyle = BaseBlockStyle & {
     color?: string;
@@ -108,6 +120,8 @@ export type TextBlockStyle = BaseBlockStyle & {
 
 export type LineBlockStyle = BaseBlockStyle & { backgroundColor?: string };
 export type ImageBlockStyle = BaseBlockStyle;
+export type ListBlockStyle = TextBlockStyle & { listType?: "bullet" | "number" | string };
+export type TableBlockStyle = TextBlockStyle & { showHeaderRow?: boolean };
 
 export type TextBlock = {
     id: string;
@@ -120,7 +134,9 @@ export type TextBlock = {
 
 export type ImageBlock = { id: string; type: "image"; style: ImageBlockStyle; value: string; locked?: boolean };
 export type HorizontalLineBlock = { id: string; type: "horizontal-line"; style: LineBlockStyle; locked?: boolean };
-export type Block = TextBlock | ImageBlock | HorizontalLineBlock;
+export type ListBlock = { id: string; type: "list"; style: ListBlockStyle; value: string; locked?: boolean };
+export type TableBlock = { id: string; type: "table"; style: TableBlockStyle; value: string; locked?: boolean };
+export type Block = TextBlock | ImageBlock | HorizontalLineBlock | ListBlock | TableBlock;
 
 export type Template = {
     name: string;
@@ -206,6 +222,33 @@ function normalizeBlock(block: Block): Block {
         s.fontWeight ??= 400;
         s.textDecoration ??= "none";
     }
+    if (b.type === "list") {
+        const s = b.style as ListBlockStyle;
+        s.color ??= "#333333";
+        s.fontFamily ??= "serif";
+        s.fontSize ??= "20em";
+        s.lineHeight ??= "1.2";
+        s.fontStyle ??= "normal";
+        s.textAlign ??= "left";
+        s.fontWeight ??= 400;
+        s.textDecoration ??= "none";
+        s.listType ??= "bullet";
+        (b as ListBlock).value ??= "First item\nSecond item\nThird item";
+    }
+    if (b.type === "table") {
+        const s = b.style as TableBlockStyle;
+        s.color ??= "#333333";
+        s.fontFamily ??= "serif";
+        s.fontSize ??= "18em";
+        s.lineHeight ??= "1.2";
+        s.fontStyle ??= "normal";
+        s.textAlign ??= "left";
+        s.fontWeight ??= 400;
+        s.textDecoration ??= "none";
+        s.showHeaderRow ??= true;
+        (b as TableBlock).value ??=
+            "Header 1|Header 2|Header 3\nRow 1 Col 1|Row 1 Col 2|Row 1 Col 3";
+    }
     if (b.type === "horizontal-line") {
         const s = b.style as LineBlockStyle;
         s.backgroundColor ??= "#333333";
@@ -226,6 +269,8 @@ function isLineBlock(b: Block): b is HorizontalLineBlock {
 function blockTypeLabel(b: Block): string {
     if (b.type === "text") return "Text";
     if (b.type === "image") return "Image";
+    if (b.type === "list") return "List";
+    if (b.type === "table") return "Table";
     return "Line";
 }
 function normalizeTemplate(input: Template): Template {
@@ -288,6 +333,8 @@ const DEFAULT_NEW_SIZES: Record<BlockType, { wPct: number; hPct: number }> = {
     text: { wPct: 35, hPct: 10 },
     image: { wPct: 20, hPct: 20 },
     "horizontal-line": { wPct: 30, hPct: 0.6 },
+    list: { wPct: 32, hPct: 20 },
+    table: { wPct: 50, hPct: 24 },
 };
 const PALETTE_WIDTH_PX = 320;
 
@@ -565,6 +612,46 @@ export default function TemplateEditor({
                 value: "",
                 locked: false,
                 style: { ...baseStyle },
+            });
+        }
+        if (type === "list") {
+            return normalizeBlock({
+                id,
+                type: "list",
+                value: "First item\nSecond item\nThird item",
+                locked: false,
+                style: {
+                    ...baseStyle,
+                    color: "#333333",
+                    fontFamily: "serif",
+                    fontSize: "20em",
+                    lineHeight: "1.2",
+                    fontWeight: 400,
+                    fontStyle: "normal",
+                    textAlign: "left",
+                    textDecoration: "none",
+                    listType: "bullet",
+                },
+            });
+        }
+        if (type === "table") {
+            return normalizeBlock({
+                id,
+                type: "table",
+                value: "Header 1|Header 2|Header 3\nRow 1 Col 1|Row 1 Col 2|Row 1 Col 3",
+                locked: false,
+                style: {
+                    ...baseStyle,
+                    color: "#333333",
+                    fontFamily: "serif",
+                    fontSize: "18em",
+                    lineHeight: "1.2",
+                    fontWeight: 400,
+                    fontStyle: "normal",
+                    textAlign: "left",
+                    textDecoration: "none",
+                    showHeaderRow: true,
+                },
             });
         }
         return normalizeBlock({
@@ -1198,6 +1285,28 @@ export default function TemplateEditor({
                             disabled={previewMode}
                         >
                             Line
+                        </Button>
+                        <Button
+                            size="small"
+                            variant="outlined"
+                            startIcon={<FormatListBulletedIcon />}
+                            draggable={!previewMode}
+                            onDragStart={(e) => onPaletteDragStart(e, "list")}
+                            onClick={() => addBlockCentered("list")}
+                            disabled={previewMode}
+                        >
+                            List
+                        </Button>
+                        <Button
+                            size="small"
+                            variant="outlined"
+                            startIcon={<TableChartIcon />}
+                            draggable={!previewMode}
+                            onDragStart={(e) => onPaletteDragStart(e, "table")}
+                            onClick={() => addBlockCentered("table")}
+                            disabled={previewMode}
+                        >
+                            Table
                         </Button>
                         <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
                         <Button
@@ -1939,6 +2048,24 @@ export default function TemplateEditor({
                     }}
                 >
                     Add line
+                </MenuItem>
+                <MenuItem
+                    onClick={() => {
+                        if (!contextMenu) return;
+                        addBlockAt("list", contextMenu.canvasX, contextMenu.canvasY);
+                        closeContextMenu();
+                    }}
+                >
+                    Add list
+                </MenuItem>
+                <MenuItem
+                    onClick={() => {
+                        if (!contextMenu) return;
+                        addBlockAt("table", contextMenu.canvasX, contextMenu.canvasY);
+                        closeContextMenu();
+                    }}
+                >
+                    Add table
                 </MenuItem>
 
                 {selectedIds.length > 0 && <Divider />}
