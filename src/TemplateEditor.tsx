@@ -120,6 +120,14 @@ export type TextBlockStyle = BaseBlockStyle & {
 
 export type LineBlockStyle = BaseBlockStyle & { backgroundColor?: string };
 export type ImageBlockStyle = BaseBlockStyle;
+export type ImageBlockValue =
+    | string
+    | {
+          type?: "image" | "svg" | string;
+          url?: string;
+          svg?: string;
+          src?: string;
+      };
 export type ListBlockStyle = TextBlockStyle & { listType?: "bullet" | "number" | string };
 export type TableCellStyle = {
     color?: string;
@@ -159,7 +167,7 @@ export type TextBlock = {
     locked?: boolean;
 };
 
-export type ImageBlock = { id: string; type: "image"; style: ImageBlockStyle; value: string; locked?: boolean };
+export type ImageBlock = { id: string; type: "image"; style: ImageBlockStyle; value: ImageBlockValue; locked?: boolean };
 export type HorizontalLineBlock = { id: string; type: "horizontal-line"; style: LineBlockStyle; locked?: boolean };
 export type ListBlock = { id: string; type: "list"; style: ListBlockStyle; value: string; var?: string; locked?: boolean };
 export type TableBlock = { id: string; type: "table"; style: TableBlockStyle; value: string; var?: string; locked?: boolean };

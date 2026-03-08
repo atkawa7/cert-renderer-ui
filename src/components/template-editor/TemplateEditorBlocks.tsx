@@ -102,7 +102,7 @@ function isTextBlock(b: Block): b is Extract<Block, { type: "text" }> {
 }
 
 function isImageBlock(b: Block): b is Extract<Block, { type: "image" }> {
-    return b.type === "image";
+    return b.type === "image" ||  b.type === "svg";
 }
 
 function isLineBlock(b: Block): b is Extract<Block, { type: "horizontal-line" }> {
@@ -125,9 +125,51 @@ function isAbsoluteUrl(value?: string): boolean {
     return /^(https?:)?\/\//i.test(String(value ?? "").trim());
 }
 
-export function resolveImageSrc(value: string | undefined, assetBaseUrl = ""): string {
-    const src = String(value ?? "").trim();
+function toImageRawSrc(value: unknown): string {
+    if (typeof value === "string") return value.trim();
+    if (!value || typeof value !== "object") return "";
+    const obj = value as Record<string, unknown>;
+    const type = String(obj.type ?? "").toLowerCase();
+    if (type === "svg" && typeof obj.svg === "string" && obj.svg.trim()) {
+        return obj.svg.trim();
+    }
+    if (typeof obj.url === "string" && obj.url.trim()) return obj.url.trim();
+    if (typeof obj.src === "string" && obj.src.trim()) return obj.src.trim();
+    if (typeof obj.svg === "string" && obj.svg.trim()) return obj.svg.trim();
+    return "";
+}
+
+function imageValueToEditorString(value: unknown): string {
+    if (typeof value === "string") return value;
+    if (value && typeof value === "object") {
+        try {
+            return JSON.stringify(value, null, 2);
+        } catch {
+            return "";
+        }
+    }
+    return "";
+}
+
+function parseImageEditorValue(value: string): unknown {
+    const raw = value.trim();
+    if (!raw) return "";
+    if (raw.startsWith("{") || raw.startsWith("[")) {
+        try {
+            return JSON.parse(raw);
+        } catch {
+            return value;
+        }
+    }
+    return value;
+}
+
+export function resolveImageSrc(value: unknown, assetBaseUrl = ""): string {
+    const src = toImageRawSrc(value);
     if (!src) return "";
+    if (src.includes("<svg")) {
+        return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(src)}`;
+    }
     if (isDataUrl(src) || isAbsoluteUrl(src)) return src;
     return `${assetBaseUrl}${encodeURI(src)}`;
 }
@@ -634,6 +676,7 @@ export function Inspector({
     const s = block.style;
     const locked = Boolean((block as any).locked);
     const imageUploadInputRef = useRef<HTMLInputElement | null>(null);
+    const [imageValueText, setImageValueText] = useState("");
     const [columnStylesJson, setColumnStylesJson] = useState("");
     const [rowStylesJson, setRowStylesJson] = useState("");
     const [cellStylesJson, setCellStylesJson] = useState("");
@@ -643,6 +686,11 @@ export function Inspector({
         setColumnStylesJson(prettyJson((block.style as TableBlockStyle).columnStyles ?? []));
         setRowStylesJson(prettyJson((block.style as TableBlockStyle).rowStyles ?? []));
         setCellStylesJson(prettyJson((block.style as TableBlockStyle).cellStyles ?? []));
+    }, [block]);
+
+    useEffect(() => {
+        if (!isImageBlock(block)) return;
+        setImageValueText(imageValueToEditorString(block.value));
     }, [block]);
 
     function onSelectImageFile(e: ChangeEvent<HTMLInputElement>) {
@@ -770,13 +818,17 @@ export function Inspector({
                 </>
             )}
 
-            {isImageBlock(block) && (
+            {(isImageBlock(block)) && (
                 <>
                     <TextField
                         fullWidth
-                        label="Image value (path/url)"
-                        value={block.value ?? ""}
-                        onChange={(e) => onPatch({ value: e.target.value } as Partial<Block>)}
+                        multiline
+                        minRows={2}
+                        label="Image value (path/url or JSON)"
+                        value={imageValueText}
+                        onChange={(e) => setImageValueText(e.target.value)}
+                        onBlur={() => onPatch({ value: parseImageEditorValue(imageValueText) } as Partial<Block>)}
+                        helperText='Supports string URL/path or JSON like {"type":"svg","svg":"<svg ...>...</svg>"}'
                     />
                     <Stack direction="row" spacing={1}>
                         <Button variant="outlined" startIcon={<AddPhotoAlternateIcon />} onClick={() => imageUploadInputRef.current?.click()}>
