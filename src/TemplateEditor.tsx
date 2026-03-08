@@ -134,8 +134,8 @@ export type TextBlock = {
 
 export type ImageBlock = { id: string; type: "image"; style: ImageBlockStyle; value: string; locked?: boolean };
 export type HorizontalLineBlock = { id: string; type: "horizontal-line"; style: LineBlockStyle; locked?: boolean };
-export type ListBlock = { id: string; type: "list"; style: ListBlockStyle; value: string; locked?: boolean };
-export type TableBlock = { id: string; type: "table"; style: TableBlockStyle; value: string; locked?: boolean };
+export type ListBlock = { id: string; type: "list"; style: ListBlockStyle; value: string; var?: string; locked?: boolean };
+export type TableBlock = { id: string; type: "table"; style: TableBlockStyle; value: string; var?: string; locked?: boolean };
 export type Block = TextBlock | ImageBlock | HorizontalLineBlock | ListBlock | TableBlock;
 
 export type Template = {
@@ -233,6 +233,7 @@ function normalizeBlock(block: Block): Block {
         s.fontWeight ??= 400;
         s.textDecoration ??= "none";
         s.listType ??= "bullet";
+        (b as ListBlock).var ??= "";
         (b as ListBlock).value ??= "First item\nSecond item\nThird item";
     }
     if (b.type === "table") {
@@ -246,6 +247,7 @@ function normalizeBlock(block: Block): Block {
         s.fontWeight ??= 400;
         s.textDecoration ??= "none";
         s.showHeaderRow ??= true;
+        (b as TableBlock).var ??= "";
         (b as TableBlock).value ??=
             "Header 1|Header 2|Header 3\nRow 1 Col 1|Row 1 Col 2|Row 1 Col 3";
     }
@@ -619,6 +621,7 @@ export default function TemplateEditor({
                 id,
                 type: "list",
                 value: "First item\nSecond item\nThird item",
+                var: "",
                 locked: false,
                 style: {
                     ...baseStyle,
@@ -639,6 +642,7 @@ export default function TemplateEditor({
                 id,
                 type: "table",
                 value: "Header 1|Header 2|Header 3\nRow 1 Col 1|Row 1 Col 2|Row 1 Col 3",
+                var: "",
                 locked: false,
                 style: {
                     ...baseStyle,

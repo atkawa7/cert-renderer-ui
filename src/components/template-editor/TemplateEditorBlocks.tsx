@@ -549,6 +549,13 @@ export function Inspector({
                 <>
                     <TextField
                         fullWidth
+                        label="Var (JSON path)"
+                        value={block.var ?? ""}
+                        onChange={(e) => onPatch({ var: e.target.value } as Partial<Block>)}
+                        helperText="Runtime path, e.g. payload.items"
+                    />
+                    <TextField
+                        fullWidth
                         multiline
                         minRows={4}
                         label="List items (one per line)"
@@ -569,6 +576,13 @@ export function Inspector({
 
             {isTableBlock(block) && (
                 <>
+                    <TextField
+                        fullWidth
+                        label="Var (JSON path)"
+                        value={block.var ?? ""}
+                        onChange={(e) => onPatch({ var: e.target.value } as Partial<Block>)}
+                        helperText="Runtime path, e.g. payload.table"
+                    />
                     <TextField
                         fullWidth
                         multiline
