@@ -37,6 +37,7 @@ export type DesignSummary = {
     name: string;
     description?: string;
     thumbnailUrl: string;
+    defaultDesign: boolean;
     createdAt: string;
     updatedAt: string;
 };
@@ -46,6 +47,7 @@ export type DesignDetail = {
     name: string;
     description?: string;
     thumbnailUrl: string;
+    defaultDesign: boolean;
     template: Template;
     createdAt: string;
     updatedAt: string;

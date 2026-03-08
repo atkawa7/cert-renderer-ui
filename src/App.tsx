@@ -7,6 +7,7 @@ import {
     CardActions,
     CardContent,
     CardMedia,
+    Chip,
     CircularProgress,
     Dialog,
     DialogActions,
@@ -45,9 +46,7 @@ import { appConfig } from "./appConfig";
 import { Link as RouterLink, Navigate, Route, Routes, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useConfirm } from "./components/ConfirmDialogProvider";
 
-const ASSET_BASE_URL = "https://certifier-production-amplify.s3.eu-west-1.amazonaws.com/public/";
 const SIDEBAR_WIDTH = 260;
-
 function formatDate(value?: string): string {
     if (!value) return "-";
     const d = new Date(value);
@@ -237,7 +236,7 @@ function EditorPage({ mode }: { mode: "new" | "edit" }) {
             const pdf = await renderTemplatePdf({
                 template: next,
                 data,
-                assetBaseUrl: ASSET_BASE_URL,
+                assetBaseUrl: appConfig.assetBaseUrl,
                 fileName: (next.name || "template").trim(),
             });
             downloadPdfBlob(next.name || "template", pdf);
@@ -336,7 +335,7 @@ function EditorPage({ mode }: { mode: "new" | "edit" }) {
             <TemplateEditor
                 key={editorKey}
                 initialTemplate={template}
-                assetBaseUrl={ASSET_BASE_URL}
+                assetBaseUrl={appConfig.assetBaseUrl}
                 onSaveTemplate={handleSaveTemplate}
                 saveButtonLabel={saving ? "Saving..." : "Save to backend"}
                 onRenderTemplate={handleRenderTemplate}
@@ -440,7 +439,7 @@ function DesignImagePreviewDialog({
                 {imageUrl && (
                     <Box
                         component="img"
-                        src={imageUrl}
+                        src={`${appConfig.assetBaseUrl}${imageUrl}`}
                         alt={title}
                         sx={{ width: "100%", maxHeight: "75vh", objectFit: "contain", display: "block" }}
                     />
@@ -471,15 +470,18 @@ function DesignCardItem({
             <CardMedia
                 component="img"
                 height="180"
-                image={design.thumbnailUrl}
+                image={`${appConfig.assetBaseUrl}${design.thumbnailUrl}`}
                 alt={design.name}
                 onClick={onPreview}
                 sx={{ objectFit: "cover", bgcolor: "#f1f4f8", cursor: "zoom-in" }}
             />
             <CardContent>
-                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                    {design.name}
-                </Typography>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                        {design.name}
+                    </Typography>
+                    {design.defaultDesign && <Chip size="small" color="info" label="Default" />}
+                </Stack>
                 <Typography variant="body2" color="text.secondary">
                     {design.description || "-"}
                 </Typography>
@@ -488,9 +490,11 @@ function DesignCardItem({
                 <Button fullWidth variant="contained" onClick={onUse}>
                     Use Design
                 </Button>
-                <Button fullWidth variant="outlined" color="error" onClick={onDelete} disabled={deleting}>
-                    {deleting ? "Deleting..." : "Delete"}
-                </Button>
+                {!design.defaultDesign && (
+                    <Button fullWidth variant="outlined" color="error" onClick={onDelete} disabled={deleting}>
+                        {deleting ? "Deleting..." : "Delete"}
+                    </Button>
+                )}
             </CardActions>
         </Card>
     );
