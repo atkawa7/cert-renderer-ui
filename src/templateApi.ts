@@ -4,6 +4,7 @@ import { appConfig } from "./appConfig";
 export type TemplateSummary = {
     id: string;
     name: string;
+    sourceDesignId?: string | null;
     createdAt: string;
     updatedAt: string;
 };
@@ -11,6 +12,7 @@ export type TemplateSummary = {
 export type TemplateDetail = {
     id: string;
     name: string;
+    sourceDesignId?: string | null;
     template: Template;
     createdAt: string;
     updatedAt: string;
@@ -120,7 +122,11 @@ export async function getTemplateById(id: string): Promise<TemplateDetail> {
     return await apiFetch<TemplateDetail>(`/templates/${id}`);
 }
 
-export async function createTemplate(payload: { name: string; template: Template }): Promise<TemplateDetail> {
+export async function createTemplate(payload: {
+    name: string;
+    template: Template;
+    sourceDesignId?: string | null;
+}): Promise<TemplateDetail> {
     return await apiFetch<TemplateDetail>("/templates", {
         method: "POST",
         body: JSON.stringify(payload),
@@ -129,7 +135,11 @@ export async function createTemplate(payload: { name: string; template: Template
 
 export async function updateTemplateById(
     id: string,
-    payload: { name: string; template: Template }
+    payload: {
+        name: string;
+        template: Template;
+        sourceDesignId?: string | null;
+    }
 ): Promise<TemplateDetail> {
     return await apiFetch<TemplateDetail>(`/templates/${id}`, {
         method: "PUT",

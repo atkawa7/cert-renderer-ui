@@ -37,16 +37,35 @@ import {
     listDesigns,
     listTemplates,
     renderTemplatePdf,
+    type DesignDetail,
     type DesignSummary,
     type TemplateDetail,
     type TemplateSummary,
     updateTemplateById,
 } from "./templateApi";
 import { appConfig } from "./appConfig";
-import { Link as RouterLink, Navigate, Route, Routes, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link as RouterLink, Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useConfirm } from "./components/ConfirmDialogProvider";
 
 const SIDEBAR_WIDTH = 260;
+const APP_TITLE = "Renderer UI";
+
+function BrowserTabTitle() {
+    const { pathname } = useLocation();
+
+    useEffect(() => {
+        let page = APP_TITLE;
+        if (pathname === "/templates") page = `Templates | ${APP_TITLE}`;
+        else if (pathname === "/designs") page = `Designs | ${APP_TITLE}`;
+        else if (pathname.startsWith("/designs/")) page = `Design Detail | ${APP_TITLE}`;
+        else if (pathname === "/templates/new") page = `New Template | ${APP_TITLE}`;
+        else if (pathname.startsWith("/templates/") && pathname.endsWith("/edit")) page = `Edit Template | ${APP_TITLE}`;
+        document.title = page;
+    }, [pathname]);
+
+    return null;
+}
+
 function formatDate(value?: string): string {
     if (!value) return "-";
     const d = new Date(value);
@@ -96,6 +115,7 @@ function EditorPage({ mode }: { mode: "new" | "edit" }) {
 
     const [template, setTemplate] = useState<Template | null>(mode === "new" ? makeNewTemplate() : null);
     const [templateId, setTemplateId] = useState<string | null>(mode === "edit" ? id ?? null : null);
+    const [sourceDesignId, setSourceDesignId] = useState<string | null>(mode === "new" ? designId : null);
     const [loading, setLoading] = useState(mode === "edit");
     const [saving, setSaving] = useState(false);
     const [rendering, setRendering] = useState(false);
@@ -116,6 +136,7 @@ function EditorPage({ mode }: { mode: "new" | "edit" }) {
         if (!designId) {
             setLoading(false);
             setTemplate(makeNewTemplate());
+            setSourceDesignId(null);
             return;
         }
 
@@ -128,11 +149,13 @@ function EditorPage({ mode }: { mode: "new" | "edit" }) {
                     name: `${design.name || design.template?.name || "Template"} copy`,
                 } as Template;
                 setTemplate(draft);
+                setSourceDesignId(designId);
                 setStatusMsg(`Using design: ${design.name}`);
             })
             .catch((err: any) => {
                 if (cancelled) return;
                 setTemplate(makeNewTemplate());
+                setSourceDesignId(null);
                 setErrorMsg(err?.message || "Failed to load design");
             })
             .finally(() => {
@@ -162,6 +185,7 @@ function EditorPage({ mode }: { mode: "new" | "edit" }) {
                 if (cancelled) return;
                 setTemplate(toEditorTemplate(detail));
                 setTemplateId(detail.id);
+                setSourceDesignId(detail.sourceDesignId ?? null);
             })
             .catch((err: any) => {
                 if (cancelled) return;
@@ -184,6 +208,7 @@ function EditorPage({ mode }: { mode: "new" | "edit" }) {
             const payload = {
                 name: (next.name || "").trim() || "Untitled Template",
                 template: next,
+                sourceDesignId,
             };
             const saved = templateId
                 ? await updateTemplateById(templateId, payload)
@@ -192,6 +217,7 @@ function EditorPage({ mode }: { mode: "new" | "edit" }) {
             const editorModel = toEditorTemplate(saved);
             setTemplate(editorModel);
             setTemplateId(saved.id);
+            setSourceDesignId(saved.sourceDesignId ?? sourceDesignId);
             setStatusMsg("Template saved");
 
             if (!templateId) {
@@ -212,6 +238,7 @@ function EditorPage({ mode }: { mode: "new" | "edit" }) {
             const payload = {
                 name: (next.name || "").trim() || "Untitled Template",
                 template: next,
+                sourceDesignId,
             };
             if (templateId) {
                 await updateTemplateById(templateId, payload);
@@ -342,6 +369,11 @@ function EditorPage({ mode }: { mode: "new" | "edit" }) {
                 renderButtonLabel={rendering ? "Rendering..." : "Render PDF (XSL-FO)"}
                 defaultRenderDataJson={`{\n  "recipient": { "name": "Jane Doe" },\n  "certificate": { "uuid": "CERT-2026-0001", "issued_on": "2026-03-07" }\n}`}
                 onConvertToDesign={handleConvertTemplateToDesign}
+                onBackToDesign={
+                    sourceDesignId
+                        ? () => navigate(`/designs/${encodeURIComponent(sourceDesignId)}`)
+                        : undefined
+                }
                 onBackToTemplates={() => navigate("/templates")}
                 onDeleteTemplate={mode === "edit" ? handleDeleteTemplate : undefined}
                 deletingTemplate={deleting}
@@ -477,9 +509,10 @@ function DesignCardItem({
             />
             <CardContent>
                 <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 200 }}>
                         {design.name}
                     </Typography>
+
                     {design.defaultDesign && <Chip size="small" color="info" label="Default" />}
                 </Stack>
                 <Typography variant="body2" color="text.secondary">
@@ -840,9 +873,90 @@ function TemplatesListPage() {
     );
 }
 
+function DesignDetailsPage() {
+    const navigate = useNavigate();
+    const { id } = useParams<{ id: string }>();
+    const [design, setDesign] = useState<DesignDetail | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!id) {
+            setErrorMsg("Missing design id");
+            setLoading(false);
+            return;
+        }
+
+        let cancelled = false;
+        setLoading(true);
+        setErrorMsg(null);
+        getDesignById(id)
+            .then((item) => {
+                if (cancelled) return;
+                setDesign(item);
+            })
+            .catch((err: any) => {
+                if (cancelled) return;
+                setErrorMsg(err?.message || "Failed to load design");
+            })
+            .finally(() => {
+                if (!cancelled) setLoading(false);
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [id]);
+
+    return (
+        <Box sx={{ p: 3, maxWidth: 980, mx: "auto" }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+                <Typography variant="h5">Design Detail</Typography>
+                <Button variant="outlined" onClick={() => navigate("/designs")}>
+                    Back to designs
+                </Button>
+            </Stack>
+
+            {loading ? (
+                <Stack direction="row" spacing={1} alignItems="center">
+                    <CircularProgress size={18} />
+                    <Typography>Loading design...</Typography>
+                </Stack>
+            ) : errorMsg ? (
+                <Alert severity="error">{errorMsg}</Alert>
+            ) : !design ? (
+                <Alert severity="warning">Design not found.</Alert>
+            ) : (
+                <Stack spacing={2}>
+                    <Box
+                        component="img"
+                        src={`${appConfig.assetBaseUrl}${design.thumbnailUrl}`}
+                        alt={design.name}
+                        sx={{ width: "100%", maxHeight: 460, objectFit: "contain", bgcolor: "#f1f4f8", borderRadius: 2 }}
+                    />
+                    <Typography variant="h6">{design.name}</Typography>
+                    <Typography color="text.secondary">{design.description || "-"}</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                        Updated: {formatDate(design.updatedAt)} | Created: {formatDate(design.createdAt)}
+                    </Typography>
+                    <Stack direction="row" spacing={1}>
+                        <Button
+                            variant="contained"
+                            onClick={() => navigate(`/templates/new?design=${encodeURIComponent(design.id)}`)}
+                        >
+                            Use Design
+                        </Button>
+                    </Stack>
+                </Stack>
+            )}
+        </Box>
+    );
+}
+
 export default function App() {
     return (
         <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "#f4f6fb" }}>
+            <BrowserTabTitle />
             <Drawer
                 variant="permanent"
                 sx={{
@@ -878,6 +992,7 @@ export default function App() {
                     <Route path="/" element={<Navigate to="/templates" replace />} />
                     <Route path="/templates" element={<TemplatesListPage />} />
                     <Route path="/designs" element={<DesignsPage />} />
+                    <Route path="/designs/:id" element={<DesignDetailsPage />} />
                     <Route path="/templates/new" element={<EditorPage mode="new" />} />
                     <Route path="/templates/:id/edit" element={<EditorPage mode="edit" />} />
                 </Routes>

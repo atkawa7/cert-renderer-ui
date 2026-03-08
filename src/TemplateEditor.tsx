@@ -162,6 +162,8 @@ export type TemplateEditorProps = {
     defaultRenderDataJson?: string;
     onConvertToDesign?: (design: DesignCreateDraft) => void | Promise<void>;
     convertToDesignLabel?: string;
+    onBackToDesign?: () => void;
+    backToDesignLabel?: string;
     onBackToTemplates?: () => void;
     onDeleteTemplate?: () => void | Promise<void>;
     deleteTemplateLabel?: string;
@@ -290,6 +292,8 @@ export default function TemplateEditor({
                                            defaultRenderDataJson = "{}",
                                            onConvertToDesign,
                                            convertToDesignLabel = "Convert to Design",
+                                           onBackToDesign,
+                                           backToDesignLabel = "Back to design",
                                            onBackToTemplates,
                                            onDeleteTemplate,
                                            deleteTemplateLabel = "Delete Template",
@@ -1169,6 +1173,11 @@ export default function TemplateEditor({
                             </Button>
                         )}
                         <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+                        {onBackToDesign && (
+                            <Button size="small" variant="contained" onClick={onBackToDesign}>
+                                {backToDesignLabel}
+                            </Button>
+                        )}
                         {onBackToTemplates && (
                             <Button size="small" variant="contained" onClick={onBackToTemplates}>
                                 Back to templates
