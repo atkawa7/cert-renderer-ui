@@ -1421,6 +1421,9 @@ export default function TemplateEditor({
                                                     assetBaseUrl={assetBaseUrl}
                                                     editing={isEditing}
                                                     previewMode={previewMode}
+                                                    onChangeText={(txt) => {
+                                                        updateBlock(b.id, { value: txt } as Partial<Block>);
+                                                    }}
                                                     onCommitText={(txt) => {
                                                         updateBlock(b.id, { value: txt } as Partial<Block>);
                                                         setEditingId(null);

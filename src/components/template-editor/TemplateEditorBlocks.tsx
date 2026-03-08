@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ChangeEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, type ChangeEvent } from "react";
 import {
     Box,
     Button,
@@ -20,6 +20,43 @@ import type { BaseBlockStyle, Block, TextBlock } from "../../TemplateEditor";
 
 function clampNum(n: number, min: number, max: number) {
     return Math.max(min, Math.min(max, n));
+}
+
+function getCaretOffset(root: HTMLElement): number {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return 0;
+    const range = sel.getRangeAt(0);
+    const pre = range.cloneRange();
+    pre.selectNodeContents(root);
+    pre.setEnd(range.endContainer, range.endOffset);
+    return pre.toString().length;
+}
+
+function setCaretOffset(root: HTMLElement, offset: number) {
+    const target = Math.max(0, offset);
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let remaining = target;
+    let node: Node | null = walker.nextNode();
+    while (node) {
+        const len = node.textContent?.length ?? 0;
+        if (remaining <= len) {
+            const range = document.createRange();
+            range.setStart(node, remaining);
+            range.collapse(true);
+            const sel = window.getSelection();
+            sel?.removeAllRanges();
+            sel?.addRange(range);
+            return;
+        }
+        remaining -= len;
+        node = walker.nextNode();
+    }
+    const range = document.createRange();
+    range.selectNodeContents(root);
+    range.collapse(false);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
 }
 
 function parseEmToNumber(v?: string, fallback = 24): number {
@@ -70,6 +107,7 @@ export function BlockRenderer({
     assetBaseUrl,
     editing,
     previewMode,
+    onChangeText,
     onCommitText,
     onCancelEdit,
 }: {
@@ -77,6 +115,7 @@ export function BlockRenderer({
     assetBaseUrl: string;
     editing: boolean;
     previewMode: boolean;
+    onChangeText: (text: string) => void;
     onCommitText: (text: string) => void;
     onCancelEdit: () => void;
 }) {
@@ -86,6 +125,7 @@ export function BlockRenderer({
                 block={block}
                 editing={editing}
                 previewMode={previewMode}
+                onChange={onChangeText}
                 onCommit={onCommitText}
                 onCancel={onCancelEdit}
             />
@@ -151,17 +191,20 @@ function EditableText({
     block,
     editing,
     previewMode,
+    onChange,
     onCommit,
     onCancel,
 }: {
     block: TextBlock;
     editing: boolean;
     previewMode: boolean;
+    onChange: (text: string) => void;
     onCommit: (text: string) => void;
     onCancel: () => void;
 }) {
     const s = block.style;
     const ref = useRef<HTMLDivElement | null>(null);
+    const caretOffsetRef = useRef<number | null>(null);
 
     const fontSizeNum = parseFloat(String(s.fontSize ?? "24").replace("em", ""));
     const fontSizePx = clampNum(Number.isNaN(fontSizeNum) ? 24 : fontSizeNum, 6, 220);
@@ -177,6 +220,13 @@ function EditableText({
             sel?.addRange(range);
         }
     }, [editing]);
+
+    useLayoutEffect(() => {
+        if (!editing) return;
+        if (!ref.current) return;
+        if (caretOffsetRef.current === null) return;
+        setCaretOffset(ref.current, Math.min(caretOffsetRef.current, ref.current.innerText.length));
+    }, [editing, block.value]);
 
     return (
         <Box
@@ -208,6 +258,13 @@ function EditableText({
                 onBlur={() => {
                     if (previewMode || !editing) return;
                     onCommit((ref.current?.innerText ?? "").trimEnd());
+                }}
+                onInput={() => {
+                    if (previewMode || !editing) return;
+                    if (ref.current) {
+                        caretOffsetRef.current = getCaretOffset(ref.current);
+                    }
+                    onChange((ref.current?.innerText ?? "").trimEnd());
                 }}
                 onKeyDown={(e) => {
                     if (previewMode || !editing) return;
