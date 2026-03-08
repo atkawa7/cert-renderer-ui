@@ -121,7 +121,34 @@ export type TextBlockStyle = BaseBlockStyle & {
 export type LineBlockStyle = BaseBlockStyle & { backgroundColor?: string };
 export type ImageBlockStyle = BaseBlockStyle;
 export type ListBlockStyle = TextBlockStyle & { listType?: "bullet" | "number" | string };
-export type TableBlockStyle = TextBlockStyle & { showHeaderRow?: boolean };
+export type TableCellStyle = {
+    color?: string;
+    backgroundColor?: string;
+    fontWeight?: number | string;
+    fontStyle?: "normal" | "italic" | string;
+    textAlign?: "left" | "center" | "right" | string;
+    textDecoration?: "none" | "underline" | "line-through" | string;
+    borderStyle?: "none" | "solid" | "dashed" | "dotted" | string;
+    borderColor?: string;
+    borderWidth?: string;
+    padding?: string;
+};
+export type TableRangeStyleRule = {
+    start: number;
+    end?: number;
+    style: TableCellStyle;
+};
+export type TableCellStyleRule = {
+    row: number;
+    col: number;
+    style: TableCellStyle;
+};
+export type TableBlockStyle = TextBlockStyle & {
+    showHeaderRow?: boolean;
+    columnStyles?: TableRangeStyleRule[];
+    rowStyles?: TableRangeStyleRule[];
+    cellStyles?: TableCellStyleRule[];
+};
 
 export type TextBlock = {
     id: string;
@@ -335,6 +362,9 @@ function normalizeBlock(block: Block): Block {
         s.fontWeight ??= 400;
         s.textDecoration ??= "none";
         s.showHeaderRow ??= true;
+        s.columnStyles ??= [];
+        s.rowStyles ??= [];
+        s.cellStyles ??= [];
         (b as TableBlock).var ??= "";
         (b as TableBlock).value ??=
             "Header 1|Header 2|Header 3\nRow 1 Col 1|Row 1 Col 2|Row 1 Col 3";
@@ -751,6 +781,9 @@ export default function TemplateEditor({
                     textAlign: "left",
                     textDecoration: "none",
                     showHeaderRow: true,
+                    columnStyles: [],
+                    rowStyles: [],
+                    cellStyles: [],
                 },
             });
         }

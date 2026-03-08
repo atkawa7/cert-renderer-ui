@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, type ChangeEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
     Box,
     Button,
@@ -16,7 +16,13 @@ import LockOpenIcon from "@mui/icons-material/LockOpen";
 import AddPhotoAlternateIcon from "@mui/icons-material/AddPhotoAlternate";
 import RemoveIcon from "@mui/icons-material/Remove";
 import AddIcon from "@mui/icons-material/Add";
-import type { BaseBlockStyle, Block, TextBlock } from "../../TemplateEditor";
+import type {
+    BaseBlockStyle,
+    Block,
+    TableBlockStyle,
+    TableCellStyle,
+    TextBlock,
+} from "../../TemplateEditor";
 
 function clampNum(n: number, min: number, max: number) {
     return Math.max(min, Math.min(max, n));
@@ -75,6 +81,16 @@ function parsePxToNumber(v?: string, fallback = 0): number {
     if (!v) return fallback;
     const n = parseFloat(String(v).replace("px", "").trim());
     return Number.isFinite(n) ? n : fallback;
+}
+function mergeCellStyle(base: TableCellStyle, patch?: TableCellStyle): TableCellStyle {
+    return { ...base, ...(patch ?? {}) };
+}
+function inRange(value: number, start?: number, end?: number): boolean {
+    if (start === undefined || !Number.isFinite(start)) return false;
+    const safeEnd = end === undefined || !Number.isFinite(end) ? start : end;
+    const min = Math.min(start, safeEnd);
+    const max = Math.max(start, safeEnd);
+    return value >= min && value <= max;
 }
 
 function toEm(n: number): string {
@@ -271,6 +287,41 @@ export function BlockRenderer({
         const borderWidth = parsePxToNumber(s.borderWidth, 1);
         const tableBorderStyle = s.borderStyle ?? "solid";
         const tableBorderColor = s.borderColor ?? "#666666";
+        const tableStyles = s as TableBlockStyle;
+        const columnStyles = tableStyles.columnStyles ?? [];
+        const rowStyles = tableStyles.rowStyles ?? [];
+        const cellStyles = tableStyles.cellStyles ?? [];
+        const baseCellStyle: TableCellStyle = {
+            color: s.color,
+            backgroundColor: undefined,
+            fontWeight: s.fontWeight,
+            fontStyle: s.fontStyle,
+            textAlign: s.textAlign,
+            textDecoration: s.textDecoration,
+            borderStyle: s.borderStyle,
+            borderColor: s.borderColor,
+            borderWidth: s.borderWidth,
+            padding: s.padding,
+        };
+        const resolveCellStyle = (rowIdx: number, colIdx: number): TableCellStyle => {
+            let out = mergeCellStyle(baseCellStyle, undefined);
+            for (const rule of columnStyles) {
+                if (inRange(colIdx, rule?.start, rule?.end)) {
+                    out = mergeCellStyle(out, rule?.style);
+                }
+            }
+            for (const rule of rowStyles) {
+                if (inRange(rowIdx, rule?.start, rule?.end)) {
+                    out = mergeCellStyle(out, rule?.style);
+                }
+            }
+            for (const rule of cellStyles) {
+                if (rule?.row === rowIdx && rule?.col === colIdx) {
+                    out = mergeCellStyle(out, rule?.style);
+                }
+            }
+            return out;
+        };
 
         return (
             <Box sx={commonShellSx}>
@@ -298,20 +349,30 @@ export function BlockRenderer({
                         <Box component="thead">
                             <Box component="tr">
                                 {cells[0].map((cell, idx) => (
+                                    (() => {
+                                        const cs = resolveCellStyle(-1, idx);
+                                        const csBorderWidth = parsePxToNumber(cs.borderWidth, borderWidth);
+                                        return (
                                     <Box
                                         key={`h_${idx}`}
                                         component="th"
                                         sx={{
-                                            p: 0.5,
-                                            borderBottomStyle: tableBorderStyle,
-                                            borderBottomColor: tableBorderColor,
-                                            borderBottomWidth: `${Math.max(borderWidth, 1)}px`,
-                                            fontWeight: 700,
-                                            textAlign: s.textAlign ?? "left",
+                                            p: cs.padding ?? "4px",
+                                            borderBottomStyle: cs.borderStyle ?? tableBorderStyle,
+                                            borderBottomColor: cs.borderColor ?? tableBorderColor,
+                                            borderBottomWidth: `${Math.max(csBorderWidth, 1)}px`,
+                                            fontWeight: cs.fontWeight ?? 700,
+                                            fontStyle: cs.fontStyle ?? s.fontStyle ?? "normal",
+                                            textAlign: cs.textAlign ?? s.textAlign ?? "left",
+                                            textDecoration: cs.textDecoration ?? s.textDecoration ?? "none",
+                                            color: cs.color ?? s.color ?? "#333",
+                                            backgroundColor: cs.backgroundColor,
                                         }}
                                     >
                                         {cell || `Header ${idx + 1}`}
                                     </Box>
+                                        );
+                                    })()
                                 ))}
                             </Box>
                         </Box>
@@ -320,15 +381,26 @@ export function BlockRenderer({
                         {cells.slice(showHeader ? 1 : 0).map((row, rIdx) => (
                             <Box component="tr" key={`r_${rIdx}`}>
                                 {row.map((cell, cIdx) => (
+                                    (() => {
+                                        const cs = resolveCellStyle(rIdx, cIdx);
+                                        return (
                                     <Box
                                         key={`c_${rIdx}_${cIdx}`}
                                         component="td"
                                         sx={{
-                                            p: 0.5,
+                                            p: cs.padding ?? "4px",
+                                            fontWeight: cs.fontWeight ?? s.fontWeight ?? 400,
+                                            fontStyle: cs.fontStyle ?? s.fontStyle ?? "normal",
+                                            textAlign: cs.textAlign ?? s.textAlign ?? "left",
+                                            textDecoration: cs.textDecoration ?? s.textDecoration ?? "none",
+                                            color: cs.color ?? s.color ?? "#333",
+                                            backgroundColor: cs.backgroundColor,
                                         }}
                                     >
                                         {cell || "\u00A0"}
                                     </Box>
+                                        );
+                                    })()
                                 ))}
                             </Box>
                         ))}
@@ -431,6 +503,23 @@ function BorderInspectorFields({
             </Stack>
         </>
     );
+}
+
+function prettyJson(value: unknown): string {
+    try {
+        return JSON.stringify(value ?? [], null, 2);
+    } catch {
+        return "[]";
+    }
+}
+
+function parseJsonArray(value: string): unknown[] {
+    try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        return [];
+    }
 }
 
 function EditableText({
@@ -545,6 +634,16 @@ export function Inspector({
     const s = block.style;
     const locked = Boolean((block as any).locked);
     const imageUploadInputRef = useRef<HTMLInputElement | null>(null);
+    const [columnStylesJson, setColumnStylesJson] = useState("");
+    const [rowStylesJson, setRowStylesJson] = useState("");
+    const [cellStylesJson, setCellStylesJson] = useState("");
+
+    useEffect(() => {
+        if (!isTableBlock(block)) return;
+        setColumnStylesJson(prettyJson((block.style as TableBlockStyle).columnStyles ?? []));
+        setRowStylesJson(prettyJson((block.style as TableBlockStyle).rowStyles ?? []));
+        setCellStylesJson(prettyJson((block.style as TableBlockStyle).cellStyles ?? []));
+    }, [block]);
 
     function onSelectImageFile(e: ChangeEvent<HTMLInputElement>) {
         const file = e.target.files?.[0];
@@ -638,6 +737,36 @@ export function Inspector({
                         <ToggleButton value="true">Header row on</ToggleButton>
                         <ToggleButton value="false">Header row off</ToggleButton>
                     </ToggleButtonGroup>
+                    <TextField
+                        fullWidth
+                        multiline
+                        minRows={4}
+                        label="Column styles JSON"
+                        value={columnStylesJson}
+                        onChange={(e) => setColumnStylesJson(e.target.value)}
+                        onBlur={() => onStylePatch({ columnStyles: parseJsonArray(columnStylesJson) })}
+                        helperText='[{ "start": 0, "end": 1, "style": { "backgroundColor": "#f5f5f5", "fontWeight": 700 } }]'
+                    />
+                    <TextField
+                        fullWidth
+                        multiline
+                        minRows={4}
+                        label="Row styles JSON"
+                        value={rowStylesJson}
+                        onChange={(e) => setRowStylesJson(e.target.value)}
+                        onBlur={() => onStylePatch({ rowStyles: parseJsonArray(rowStylesJson) })}
+                        helperText='[{ "start": 0, "end": 2, "style": { "backgroundColor": "#fafafa" } }]'
+                    />
+                    <TextField
+                        fullWidth
+                        multiline
+                        minRows={4}
+                        label="Cell styles JSON"
+                        value={cellStylesJson}
+                        onChange={(e) => setCellStylesJson(e.target.value)}
+                        onBlur={() => onStylePatch({ cellStyles: parseJsonArray(cellStylesJson) })}
+                        helperText='[{ "row": 1, "col": 2, "style": { "color": "#d32f2f", "fontWeight": 700 } }]'
+                    />
                 </>
             )}
 
