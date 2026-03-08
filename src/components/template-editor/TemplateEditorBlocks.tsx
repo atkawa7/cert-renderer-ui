@@ -121,6 +121,7 @@ export function BlockRenderer({
     assetBaseUrl,
     editing,
     previewMode,
+    renderData,
     onChangeText,
     onCommitText,
     onCancelEdit,
@@ -129,10 +130,23 @@ export function BlockRenderer({
     assetBaseUrl: string;
     editing: boolean;
     previewMode: boolean;
+    renderData?: unknown;
     onChangeText: (text: string) => void;
     onCommitText: (text: string) => void;
     onCancelEdit: () => void;
 }) {
+    function readPath(data: unknown, path: string): unknown {
+        const key = String(path ?? "").trim();
+        if (!key) return undefined;
+        const parts = key.split(".").filter(Boolean);
+        let cur: any = data;
+        for (const part of parts) {
+            if (cur === null || cur === undefined || typeof cur !== "object") return undefined;
+            cur = cur[part];
+        }
+        return cur;
+    }
+
     const commonShellSx = useMemo(
         () => ({
             width: "100%",
@@ -192,10 +206,14 @@ export function BlockRenderer({
     if (isListBlock(block)) {
         const s = block.style;
         const fontSizePx = clampNum(parseEmToNumber(s.fontSize, 20), 6, 220);
-        const items = String(block.value ?? "")
-            .split(/\r?\n/)
-            .map((v) => v.trim())
-            .filter((v) => v.length > 0);
+        const fromVar = readPath(renderData, block.var ?? "");
+        const items =
+            Array.isArray(fromVar)
+                ? fromVar.map((v) => String(v ?? "")).filter((v) => v.trim().length > 0)
+                : String(block.value ?? "")
+                      .split(/\r?\n/)
+                      .map((v) => v.trim())
+                      .filter((v) => v.length > 0);
         const listType = String(s.listType ?? "bullet");
         const ListTag = listType === "number" ? "ol" : "ul";
 
@@ -228,15 +246,31 @@ export function BlockRenderer({
     if (isTableBlock(block)) {
         const s = block.style;
         const fontSizePx = clampNum(parseEmToNumber(s.fontSize, 18), 6, 220);
-        const rows = String(block.value ?? "")
+        const fromVar = readPath(renderData, block.var ?? "");
+        const runtimeColumns = Array.isArray((fromVar as any)?.columns)
+            ? (fromVar as any).columns.map((c: unknown) => String(c ?? ""))
+            : [];
+        const runtimeRows = Array.isArray((fromVar as any)?.rows) ? (fromVar as any).rows : [];
+        const hasRuntimeTable = runtimeColumns.length > 0;
+
+        const fallbackRows = String(block.value ?? "")
             .split(/\r?\n/)
             .map((r) => r.split("|").map((c) => c.trim()));
-        const hasRows = rows.length > 0 && rows.some((row) => row.some((c) => c.length > 0));
-        const cells = hasRows ? rows : [["Column 1", "Column 2"], ["Value", "Value"]];
+        const hasFallbackRows = fallbackRows.length > 0 && fallbackRows.some((row) => row.some((c) => c.length > 0));
+        const fallbackCells = hasFallbackRows ? fallbackRows : [["Column 1", "Column 2"], ["Value", "Value"]];
+
+        const cells = hasRuntimeTable
+            ? [
+                  runtimeColumns,
+                  ...runtimeRows.map((row: Record<string, unknown>) =>
+                      runtimeColumns.map((col) => String(row?.[col] ?? ""))
+                  ),
+              ]
+            : fallbackCells;
         const showHeader = Boolean(s.showHeaderRow ?? true);
         const borderWidth = parsePxToNumber(s.borderWidth, 1);
-        const cellBorderStyle = (s.borderStyle ?? "solid") === "none" ? "solid" : s.borderStyle ?? "solid";
-        const cellBorderColor = s.borderColor ?? "#666666";
+        const tableBorderStyle = s.borderStyle ?? "solid";
+        const tableBorderColor = s.borderColor ?? "#666666";
 
         return (
             <Box sx={commonShellSx}>
@@ -247,6 +281,9 @@ export function BlockRenderer({
                         height: "100%",
                         borderCollapse: "collapse",
                         tableLayout: "fixed",
+                        borderStyle: tableBorderStyle,
+                        borderColor: tableBorderColor,
+                        borderWidth: `${Math.max(borderWidth, 0)}px`,
                         color: s.color ?? "#333",
                         fontFamily: s.fontFamily ?? "serif",
                         fontWeight: s.fontWeight ?? 400,
@@ -266,9 +303,9 @@ export function BlockRenderer({
                                         component="th"
                                         sx={{
                                             p: 0.5,
-                                            borderStyle: cellBorderStyle,
-                                            borderColor: cellBorderColor,
-                                            borderWidth: `${Math.max(borderWidth, 1)}px`,
+                                            borderBottomStyle: tableBorderStyle,
+                                            borderBottomColor: tableBorderColor,
+                                            borderBottomWidth: `${Math.max(borderWidth, 1)}px`,
                                             fontWeight: 700,
                                             textAlign: s.textAlign ?? "left",
                                         }}
@@ -288,9 +325,6 @@ export function BlockRenderer({
                                         component="td"
                                         sx={{
                                             p: 0.5,
-                                            borderStyle: cellBorderStyle,
-                                            borderColor: cellBorderColor,
-                                            borderWidth: `${Math.max(borderWidth, 1)}px`,
                                         }}
                                     >
                                         {cell || "\u00A0"}

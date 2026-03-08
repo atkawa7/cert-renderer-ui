@@ -176,6 +176,7 @@ export type TemplateEditorProps = {
     deleteTemplateLabel?: string;
     deletingTemplate?: boolean;
     sessionStorageKey?: string;
+    restoreLocalSession?: boolean;
     onPersistSession?: (template: Template) => void | Promise<void>;
     persistDebounceMs?: number;
 };
@@ -202,6 +203,93 @@ function makeId(): string {
 }
 function deepClone<T>(obj: T): T {
     return JSON.parse(JSON.stringify(obj)) as T;
+}
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function parseListValue(raw: string): string[] {
+    return String(raw ?? "")
+        .split(/\r?\n/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+}
+function parseTableValue(raw: string): { columns: string[]; rows: Array<Record<string, string>> } {
+    const lines = String(raw ?? "")
+        .split(/\r?\n/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+    if (!lines.length) return { columns: [], rows: [] };
+
+    const columns = lines[0].split("|").map((s) => s.trim());
+    const rows = lines.slice(1).map((line) => {
+        const parts = line.split("|").map((s) => s.trim());
+        const row: Record<string, string> = {};
+        for (let i = 0; i < columns.length; i++) {
+            row[columns[i]] = parts[i] ?? "";
+        }
+        return row;
+    });
+    return { columns, rows };
+}
+function collectVarSpecs(template: Template): Array<{ path: string; defaultValue: unknown }> {
+    const out: Array<{ path: string; defaultValue: unknown }> = [];
+    const pages = template.pages ?? [];
+    for (const page of pages) {
+        for (const raw of page.blocks ?? []) {
+            const b = normalizeBlock(raw as Block);
+            const varPath = String((b as any).var ?? "").trim();
+            if (!varPath) continue;
+            if (b.type === "list") {
+                out.push({ path: varPath, defaultValue: parseListValue((b as any).value ?? "") });
+            } else if (b.type === "table") {
+                out.push({ path: varPath, defaultValue: parseTableValue((b as any).value ?? "") });
+            }
+        }
+    }
+    return out;
+}
+function shouldHydrate(currentValue: unknown): boolean {
+    if (currentValue === undefined || currentValue === null) return true;
+    if (Array.isArray(currentValue) && currentValue.length === 0) return true;
+    if (isPlainObject(currentValue)) {
+        const cols = (currentValue as any).columns;
+        const rows = (currentValue as any).rows;
+        if (Array.isArray(cols) && Array.isArray(rows) && cols.length === 0 && rows.length === 0) {
+            return true;
+        }
+    }
+    return false;
+}
+function ensurePath(root: Record<string, unknown>, path: string, value: unknown) {
+    const parts = path.split(".").map((p) => p.trim()).filter(Boolean);
+    if (!parts.length) return;
+    let cur: Record<string, unknown> = root;
+    for (let i = 0; i < parts.length - 1; i++) {
+        const key = parts[i];
+        const next = cur[key];
+        if (!isPlainObject(next)) {
+            cur[key] = {};
+        }
+        cur = cur[key] as Record<string, unknown>;
+    }
+    const leaf = parts[parts.length - 1];
+    if (shouldHydrate(cur[leaf])) {
+        cur[leaf] = value;
+    }
+}
+function injectVarDefaultsIntoRenderDataJson(rawJson: string, template: Template): string {
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(rawJson || "{}");
+    } catch {
+        parsed = {};
+    }
+    const root = isPlainObject(parsed) ? (parsed as Record<string, unknown>) : {};
+    const specs = collectVarSpecs(template);
+    for (const spec of specs) {
+        ensurePath(root, spec.path, spec.defaultValue);
+    }
+    return JSON.stringify(root, null, 2);
 }
 function normalizeBlock(block: Block): Block {
     const b = deepClone(block);
@@ -359,6 +447,7 @@ export default function TemplateEditor({
                                            deleteTemplateLabel = "Delete Template",
                                            deletingTemplate = false,
                                            sessionStorageKey,
+                                           restoreLocalSession = true,
                                            onPersistSession,
                                            persistDebounceMs = 1200,
                                        }: TemplateEditorProps) {
@@ -441,6 +530,13 @@ export default function TemplateEditor({
 
     const [canvasBaseWidth, setCanvasBaseWidth] = useState<number>(900);
     const [canvasSize, setCanvasSize] = useState<Size>({ w: 900, h: 900 / aspectRatio });
+    const renderDataForPreview = useMemo(() => {
+        try {
+            return JSON.parse(renderDataJson || "{}");
+        } catch {
+            return null;
+        }
+    }, [renderDataJson]);
     const centerGridOffsetX = useMemo(() => {
         const mod = (canvasSize.w / 2) % gridSizePx;
         return Number.isFinite(mod) ? mod : 0;
@@ -1142,6 +1238,7 @@ export default function TemplateEditor({
     }, [activePageId]);
 
     useEffect(() => {
+        if (!restoreLocalSession) return;
         if (!sessionStorageKey) return;
         try {
             const raw = localStorage.getItem(sessionStorageKey);
@@ -1161,7 +1258,7 @@ export default function TemplateEditor({
             // ignore broken local draft payload
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [sessionStorageKey]);
+    }, [sessionStorageKey, restoreLocalSession]);
 
     useEffect(() => {
         if (!sessionStorageKey) return;
@@ -1398,6 +1495,7 @@ export default function TemplateEditor({
                                 variant="contained"
                                 onClick={() => {
                                     setRenderDialogError(null);
+                                    setRenderDataJson((prev) => injectVarDefaultsIntoRenderDataJson(prev, template));
                                     setRenderDialogOpen(true);
                                 }}
                                 disabled={renderingExternal}
@@ -1731,6 +1829,7 @@ export default function TemplateEditor({
                                                     assetBaseUrl={assetBaseUrl}
                                                     editing={isEditing}
                                                     previewMode={previewMode}
+                                                    renderData={renderDataForPreview}
                                                     onChangeText={(txt) => {
                                                         updateBlock(b.id, { value: txt } as Partial<Block>);
                                                     }}

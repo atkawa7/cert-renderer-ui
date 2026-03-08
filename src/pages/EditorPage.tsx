@@ -333,6 +333,7 @@ export default function EditorPage({ mode, sidebarWidth: _sidebarWidth }: { mode
                         ? `renderer.template.session.${templateId}`
                         : `renderer.template.session.new.${designId ?? "default"}`
                 }
+                restoreLocalSession={mode === "new"}
                 onPersistSession={handlePersistSession}
             />
         </Box>
