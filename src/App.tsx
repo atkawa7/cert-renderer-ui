@@ -1,12 +1,14 @@
 import { Box, Divider, Drawer, List, ListItemButton, ListItemText, Toolbar, Typography } from "@mui/material";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import CollectionsOutlinedIcon from "@mui/icons-material/CollectionsOutlined";
+import BorderColorOutlinedIcon from "@mui/icons-material/BorderColorOutlined";
 import { Link as RouterLink, Navigate, Route, Routes } from "react-router-dom";
 import BrowserTabTitle from "./components/BrowserTabTitle";
 import DesignsPage from "./pages/DesignsPage";
 import DesignDetailsPage from "./pages/DesignDetailsPage";
 import EditorPage from "./pages/EditorPage";
 import TemplatesListPage from "./pages/TemplatesListPage";
+import SignaturePage from "./pages/SignaturePage";
 
 const SIDEBAR_WIDTH = 260;
 
@@ -41,6 +43,10 @@ export default function App() {
                         <CollectionsOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
                         <ListItemText primary="Designs" />
                     </ListItemButton>
+                    <ListItemButton component={RouterLink} to="/signature">
+                        <BorderColorOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
+                        <ListItemText primary="Signature" />
+                    </ListItemButton>
                 </List>
             </Drawer>
 
@@ -50,6 +56,7 @@ export default function App() {
                     <Route path="/templates" element={<TemplatesListPage />} />
                     <Route path="/designs" element={<DesignsPage />} />
                     <Route path="/designs/:id" element={<DesignDetailsPage />} />
+                    <Route path="/signature" element={<SignaturePage />} />
                     <Route path="/templates/new" element={<EditorPage mode="new" sidebarWidth={SIDEBAR_WIDTH} />} />
                     <Route path="/templates/:id/edit" element={<EditorPage mode="edit" sidebarWidth={SIDEBAR_WIDTH} />} />
                 </Routes>

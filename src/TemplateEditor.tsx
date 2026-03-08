@@ -392,6 +392,14 @@ export default function TemplateEditor({
 
     const [canvasBaseWidth, setCanvasBaseWidth] = useState<number>(900);
     const [canvasSize, setCanvasSize] = useState<Size>({ w: 900, h: 900 / aspectRatio });
+    const centerGridOffsetX = useMemo(() => {
+        const mod = (canvasSize.w / 2) % gridSizePx;
+        return Number.isFinite(mod) ? mod : 0;
+    }, [canvasSize.w]);
+    const centerGridOffsetY = useMemo(() => {
+        const mod = (canvasSize.h / 2) % gridSizePx;
+        return Number.isFinite(mod) ? mod : 0;
+    }, [canvasSize.h]);
 
     // measure outer width
     useEffect(() => {
@@ -1378,6 +1386,7 @@ export default function TemplateEditor({
                                             backgroundImage:
                                                 "linear-gradient(to right, rgba(25,118,210,0.16) 1px, transparent 1px), linear-gradient(to bottom, rgba(25,118,210,0.16) 1px, transparent 1px)",
                                             backgroundSize: `${gridSizePx}px ${gridSizePx}px`,
+                                            backgroundPosition: `${centerGridOffsetX}px ${centerGridOffsetY}px`,
                                         }}
                                     />
                                 )}
@@ -1388,7 +1397,7 @@ export default function TemplateEditor({
                                                 position: "absolute",
                                                 left: 0,
                                                 right: 0,
-                                                top: "50%",
+                                                top: "calc(50% - 0.5px)",
                                                 height: "1px",
                                                 bgcolor: "rgba(244, 67, 54, 0.9)",
                                                 pointerEvents: "none",
@@ -1400,7 +1409,7 @@ export default function TemplateEditor({
                                                 position: "absolute",
                                                 top: 0,
                                                 bottom: 0,
-                                                left: "50%",
+                                                left: "calc(50% - 0.5px)",
                                                 width: "1px",
                                                 bgcolor: "rgba(76, 175, 80, 0.9)",
                                                 pointerEvents: "none",

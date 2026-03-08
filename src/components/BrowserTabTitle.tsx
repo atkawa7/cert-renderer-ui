@@ -11,6 +11,7 @@ export default function BrowserTabTitle() {
         if (pathname === "/templates") page = `Templates | ${APP_TITLE}`;
         else if (pathname === "/designs") page = `Designs | ${APP_TITLE}`;
         else if (pathname.startsWith("/designs/")) page = `Design Detail | ${APP_TITLE}`;
+        else if (pathname === "/signature") page = `Signature Creator | ${APP_TITLE}`;
         else if (pathname === "/templates/new") page = `New Template | ${APP_TITLE}`;
         else if (pathname.startsWith("/templates/") && pathname.endsWith("/edit")) page = `Edit Template | ${APP_TITLE}`;
         document.title = page;
