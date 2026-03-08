@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import {
-    Alert,
     Box,
     Button,
     CircularProgress,
@@ -16,6 +15,7 @@ import { Link as RouterLink, useNavigate } from "react-router-dom";
 import { appConfig } from "../appConfig";
 import { deleteTemplateById, listTemplates, type TemplateSummary } from "../templateApi";
 import { useConfirm } from "../components/ConfirmDialogProvider";
+import { useNotifications } from "../components/NotificationsProvider";
 
 function formatDate(value?: string): string {
     if (!value) return "-";
@@ -27,21 +27,20 @@ function formatDate(value?: string): string {
 export default function TemplatesListPage() {
     const navigate = useNavigate();
     const confirm = useConfirm();
+    const notifications = useNotifications();
     const [templates, setTemplates] = useState<TemplateSummary[]>([]);
     const [query, setQuery] = useState("");
     const [loadingList, setLoadingList] = useState(false);
     const [loadingEditor, setLoadingEditor] = useState(false);
     const [deletingId, setDeletingId] = useState<string | null>(null);
-    const [listError, setListError] = useState<string | null>(null);
 
     async function loadTemplates() {
         setLoadingList(true);
-        setListError(null);
         try {
             const items = await listTemplates(query);
             setTemplates(items);
         } catch (err: any) {
-            setListError(err?.message || "Failed to load templates");
+            notifications.error(err?.message || "Failed to load templates", { title: "Templates" });
         } finally {
             setLoadingList(false);
         }
@@ -69,12 +68,12 @@ export default function TemplatesListPage() {
         });
         if (!ok) return;
         setDeletingId(id);
-        setListError(null);
         try {
             await deleteTemplateById(id);
+            notifications.success("Template deleted");
             await loadTemplates();
         } catch (err: any) {
-            setListError(err?.message || "Failed to delete template");
+            notifications.error(err?.message || "Failed to delete template", { title: "Templates" });
         } finally {
             setDeletingId(null);
         }
@@ -110,8 +109,6 @@ export default function TemplatesListPage() {
                 <Button variant="outlined" onClick={() => void loadTemplates()} disabled={loadingList}>Search</Button>
             </Stack>
 
-            {listError && <Alert severity="error" sx={{ mb: 2 }}>{listError}</Alert>}
-
             <Divider sx={{ mb: 1 }} />
             {loadingList ? (
                 <Stack direction="row" alignItems="center" spacing={1} sx={{ py: 2 }}>
@@ -125,7 +122,20 @@ export default function TemplatesListPage() {
                     {templates.map((item) => (
                         <ListItemButton key={item.id} onClick={() => openEditor(item.id)} disabled={loadingEditor}>
                             <ListItemText
-                                primary={item.name}
+                                primary={
+                                    item.sourceDesignId ? (
+                                        <Typography
+                                            component={RouterLink}
+                                            to={`/designs/${encodeURIComponent(item.sourceDesignId)}`}
+                                            onClick={(e) => e.stopPropagation()}
+                                            sx={{ textDecoration: "none", color: "inherit", "&:hover": { textDecoration: "underline" } }}
+                                        >
+                                            {item.name}
+                                        </Typography>
+                                    ) : (
+                                        item.name
+                                    )
+                                }
                                 secondary={`Updated: ${formatDate(item.updatedAt)}  |  Created: ${formatDate(item.createdAt)}`}
                             />
                             <Button

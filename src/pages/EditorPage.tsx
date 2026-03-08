@@ -14,25 +14,55 @@ import {
 } from "../templateApi";
 import { appConfig } from "../appConfig";
 import { useConfirm } from "../components/ConfirmDialogProvider";
+import { useNotifications } from "../components/NotificationsProvider";
+
+function toPagedTemplate(raw: Partial<Template>, fallbackName: string): Template {
+    const background = (raw.background ?? { type: "color", color: "#ffffff", url: "", svg: "" }) as any;
+    const blocks = (raw.blocks ?? []) as any[];
+    const paperSize = raw.paperSize ?? "A4";
+    const orientation = raw.orientation ?? "portrait";
+    const pages = raw.pages ?? [
+        {
+            id: "front",
+            name: "Front",
+            background,
+            blocks,
+            paperSize,
+            orientation,
+        },
+    ];
+
+    return {
+        name: (raw.name ?? fallbackName).trim() || fallbackName,
+        pages: pages.map((p: any, idx: number) => ({
+            id: String(p.id ?? (idx === 0 ? "front" : `page_${idx + 1}`)),
+            name: String(p.name ?? (idx === 0 ? "Front" : idx === 1 ? "Back" : `Page ${idx + 1}`)),
+            background: p.background ?? { type: "color", color: "#ffffff", url: "", svg: "" },
+            blocks: Array.isArray(p.blocks) ? p.blocks : [],
+            paperSize: p.paperSize ?? paperSize,
+            orientation: p.orientation ?? orientation,
+        })),
+    };
+}
 
 function toEditorTemplate(detail: TemplateDetail): Template {
     const template = (detail.template ?? {}) as Partial<Template>;
-    return {
-        name: template.name ?? detail.name ?? "",
-        background: (template.background ?? { type: "color", color: "#ffffff", url: "", svg: "" }) as Template["background"],
-        blocks: (template.blocks ?? []) as Template["blocks"],
-        paperSize: template.paperSize ?? "A4",
-        orientation: template.orientation ?? "portrait",
-    };
+    return toPagedTemplate(template, detail.name ?? "Untitled Template");
 }
 
 function makeNewTemplate(): Template {
     return {
         name: "Template copy",
-        background: { type: "color", color: "#ffffff", url: "", svg: "" } as Template["background"],
-        blocks: [],
-        paperSize: "A4",
-        orientation: "portrait",
+        pages: [
+            {
+                id: "front",
+                name: "Front",
+                background: { type: "color", color: "#ffffff", url: "", svg: "" } as any,
+                blocks: [],
+                paperSize: "A4",
+                orientation: "portrait",
+            },
+        ],
     };
 }
 
@@ -48,21 +78,23 @@ function downloadPdfBlob(fileBaseName: string, blob: Blob) {
     URL.revokeObjectURL(blobUrl);
 }
 
-export default function EditorPage({ mode, sidebarWidth }: { mode: "new" | "edit"; sidebarWidth: number }) {
+export default function EditorPage({ mode, sidebarWidth: _sidebarWidth }: { mode: "new" | "edit"; sidebarWidth: number }) {
     const navigate = useNavigate();
     const { id } = useParams<{ id: string }>();
     const [searchParams] = useSearchParams();
     const confirm = useConfirm();
+    const notifications = useNotifications();
     const designId = searchParams.get("design");
 
-    const [template, setTemplate] = useState<Template | null>(mode === "new" ? makeNewTemplate() : null);
+    const [template, setTemplate] = useState<Template | null>(
+        mode === "new" ? (designId ? null : makeNewTemplate()) : null
+    );
     const [templateId, setTemplateId] = useState<string | null>(mode === "edit" ? id ?? null : null);
     const [sourceDesignId, setSourceDesignId] = useState<string | null>(mode === "new" ? designId : null);
-    const [loading, setLoading] = useState(mode === "edit");
+    const [loading, setLoading] = useState(mode === "edit" || (mode === "new" && Boolean(designId)));
     const [saving, setSaving] = useState(false);
     const [rendering, setRendering] = useState(false);
     const [deleting, setDeleting] = useState(false);
-    const [statusMsg, setStatusMsg] = useState<string | null>(null);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const persistInFlightRef = useRef(false);
 
@@ -72,7 +104,6 @@ export default function EditorPage({ mode, sidebarWidth }: { mode: "new" | "edit
 
         setTemplateId(null);
         setErrorMsg(null);
-        setStatusMsg(null);
 
         if (!designId) {
             setLoading(false);
@@ -82,16 +113,15 @@ export default function EditorPage({ mode, sidebarWidth }: { mode: "new" | "edit
         }
 
         setLoading(true);
+        setTemplate(null);
         getDesignById(designId)
             .then((design) => {
                 if (cancelled) return;
-                const draft = {
-                    ...design.template,
-                    name: `${design.name || design.template?.name || "Template"} copy`,
-                } as Template;
+                const draftName = `${design.name || design.template?.name || "Template"} copy`;
+                const draft = toPagedTemplate((design.template ?? {}) as Partial<Template>, draftName);
                 setTemplate(draft);
                 setSourceDesignId(designId);
-                setStatusMsg(`Using design: ${design.name}`);
+                notifications.info(`Using design: ${design.name}`);
             })
             .catch((err: any) => {
                 if (cancelled) return;
@@ -119,7 +149,6 @@ export default function EditorPage({ mode, sidebarWidth }: { mode: "new" | "edit
         let cancelled = false;
         setLoading(true);
         setErrorMsg(null);
-        setStatusMsg(null);
 
         getTemplateById(id)
             .then((detail) => {
@@ -143,8 +172,6 @@ export default function EditorPage({ mode, sidebarWidth }: { mode: "new" | "edit
 
     async function handleSaveTemplate(next: Template) {
         setSaving(true);
-        setStatusMsg(null);
-        setErrorMsg(null);
         try {
             const payload = {
                 name: (next.name || "").trim() || "Untitled Template",
@@ -158,13 +185,13 @@ export default function EditorPage({ mode, sidebarWidth }: { mode: "new" | "edit
             setTemplate(toEditorTemplate(saved));
             setTemplateId(saved.id);
             setSourceDesignId(saved.sourceDesignId ?? sourceDesignId);
-            setStatusMsg("Template saved");
+            notifications.success("Template saved");
 
             if (!templateId) {
                 navigate(`/templates/${saved.id}/edit`, { replace: true });
             }
         } catch (err: any) {
-            setErrorMsg(err?.message || "Failed to save template");
+            notifications.error(err?.message || "Failed to save template", { title: "Template" });
         } finally {
             setSaving(false);
         }
@@ -195,8 +222,6 @@ export default function EditorPage({ mode, sidebarWidth }: { mode: "new" | "edit
 
     async function handleRenderTemplate(next: Template, data: unknown) {
         setRendering(true);
-        setStatusMsg(null);
-        setErrorMsg(null);
         try {
             const pdf = await renderTemplatePdf({
                 template: next,
@@ -205,9 +230,9 @@ export default function EditorPage({ mode, sidebarWidth }: { mode: "new" | "edit
                 fileName: (next.name || "template").trim(),
             });
             downloadPdfBlob(next.name || "template", pdf);
-            setStatusMsg("PDF rendered");
+            notifications.success("PDF rendered");
         } catch (err: any) {
-            setErrorMsg(err?.message || "Failed to render PDF");
+            notifications.error(err?.message || "Failed to render PDF", { title: "Render" });
         } finally {
             setRendering(false);
         }
@@ -219,8 +244,6 @@ export default function EditorPage({ mode, sidebarWidth }: { mode: "new" | "edit
         thumbnailUrl: string;
         template: Template;
     }) {
-        setStatusMsg(null);
-        setErrorMsg(null);
         try {
             await createDesign({
                 name: payload.name,
@@ -228,10 +251,10 @@ export default function EditorPage({ mode, sidebarWidth }: { mode: "new" | "edit
                 thumbnailUrl: payload.thumbnailUrl,
                 template: payload.template,
             });
-            setStatusMsg("Design created from template");
+            notifications.success("Design created from template");
             navigate("/designs");
         } catch (err: any) {
-            setErrorMsg(err?.message || "Failed to convert template to design");
+            notifications.error(err?.message || "Failed to convert template to design", { title: "Design" });
         }
     }
 
@@ -248,13 +271,12 @@ export default function EditorPage({ mode, sidebarWidth }: { mode: "new" | "edit
         if (!ok) return;
 
         setDeleting(true);
-        setErrorMsg(null);
-        setStatusMsg(null);
         try {
             await deleteTemplateById(templateId);
+            notifications.success("Template deleted");
             navigate("/templates");
         } catch (err: any) {
-            setErrorMsg(err?.message || "Failed to delete template");
+            notifications.error(err?.message || "Failed to delete template", { title: "Template" });
         } finally {
             setDeleting(false);
         }
@@ -288,12 +310,6 @@ export default function EditorPage({ mode, sidebarWidth }: { mode: "new" | "edit
 
     return (
         <Box>
-            {(statusMsg || errorMsg) && (
-                <Box sx={{ position: "fixed", top: 14, left: sidebarWidth + 22, right: 360, zIndex: 2000 }}>
-                    {statusMsg && <Alert severity="info" sx={{ mb: errorMsg ? 1 : 0 }}>{statusMsg}</Alert>}
-                    {errorMsg && <Alert severity="error">{errorMsg}</Alert>}
-                </Box>
-            )}
             <TemplateEditor
                 key={editorKey}
                 initialTemplate={template}

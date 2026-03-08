@@ -4,13 +4,16 @@ import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import App from './App.tsx'
 import { ConfirmDialogProvider } from './components/ConfirmDialogProvider'
+import { NotificationsProvider } from './components/NotificationsProvider'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ConfirmDialogProvider>
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
-    </ConfirmDialogProvider>
+    <NotificationsProvider>
+      <ConfirmDialogProvider>
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
+      </ConfirmDialogProvider>
+    </NotificationsProvider>
   </StrictMode>,
 )

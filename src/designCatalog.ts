@@ -34,7 +34,7 @@ function joinUrl(base: string, path: string): string {
 }
 
 function resolveThumbnailUrl(template: Template, assetBaseUrl?: string): string {
-    const bg = template.background;
+    const bg = (template.pages?.[0]?.background ?? template.background) as any;
     const raw = (bg?.type === "image" ? bg.url : "").trim();
     if (!raw) return "";
     return isAbsoluteUrl(raw) ? raw : joinUrl(assetBaseUrl ?? "", raw);

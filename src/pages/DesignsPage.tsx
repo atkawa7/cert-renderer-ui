@@ -118,7 +118,14 @@ function DesignCardItem({
             />
             <CardContent>
                 <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>{design.name}</Typography>
+                    <Typography
+                        variant="subtitle1"
+                        component={RouterLink}
+                        to={`/designs/${encodeURIComponent(design.id)}`}
+                        sx={{ fontWeight: 700, textDecoration: "none", color: "inherit", "&:hover": { textDecoration: "underline" } }}
+                    >
+                        {design.name}
+                    </Typography>
                     {design.defaultDesign && <Chip size="small" color="info" label="Default" />}
                 </Stack>
                 <Typography variant="body2" color="text.secondary">{design.description || "-"}</Typography>

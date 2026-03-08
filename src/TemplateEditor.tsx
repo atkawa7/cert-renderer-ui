@@ -31,6 +31,7 @@ import VisibilityIcon from "@mui/icons-material/Visibility";
 import EditIcon from "@mui/icons-material/Edit";
 import { Rnd, type RndDragCallback, type RndResizeCallback } from "react-rnd";
 import { useConfirm } from "./components/ConfirmDialogProvider";
+import { useNotifications } from "./components/NotificationsProvider";
 import { convertTemplateToDesignDraft, type DesignCreateDraft } from "./designCatalog";
 import { BlockRenderer, Inspector, resolveImageSrc } from "./components/template-editor/TemplateEditorBlocks";
 
@@ -122,6 +123,17 @@ export type HorizontalLineBlock = { id: string; type: "horizontal-line"; style: 
 export type Block = TextBlock | ImageBlock | HorizontalLineBlock;
 
 export type Template = {
+    name: string;
+    pages?: TemplatePage[];
+    // Legacy single-page fields (kept for backward compatibility)
+    background?: Background;
+    blocks?: Block[];
+    paperSize?: string;
+    orientation?: Orientation;
+};
+
+export type TemplatePage = {
+    id: string;
     name: string;
     background: Background;
     blocks: Block[];
@@ -218,31 +230,51 @@ function blockTypeLabel(b: Block): string {
 }
 function normalizeTemplate(input: Template): Template {
     const t = deepClone(input);
-    t.blocks = (t.blocks ?? []).map((b) => {
+    const normalizedPages = (t.pages ?? []).map((raw, idx) => normalizePage(raw as TemplatePage, idx));
+    if (!normalizedPages.length) {
+        normalizedPages.push(
+            normalizePage(
+                {
+                    id: "front",
+                    name: "Front",
+                    background: (t.background ?? { type: "color", url: "", color: "#ffffff", svg: "" }) as Background,
+                    blocks: (t.blocks ?? []) as Block[],
+                    paperSize: t.paperSize ?? "A4",
+                    orientation: t.orientation ?? "portrait",
+                },
+                0
+            )
+        );
+    }
+    t.pages = normalizedPages;
+    t.name ??= "";
+    return t;
+}
+
+function normalizePage(raw: TemplatePage, idx: number): TemplatePage {
+    const page = deepClone(raw ?? ({} as TemplatePage));
+    page.id = String(page.id ?? "").trim() || `page_${idx + 1}`;
+    page.name = String(page.name ?? "").trim() || (idx === 0 ? "Front" : idx === 1 ? "Back" : `Page ${idx + 1}`);
+    page.blocks = (page.blocks ?? []).map((b) => {
         if (!(b as any).id) (b as any).id = makeId();
         return normalizeBlock(b as Block);
     });
-    if (!t.background) {
-        t.background = { type: "color", url: "", color: "#ffffff", svg: "" };
+    if (!page.background) {
+        page.background = { type: "color", url: "", color: "#ffffff", svg: "" };
     } else {
-        const bg = t.background as Background;
+        const bg = page.background as Background;
         bg.url ??= "";
         bg.color ??= "#ffffff";
         bg.svg ??= "";
         if (!bg.type) {
-            if ((bg.svg ?? "").trim()) {
-                bg.type = "svg";
-            } else if ((bg.url ?? "").trim()) {
-                bg.type = "image";
-            } else {
-                bg.type = "color";
-            }
+            if ((bg.svg ?? "").trim()) bg.type = "svg";
+            else if ((bg.url ?? "").trim()) bg.type = "image";
+            else bg.type = "color";
         }
     }
-    t.name ??= "";
-    t.paperSize ??= "A4";
-    t.orientation ??= "portrait";
-    return t;
+    page.paperSize ??= "A4";
+    page.orientation ??= "portrait";
+    return page;
 }
 function templatesEqual(a: Template, b: Template): boolean {
     return JSON.stringify(a) === JSON.stringify(b);
@@ -282,11 +314,13 @@ export default function TemplateEditor({
                                            persistDebounceMs = 1200,
                                        }: TemplateEditorProps) {
     const confirm = useConfirm();
+    const notifications = useNotifications();
     const [template, setTemplate] = useState<Template>(() => normalizeTemplate(initialTemplate));
 
     // ✅ Preview toggle
     const [previewMode, setPreviewMode] = useState<boolean>(defaultPreview);
     const [gridEnabled, setGridEnabled] = useState<boolean>(false);
+    const [centerGuidesEnabled, setCenterGuidesEnabled] = useState<boolean>(false);
     const [zoomPct, setZoomPct] = useState<number>(100);
     const gridSizePx = 20;
 
@@ -314,16 +348,43 @@ export default function TemplateEditor({
     const [historyTick, setHistoryTick] = useState(0);
     const canUndo = useMemo(() => undoStackRef.current.length > 0, [historyTick]);
     const canRedo = useMemo(() => redoStackRef.current.length > 0, [historyTick]);
+    const [activePageId, setActivePageId] = useState<string>("");
+
+    const pages = template.pages ?? [];
+    const activePageIndex = useMemo(() => {
+        if (!pages.length) return -1;
+        const byId = activePageId ? pages.findIndex((p) => p.id === activePageId) : -1;
+        return byId >= 0 ? byId : 0;
+    }, [pages, activePageId]);
+    const activePage = activePageIndex >= 0 ? pages[activePageIndex] : null;
+
+    useEffect(() => {
+        if (!pages.length) return;
+        if (!activePageId || !pages.some((p) => p.id === activePageId)) {
+            setActivePageId(pages[0].id);
+        }
+    }, [pages, activePageId]);
+
+    function updateActivePage(mutator: (page: TemplatePage) => void) {
+        setTemplate((prev) => {
+            const next = deepClone(prev);
+            if (!next.pages || !next.pages.length) return next;
+            const idx = next.pages.findIndex((p) => p.id === activePageId);
+            const safeIdx = idx >= 0 ? idx : 0;
+            mutator(next.pages[safeIdx]);
+            return next;
+        });
+    }
 
     const primarySelectedId = selectedIds.length ? selectedIds[selectedIds.length - 1] : null;
 
     const selectedBlock = useMemo(
-        () => template.blocks.find((b) => b.id === primarySelectedId) ?? null,
-        [template.blocks, primarySelectedId]
+        () => activePage?.blocks.find((b) => b.id === primarySelectedId) ?? null,
+        [activePage, primarySelectedId]
     );
 
-    const paperKey = normalizePaperKey(template.paperSize);
-    const orientation = normalizeOrientation(template.orientation);
+    const paperKey = normalizePaperKey(activePage?.paperSize);
+    const orientation = normalizeOrientation(activePage?.orientation);
     const aspectRatio = getAspectRatioMm(paperKey, orientation);
 
     const canvasOuterRef = useRef<HTMLDivElement | null>(null);
@@ -354,7 +415,7 @@ export default function TemplateEditor({
     }, [canvasBaseWidth, aspectRatio, zoomPct]);
 
     const bgUrl = useMemo(() => {
-        const bg = template.background as Background | undefined;
+        const bg = activePage?.background as Background | undefined;
         if (!bg) return null;
         if (bg.type === "svg" && (bg.svg ?? "").trim()) {
             return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(bg.svg ?? "")}`;
@@ -363,39 +424,40 @@ export default function TemplateEditor({
             return resolveImageSrc(bg.url, assetBaseUrl) || null;
         }
         return null;
-    }, [template.background, assetBaseUrl]);
-    const bgType = (template.background?.type ?? "color") as Background["type"];
+    }, [activePage, assetBaseUrl]);
+    const bgType = (activePage?.background?.type ?? "color") as Background["type"];
     const bgCssImage = useMemo(() => {
         if (!bgUrl) return "none";
         return `url(${JSON.stringify(bgUrl)})`;
     }, [bgUrl]);
 
     function updateBlock(blockId: string, patch: Partial<Block>) {
-        setTemplate((prev) => {
-            const next = deepClone(prev);
-            next.blocks = next.blocks.map((b) => (b.id === blockId ? ({ ...b, ...patch } as Block) : b));
-            return next;
+        updateActivePage((page) => {
+            page.blocks = page.blocks.map((b) => (b.id === blockId ? ({ ...b, ...patch } as Block) : b));
         });
     }
 
     function updateBlockStyle(blockId: string, patch: Partial<BaseBlockStyle & Record<string, unknown>>) {
-        setTemplate((prev) => {
-            const next = deepClone(prev);
-            next.blocks = next.blocks.map((b) =>
+        updateActivePage((page) => {
+            page.blocks = page.blocks.map((b) =>
                 b.id === blockId ? ({ ...b, style: { ...(b.style ?? {}), ...patch } } as Block) : b
             );
-            return next;
         });
     }
 
     function toggleLock(blockId: string) {
-        const b = template.blocks.find((x) => x.id === blockId);
+        const b = activePage?.blocks.find((x) => x.id === blockId);
         if (!b) return;
         updateBlock(blockId, { locked: !Boolean((b as any).locked) } as Partial<Block>);
     }
 
     async function copyJson() {
-        await navigator.clipboard.writeText(JSON.stringify(template, null, 2));
+        try {
+            await navigator.clipboard.writeText(JSON.stringify(template, null, 2));
+            notifications.success("Template JSON copied");
+        } catch (err: any) {
+            notifications.error(err?.message || "Failed to copy template JSON", { title: "Clipboard" });
+        }
     }
 
     async function deleteSelected() {
@@ -408,20 +470,19 @@ export default function TemplateEditor({
             destructive: true,
         });
         if (!ok) return;
-        setTemplate((prev) => ({
-            ...prev,
-            blocks: prev.blocks.filter((b) => !selectedIds.includes(b.id)),
-        }));
+        updateActivePage((page) => {
+            page.blocks = page.blocks.filter((b) => !selectedIds.includes(b.id));
+        });
         setSelectedIds([]);
         setEditingId(null);
     }
 
     function duplicateSelected() {
         if (!selectedIds.length || previewMode) return;
-        setTemplate((prev) => {
+        updateActivePage((page) => {
             const selectedSet = new Set(selectedIds);
-            const toDuplicate = prev.blocks.filter((b) => selectedSet.has(b.id)).map(normalizeBlock);
-            if (!toDuplicate.length) return prev;
+            const toDuplicate = page.blocks.filter((b) => selectedSet.has(b.id)).map(normalizeBlock);
+            if (!toDuplicate.length) return;
 
             const duplicates = toDuplicate.map((b) => {
                 const top = pctToPx(b.style.top, canvasSize.h);
@@ -443,16 +504,15 @@ export default function TemplateEditor({
                 } as Block;
             });
 
-            return { ...prev, blocks: [...prev.blocks, ...duplicates] };
+            page.blocks = [...page.blocks, ...duplicates];
         });
     }
 
     function setSelectedLocked(nextLocked: boolean) {
         if (!selectedIds.length || previewMode) return;
-        setTemplate((prev) => ({
-            ...prev,
-            blocks: prev.blocks.map((b) => (selectedIds.includes(b.id) ? ({ ...b, locked: nextLocked } as Block) : b)),
-        }));
+        updateActivePage((page) => {
+            page.blocks = page.blocks.map((b) => (selectedIds.includes(b.id) ? ({ ...b, locked: nextLocked } as Block) : b));
+        });
     }
 
     function createBlockAt(type: BlockType, x: number, y: number): Block {
@@ -510,13 +570,38 @@ export default function TemplateEditor({
     function addBlockAt(type: BlockType, x: number, y: number) {
         if (previewMode) return;
         const block = createBlockAt(type, x, y);
-        setTemplate((prev) => ({ ...prev, blocks: [...prev.blocks, block] }));
+        updateActivePage((page) => {
+            page.blocks = [...page.blocks, block];
+        });
         setSelectedIds([block.id]);
         setEditingId(type === "text" ? block.id : null);
     }
 
     function addBlockCentered(type: BlockType) {
         addBlockAt(type, canvasSize.w / 2, canvasSize.h / 2);
+    }
+
+    function addBackPageIfMissing() {
+        setTemplate((prev) => {
+            const next = deepClone(prev);
+            const currentPages = next.pages ?? [];
+            if (!currentPages.length) return next;
+            if (currentPages.some((p) => p.name.toLowerCase() === "back")) return next;
+            const first = normalizePage(currentPages[0], 0);
+            const back = normalizePage(
+                {
+                    id: "back",
+                    name: "Back",
+                    background: deepClone(first.background),
+                    blocks: [],
+                    paperSize: first.paperSize,
+                    orientation: first.orientation,
+                },
+                currentPages.length
+            );
+            next.pages = [...currentPages, back];
+            return next;
+        });
     }
 
     function openContextMenu(e: React.MouseEvent, targetBlockId: string | null) {
@@ -559,6 +644,7 @@ export default function TemplateEditor({
             parsedData = JSON.parse(renderDataJson || "{}");
         } catch {
             setRenderDialogError("Render data must be valid JSON.");
+            notifications.warning("Render data must be valid JSON", { title: "Render" });
             return;
         }
         try {
@@ -566,6 +652,8 @@ export default function TemplateEditor({
             setRenderingExternal(true);
             await onRenderTemplate(deepClone(template), parsedData);
             setRenderDialogOpen(false);
+        } catch (err: any) {
+            notifications.error(err?.message || "Failed to render template", { title: "Render" });
         } finally {
             setRenderingExternal(false);
         }
@@ -611,8 +699,9 @@ export default function TemplateEditor({
                 setTemplate(next);
                 setSelectedIds([]);
                 setEditingId(null);
+                notifications.success("Template JSON imported");
             } catch {
-                window.alert("Invalid JSON file.");
+                notifications.error("Invalid JSON file", { title: "Import" });
             }
         };
         reader.readAsText(file);
@@ -643,33 +732,32 @@ export default function TemplateEditor({
 
     function moveSelectedLayers(direction: "front" | "back") {
         if (!selectedIds.length || previewMode) return;
-        setTemplate((prev) => {
+        updateActivePage((page) => {
             const selectedSet = new Set(selectedIds);
-            const selected = prev.blocks.filter((b) => selectedSet.has(b.id));
-            const others = prev.blocks.filter((b) => !selectedSet.has(b.id));
+            const selected = page.blocks.filter((b) => selectedSet.has(b.id));
+            const others = page.blocks.filter((b) => !selectedSet.has(b.id));
             const nextBlocks = direction === "front" ? [...others, ...selected] : [...selected, ...others];
-            return { ...prev, blocks: nextBlocks };
+            page.blocks = nextBlocks;
         });
     }
 
     function moveLayer(blockId: string, direction: "front" | "back") {
         if (previewMode) return;
-        setTemplate((prev) => {
-            const idx = prev.blocks.findIndex((b) => b.id === blockId);
-            if (idx < 0) return prev;
-            const block = prev.blocks[idx];
-            const others = prev.blocks.filter((b) => b.id !== blockId);
+        updateActivePage((page) => {
+            const idx = page.blocks.findIndex((b) => b.id === blockId);
+            if (idx < 0) return;
+            const block = page.blocks[idx];
+            const others = page.blocks.filter((b) => b.id !== blockId);
             const nextBlocks = direction === "front" ? [...others, block] : [block, ...others];
-            return { ...prev, blocks: nextBlocks };
+            page.blocks = nextBlocks;
         });
         setSelectedIds([blockId]);
     }
 
     function nudgeSelectedBy(deltaX: number, deltaY: number) {
         if (!selectedIds.length || previewMode) return;
-        setTemplate((prev) => ({
-            ...prev,
-            blocks: prev.blocks.map((b) => {
+        updateActivePage((page) => {
+            page.blocks = page.blocks.map((b) => {
                 if (!selectedIds.includes(b.id)) return b;
                 const normalized = normalizeBlock(b);
                 const w = pctToPx(normalized.style.width, canvasSize.w);
@@ -688,16 +776,16 @@ export default function TemplateEditor({
                         top: pxToPct(nextY, canvasSize.h),
                     },
                 };
-            }),
-        }));
+            });
+        });
     }
 
     function alignSelected(mode: AlignMode) {
         if (previewMode || selectedIds.length < 2) return;
 
-        setTemplate((prev) => {
-            const selected = prev.blocks.filter((b) => selectedIds.includes(b.id)).map(normalizeBlock);
-            if (selected.length < 2) return prev;
+        updateActivePage((page) => {
+            const selected = page.blocks.filter((b) => selectedIds.includes(b.id)).map(normalizeBlock);
+            if (selected.length < 2) return;
 
             const rects = selected.map((b) => {
                 const x = pctToPx(b.style.left, canvasSize.w);
@@ -735,14 +823,11 @@ export default function TemplateEditor({
                 });
             });
 
-            return {
-                ...prev,
-                blocks: prev.blocks.map((b) => {
-                    const patch = patchMap.get(b.id);
-                    if (!patch) return b;
-                    return { ...b, style: { ...(b.style ?? {}), ...patch } };
-                }),
-            };
+            page.blocks = page.blocks.map((b) => {
+                const patch = patchMap.get(b.id);
+                if (!patch) return b;
+                return { ...b, style: { ...(b.style ?? {}), ...patch } };
+            });
         });
     }
 
@@ -780,7 +865,7 @@ export default function TemplateEditor({
 
             if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a") {
                 e.preventDefault();
-                setSelectedIds(template.blocks.map((b) => b.id));
+                setSelectedIds((activePage?.blocks ?? []).map((b) => b.id));
                 setEditingId(null);
                 return;
             }
@@ -822,7 +907,7 @@ export default function TemplateEditor({
         window.addEventListener("keydown", onKeyDown);
         return () => window.removeEventListener("keydown", onKeyDown);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [previewMode, selectedIds, template]);
+    }, [previewMode, selectedIds, template, activePage]);
 
     // ---------- Palette DnD ----------
     function onPaletteDragStart(e: React.DragEvent, type: BlockType) {
@@ -866,7 +951,9 @@ export default function TemplateEditor({
 
         const block = createBlockAt(payload.type, x, y);
 
-        setTemplate((prev) => ({ ...prev, blocks: [...prev.blocks, block] }));
+        updateActivePage((page) => {
+            page.blocks = [...page.blocks, block];
+        });
         setSelectedIds([block.id]);
         setEditingId(payload.type === "text" ? block.id : null);
     }
@@ -892,7 +979,7 @@ export default function TemplateEditor({
         const newH = (ref as HTMLElement).offsetHeight;
 
         // Optional: keep line heights sane when resizing
-        const found = template.blocks.find((b) => b.id === id);
+        const found = activePage?.blocks.find((b) => b.id === id);
         const isLine = found?.type === "horizontal-line";
         const rawHeightPct = pxToPct(newH, canvasSize.h);
         const clampedHeightPct = isLine
@@ -911,7 +998,7 @@ export default function TemplateEditor({
         if (previewMode) return null;
         if (!selectedIds.length) return null;
 
-        const selectedBlocks = template.blocks
+        const selectedBlocks = (activePage?.blocks ?? [])
             .filter((b) => selectedIds.includes(b.id))
             .map(normalizeBlock);
 
@@ -940,7 +1027,7 @@ export default function TemplateEditor({
             width: right - left,
             height: bottom - top,
         };
-    }, [previewMode, selectedIds, template.blocks, canvasSize.w, canvasSize.h]);
+    }, [previewMode, selectedIds, activePage, canvasSize.w, canvasSize.h]);
 
     // When entering preview: clear selection + editing
     useEffect(() => {
@@ -949,6 +1036,11 @@ export default function TemplateEditor({
             setEditingId(null);
         }
     }, [previewMode]);
+
+    useEffect(() => {
+        setSelectedIds([]);
+        setEditingId(null);
+    }, [activePageId]);
 
     useEffect(() => {
         if (!sessionStorageKey) return;
@@ -1026,6 +1118,31 @@ export default function TemplateEditor({
                         <Typography variant="subtitle2" sx={{ minWidth: 120 }}>
                             Template Toolbar
                         </Typography>
+                        <ToggleButtonGroup
+                            size="small"
+                            exclusive
+                            value={activePageId}
+                            onChange={(_, v) => {
+                                if (!v) return;
+                                setActivePageId(v);
+                            }}
+                        >
+                            {pages.map((p) => (
+                                <ToggleButton key={p.id} value={p.id}>
+                                    {p.name}
+                                </ToggleButton>
+                            ))}
+                        </ToggleButtonGroup>
+                        {pages.length < 2 && (
+                            <Button
+                                size="small"
+                                variant="outlined"
+                                onClick={addBackPageIfMissing}
+                                disabled={previewMode}
+                            >
+                                Add Back Page
+                            </Button>
+                        )}
                         <Button size="small" variant="outlined" onClick={undo} disabled={!canUndo}>
                             Undo
                         </Button>
@@ -1103,6 +1220,17 @@ export default function TemplateEditor({
                                 />
                             }
                             label="Grid"
+                        />
+                        <FormControlLabel
+                            sx={{ ml: 0.5 }}
+                            control={
+                                <Switch
+                                    size="small"
+                                    checked={centerGuidesEnabled}
+                                    onChange={(_, checked) => setCenterGuidesEnabled(checked)}
+                                />
+                            }
+                            label="Center Guides"
                         />
                         <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
                         <Button size="small" variant="outlined" onClick={copyJson}>
@@ -1232,7 +1360,7 @@ export default function TemplateEditor({
                                     overflow: "hidden",
                                     bgcolor:
                                         bgType === "color"
-                                            ? ((template.background as Background | undefined)?.color || "#ffffff")
+                                            ? ((activePage?.background as Background | undefined)?.color || "#ffffff")
                                             : "#fff",
                                     border: "2px solid rgba(0,0,0,0.2)",
                                     boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
@@ -1252,6 +1380,66 @@ export default function TemplateEditor({
                                             backgroundSize: `${gridSizePx}px ${gridSizePx}px`,
                                         }}
                                     />
+                                )}
+                                {centerGuidesEnabled && (
+                                    <>
+                                        <Box
+                                            sx={{
+                                                position: "absolute",
+                                                left: 0,
+                                                right: 0,
+                                                top: "50%",
+                                                height: "1px",
+                                                bgcolor: "rgba(244, 67, 54, 0.9)",
+                                                pointerEvents: "none",
+                                                zIndex: 3,
+                                            }}
+                                        />
+                                        <Box
+                                            sx={{
+                                                position: "absolute",
+                                                top: 0,
+                                                bottom: 0,
+                                                left: "50%",
+                                                width: "1px",
+                                                bgcolor: "rgba(76, 175, 80, 0.9)",
+                                                pointerEvents: "none",
+                                                zIndex: 3,
+                                            }}
+                                        />
+                                        <Typography
+                                            variant="caption"
+                                            sx={{
+                                                position: "absolute",
+                                                left: 8,
+                                                top: "calc(50% + 4px)",
+                                                px: 0.5,
+                                                bgcolor: "rgba(255,255,255,0.8)",
+                                                borderRadius: 0.5,
+                                                color: "rgba(183, 28, 28, 0.9)",
+                                                pointerEvents: "none",
+                                                zIndex: 4,
+                                            }}
+                                        >
+                                            Equator
+                                        </Typography>
+                                        <Typography
+                                            variant="caption"
+                                            sx={{
+                                                position: "absolute",
+                                                left: "calc(50% + 6px)",
+                                                top: 8,
+                                                px: 0.5,
+                                                bgcolor: "rgba(255,255,255,0.8)",
+                                                borderRadius: 0.5,
+                                                color: "rgba(27, 94, 32, 0.9)",
+                                                pointerEvents: "none",
+                                                zIndex: 4,
+                                            }}
+                                        >
+                                            Greenwich
+                                        </Typography>
+                                    </>
                                 )}
 
                                 {/* Hints only in edit mode */}
@@ -1288,7 +1476,7 @@ export default function TemplateEditor({
                                                 pointerEvents: "none",
                                             }}
                                         >
-                                            blocks: {template.blocks.length}
+                                            blocks: {activePage?.blocks.length ?? 0}
                                         </Typography>
                                     </>
                                 )}
@@ -1342,7 +1530,7 @@ export default function TemplateEditor({
                                         </Box>
                                     </Box>
                                 )}
-                                {template.blocks.map((raw) => {
+                                {(activePage?.blocks ?? []).map((raw) => {
                                     const b = normalizeBlock(raw);
 
                                     const x = pctToPx(b.style.left, canvasSize.w);
@@ -1580,7 +1768,11 @@ export default function TemplateEditor({
                             labelId="paper-label"
                             label="Paper"
                             value={paperKey}
-                            onChange={(e: any) => setTemplate((p) => ({ ...p, paperSize: e.target.value }))}
+                            onChange={(e: any) =>
+                                updateActivePage((page) => {
+                                    page.paperSize = e.target.value;
+                                })
+                            }
                         >
                             {Object.values(PAPER_SIZES).map((p) => (
                                 <MenuItem key={p.key} value={p.key}>
@@ -1596,7 +1788,11 @@ export default function TemplateEditor({
                             labelId="ori-label"
                             label="Orientation"
                             value={orientation}
-                            onChange={(e: any) => setTemplate((p) => ({ ...p, orientation: e.target.value }))}
+                            onChange={(e: any) =>
+                                updateActivePage((page) => {
+                                    page.orientation = e.target.value;
+                                })
+                            }
                         >
                             <MenuItem value="portrait">portrait</MenuItem>
                             <MenuItem value="landscape">landscape</MenuItem>
@@ -1610,13 +1806,12 @@ export default function TemplateEditor({
                     label="Background Type"
                     value={bgType}
                     onChange={(e) =>
-                        setTemplate((p) => ({
-                            ...p,
-                            background: {
-                                ...(p.background ?? { type: "color", color: "#ffffff", url: "", svg: "" }),
+                        updateActivePage((page) => {
+                            page.background = {
+                                ...(page.background ?? { type: "color", color: "#ffffff", url: "", svg: "" }),
                                 type: e.target.value as Background["type"],
-                            },
-                        }))
+                            };
+                        })
                     }
                     sx={{ mt: 1 }}
                     disabled={previewMode}
@@ -1630,16 +1825,15 @@ export default function TemplateEditor({
                     <TextField
                         fullWidth
                         label="Background URL"
-                        value={template.background?.url ?? ""}
+                        value={activePage?.background?.url ?? ""}
                         onChange={(e) =>
-                            setTemplate((p) => ({
-                                ...p,
-                                background: {
-                                    ...(p.background ?? { type: "image", url: "" }),
+                            updateActivePage((page) => {
+                                page.background = {
+                                    ...(page.background ?? { type: "image", url: "" }),
                                     type: "image",
                                     url: e.target.value,
-                                },
-                            }))
+                                } as Background;
+                            })
                         }
                         sx={{ mt: 1 }}
                         disabled={previewMode}
@@ -1652,16 +1846,15 @@ export default function TemplateEditor({
                         label="Background SVG"
                         multiline
                         minRows={6}
-                        value={(template.background as Background | undefined)?.svg ?? ""}
+                        value={(activePage?.background as Background | undefined)?.svg ?? ""}
                         onChange={(e) =>
-                            setTemplate((p) => ({
-                                ...p,
-                                background: {
-                                    ...(p.background ?? { type: "svg", svg: "", url: "", color: "#ffffff" }),
+                            updateActivePage((page) => {
+                                page.background = {
+                                    ...(page.background ?? { type: "svg", svg: "", url: "", color: "#ffffff" }),
                                     type: "svg",
                                     svg: e.target.value,
-                                },
-                            }))
+                                } as Background;
+                            })
                         }
                         sx={{ mt: 1 }}
                         disabled={previewMode}
@@ -1672,16 +1865,15 @@ export default function TemplateEditor({
                     <TextField
                         fullWidth
                         label="Background Color"
-                        value={template.background?.color ?? "#ffffff"}
+                        value={activePage?.background?.color ?? "#ffffff"}
                         onChange={(e) =>
-                            setTemplate((p) => ({
-                                ...p,
-                                background: {
-                                    ...(p.background ?? { type: "color", color: "#ffffff", url: "", svg: "" }),
+                            updateActivePage((page) => {
+                                page.background = {
+                                    ...(page.background ?? { type: "color", color: "#ffffff", url: "", svg: "" }),
                                     type: "color",
                                     color: e.target.value,
-                                },
-                            }))
+                                } as Background;
+                            })
                         }
                         sx={{ mt: 1 }}
                         disabled={previewMode}
@@ -1755,13 +1947,13 @@ export default function TemplateEditor({
                 {selectedIds.length > 0 && (
                     <MenuItem
                         onClick={() => {
-                            const selectedBlocksNow = template.blocks.filter((b) => selectedIds.includes(b.id));
+                            const selectedBlocksNow = (activePage?.blocks ?? []).filter((b) => selectedIds.includes(b.id));
                             const shouldLock = selectedBlocksNow.some((b) => !Boolean((b as any).locked));
                             setSelectedLocked(shouldLock);
                             closeContextMenu();
                         }}
                     >
-                        {template.blocks
+                        {(activePage?.blocks ?? [])
                             .filter((b) => selectedIds.includes(b.id))
                             .every((b) => Boolean((b as any).locked))
                             ? "Unlock selected"
