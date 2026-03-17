@@ -508,6 +508,7 @@ export default function TemplateEditor({
 
     // ✅ Preview toggle
     const [previewMode, setPreviewMode] = useState<boolean>(defaultPreview);
+    const [toolbarMinimized, setToolbarMinimized] = useState<boolean>(false);
     const [gridEnabled, setGridEnabled] = useState<boolean>(false);
     const [centerGuidesEnabled, setCenterGuidesEnabled] = useState<boolean>(false);
     const [zoomPct, setZoomPct] = useState<number>(isCompactLayout ? 90 : 100);
@@ -1381,9 +1382,10 @@ export default function TemplateEditor({
                         mb: 2,
                         p: 1.25,
                         borderRadius: 2,
-                        border: "1px solid rgba(0,0,0,0.1)",
-                        bgcolor: "rgba(255,255,255,0.92)",
-                        backdropFilter: "blur(6px)",
+                        border: toolbarMinimized ? "none" : "1px solid rgba(0,0,0,0.1)",
+                        bgcolor: toolbarMinimized ? "transparent" : "rgba(255,255,255,0.92)",
+                        backdropFilter: toolbarMinimized ? "none" : "blur(6px)",
+                        boxShadow: toolbarMinimized ? "none" : undefined,
                         "& .MuiButton-root": {
                             fontSize: compactUiFontSize,
                             px: isCompactLayout ? 1 : 1.5,
@@ -1397,6 +1399,11 @@ export default function TemplateEditor({
                         <Typography variant="subtitle2" sx={{ minWidth: 120 }}>
                             Template Toolbar
                         </Typography>
+                        <Button size="small" variant="outlined" onClick={() => setToolbarMinimized((v) => !v)}>
+                            {toolbarMinimized ? "Expand Toolbar" : "Minimize Toolbar"}
+                        </Button>
+                        {!toolbarMinimized && (
+                            <>
                         <ToggleButtonGroup
                             size="small"
                             exclusive
@@ -1622,6 +1629,8 @@ export default function TemplateEditor({
                             >
                                 {deletingTemplate ? "Deleting..." : deleteTemplateLabel}
                             </Button>
+                        )}
+                            </>
                         )}
                     </Stack>
                 </Box>
