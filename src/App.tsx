@@ -21,6 +21,8 @@ export default function App() {
     const isCompactNav = useMediaQuery(theme.breakpoints.down("lg"));
     const sidebarWidth = isCompactNav ? SIDEBAR_WIDTH_COMPACT : SIDEBAR_WIDTH;
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
+    const [sidebarHidden, setSidebarHidden] = useState(false);
+    const effectiveSidebarWidth = sidebarHidden ? 0 : sidebarWidth;
 
     const navContent = (
         <>
@@ -61,16 +63,16 @@ export default function App() {
             <BrowserTabTitle />
             <Drawer
                 variant={isOverlayNav ? "temporary" : "permanent"}
-                open={isOverlayNav ? mobileNavOpen : true}
+                open={isOverlayNav ? mobileNavOpen : !sidebarHidden}
                 onClose={() => setMobileNavOpen(false)}
                 ModalProps={{ keepMounted: true }}
                 sx={{
-                    width: sidebarWidth,
+                    width: isOverlayNav ? sidebarWidth : effectiveSidebarWidth,
                     flexShrink: 0,
                     ["& .MuiDrawer-paper"]: {
-                        width: sidebarWidth,
+                        width: isOverlayNav ? sidebarWidth : effectiveSidebarWidth,
                         boxSizing: "border-box",
-                        borderRight: "1px solid rgba(0,0,0,0.08)",
+                        borderRight: sidebarHidden ? "none" : "1px solid rgba(0,0,0,0.08)",
                     },
                 }}
             >
@@ -96,8 +98,28 @@ export default function App() {
                     <Route path="/designs" element={<DesignsPage />} />
                     <Route path="/designs/:id" element={<DesignDetailsPage />} />
                     <Route path="/signature" element={<SignaturePage />} />
-                    <Route path="/templates/new" element={<EditorPage mode="new" sidebarWidth={sidebarWidth} />} />
-                    <Route path="/templates/:id/edit" element={<EditorPage mode="edit" sidebarWidth={sidebarWidth} />} />
+                    <Route
+                        path="/templates/new"
+                        element={
+                            <EditorPage
+                                mode="new"
+                                sidebarWidth={sidebarWidth}
+                                appSidebarHidden={sidebarHidden}
+                                onToggleAppSidebar={() => setSidebarHidden((v) => !v)}
+                            />
+                        }
+                    />
+                    <Route
+                        path="/templates/:id/edit"
+                        element={
+                            <EditorPage
+                                mode="edit"
+                                sidebarWidth={sidebarWidth}
+                                appSidebarHidden={sidebarHidden}
+                                onToggleAppSidebar={() => setSidebarHidden((v) => !v)}
+                            />
+                        }
+                    />
                 </Routes>
             </Box>
         </Box>

@@ -78,7 +78,17 @@ function downloadPdfBlob(fileBaseName: string, blob: Blob) {
     URL.revokeObjectURL(blobUrl);
 }
 
-export default function EditorPage({ mode, sidebarWidth: _sidebarWidth }: { mode: "new" | "edit"; sidebarWidth: number }) {
+export default function EditorPage({
+    mode,
+    sidebarWidth: _sidebarWidth,
+    appSidebarHidden = false,
+    onToggleAppSidebar,
+}: {
+    mode: "new" | "edit";
+    sidebarWidth: number;
+    appSidebarHidden?: boolean;
+    onToggleAppSidebar?: () => void;
+}) {
     const navigate = useNavigate();
     const { id } = useParams<{ id: string }>();
     const [searchParams] = useSearchParams();
@@ -335,6 +345,8 @@ export default function EditorPage({ mode, sidebarWidth: _sidebarWidth }: { mode
                 }
                 restoreLocalSession={mode === "new"}
                 onPersistSession={handlePersistSession}
+                appSidebarHidden={appSidebarHidden}
+                onToggleAppSidebar={onToggleAppSidebar}
             />
         </Box>
     );

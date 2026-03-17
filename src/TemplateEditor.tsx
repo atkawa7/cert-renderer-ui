@@ -217,6 +217,8 @@ export type TemplateEditorProps = {
     restoreLocalSession?: boolean;
     onPersistSession?: (template: Template) => void | Promise<void>;
     persistDebounceMs?: number;
+    appSidebarHidden?: boolean;
+    onToggleAppSidebar?: () => void;
 };
 
 type Size = { w: number; h: number };
@@ -492,6 +494,8 @@ export default function TemplateEditor({
                                            restoreLocalSession = true,
                                            onPersistSession,
                                            persistDebounceMs = 1200,
+                                           appSidebarHidden = false,
+                                           onToggleAppSidebar,
                                        }: TemplateEditorProps) {
     const theme = useTheme();
     const isOverlayInspector = useMediaQuery(theme.breakpoints.down("md"));
@@ -1432,6 +1436,11 @@ export default function TemplateEditor({
                         >
                             {previewMode ? "Edit" : "Preview"}
                         </Button>
+                        {onToggleAppSidebar && (
+                            <Button size="small" variant="outlined" onClick={onToggleAppSidebar}>
+                                {appSidebarHidden ? "Show Sidebar" : "Maximize Canvas"}
+                            </Button>
+                        )}
                         {isOverlayInspector && (
                             <Button
                                 size="small"
