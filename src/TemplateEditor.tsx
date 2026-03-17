@@ -22,6 +22,8 @@ import {
     ToggleButton,
     ToggleButtonGroup,
     Typography,
+    useMediaQuery,
+    useTheme,
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import AddPhotoAlternateIcon from "@mui/icons-material/AddPhotoAlternate";
@@ -31,6 +33,7 @@ import FormatListBulletedIcon from "@mui/icons-material/FormatListBulleted";
 import TableChartIcon from "@mui/icons-material/TableChart";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import EditIcon from "@mui/icons-material/Edit";
+import TuneIcon from "@mui/icons-material/Tune";
 import { Rnd, type RndDragCallback, type RndResizeCallback } from "react-rnd";
 import { useConfirm } from "./components/ConfirmDialogProvider";
 import { useNotifications } from "./components/NotificationsProvider";
@@ -489,6 +492,8 @@ export default function TemplateEditor({
                                            onPersistSession,
                                            persistDebounceMs = 1200,
                                        }: TemplateEditorProps) {
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down("lg"));
     const confirm = useConfirm();
     const notifications = useNotifications();
     const [template, setTemplate] = useState<Template>(() => normalizeTemplate(initialTemplate));
@@ -508,6 +513,7 @@ export default function TemplateEditor({
     const [renderDataJson, setRenderDataJson] = useState<string>(defaultRenderDataJson);
     const [renderDialogOpen, setRenderDialogOpen] = useState<boolean>(false);
     const [renderDialogError, setRenderDialogError] = useState<string | null>(null);
+    const [inspectorOpen, setInspectorOpen] = useState<boolean>(false);
     const importInputRef = useRef<HTMLInputElement | null>(null);
     const [contextMenu, setContextMenu] = useState<{
         mouseX: number;
@@ -1337,7 +1343,15 @@ export default function TemplateEditor({
     console.log({ bgUrl });
     return (
         <Box sx={{ display: "flex", height: "100vh", bgcolor: "#f3f5f7" }}>
-            <Box sx={{ flex: 1, p: 3, pr: `${PALETTE_WIDTH_PX + 24}px`, overflow: "auto", minWidth: 0 }}>
+            <Box
+                sx={{
+                    flex: 1,
+                    p: { xs: 1.5, sm: 2, md: 3 },
+                    pr: { xs: 1.5, sm: 2, lg: `${PALETTE_WIDTH_PX + 24}px` },
+                    overflow: "auto",
+                    minWidth: 0,
+                }}
+            >
                 <Box
                     sx={{
                         position: "sticky",
@@ -1394,6 +1408,16 @@ export default function TemplateEditor({
                         >
                             {previewMode ? "Edit" : "Preview"}
                         </Button>
+                        {isMobile && (
+                            <Button
+                                size="small"
+                                variant="outlined"
+                                startIcon={<TuneIcon />}
+                                onClick={() => setInspectorOpen(true)}
+                            >
+                                Inspector
+                            </Button>
+                        )}
                         <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
                         <Button
                             size="small"
@@ -1892,10 +1916,18 @@ export default function TemplateEditor({
 
             {/* RIGHT: palette + inspector + preview */}
             <Drawer
-                variant="permanent"
+                variant={isMobile ? "temporary" : "permanent"}
                 anchor="right"
+                open={isMobile ? inspectorOpen : true}
+                onClose={() => setInspectorOpen(false)}
+                ModalProps={{ keepMounted: true }}
                 PaperProps={{
-                    sx: { width: `${PALETTE_WIDTH_PX}px`, p: 2, borderLeft: "1px solid", borderColor: "divider" },
+                    sx: {
+                        width: { xs: "min(90vw, 360px)", md: `${PALETTE_WIDTH_PX}px` },
+                        p: 2,
+                        borderLeft: "1px solid",
+                        borderColor: "divider",
+                    },
                 }}
             >
                 <Typography variant="h6" sx={{ mb: 1 }}>Inspector Panel</Typography>
