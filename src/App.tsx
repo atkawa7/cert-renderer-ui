@@ -13,15 +13,18 @@ import TemplatesListPage from "./pages/TemplatesListPage";
 import SignaturePage from "./pages/SignaturePage";
 
 const SIDEBAR_WIDTH = 260;
+const SIDEBAR_WIDTH_COMPACT = 196;
 
 export default function App() {
     const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down("lg"));
+    const isOverlayNav = useMediaQuery(theme.breakpoints.down("md"));
+    const isCompactNav = useMediaQuery(theme.breakpoints.down("lg"));
+    const sidebarWidth = isCompactNav ? SIDEBAR_WIDTH_COMPACT : SIDEBAR_WIDTH;
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
     const navContent = (
         <>
-            <Toolbar>
+            <Toolbar sx={{ minHeight: isCompactNav ? 52 : 64 }}>
                 <Typography variant="h6" sx={{ fontWeight: 700 }}>
                     Renderer UI
                 </Typography>
@@ -30,15 +33,24 @@ export default function App() {
             <List>
                 <ListItemButton component={RouterLink} to="/templates" onClick={() => setMobileNavOpen(false)}>
                     <DescriptionOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
-                    <ListItemText primary="Templates" />
+                    <ListItemText
+                        primary="Templates"
+                        primaryTypographyProps={{ fontSize: isCompactNav ? "0.9rem" : "1rem" }}
+                    />
                 </ListItemButton>
                 <ListItemButton component={RouterLink} to="/designs" onClick={() => setMobileNavOpen(false)}>
                     <CollectionsOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
-                    <ListItemText primary="Designs" />
+                    <ListItemText
+                        primary="Designs"
+                        primaryTypographyProps={{ fontSize: isCompactNav ? "0.9rem" : "1rem" }}
+                    />
                 </ListItemButton>
                 <ListItemButton component={RouterLink} to="/signature" onClick={() => setMobileNavOpen(false)}>
                     <BorderColorOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
-                    <ListItemText primary="Signature" />
+                    <ListItemText
+                        primary="Signature"
+                        primaryTypographyProps={{ fontSize: isCompactNav ? "0.9rem" : "1rem" }}
+                    />
                 </ListItemButton>
             </List>
         </>
@@ -48,15 +60,15 @@ export default function App() {
         <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "#f4f6fb" }}>
             <BrowserTabTitle />
             <Drawer
-                variant={isMobile ? "temporary" : "permanent"}
-                open={isMobile ? mobileNavOpen : true}
+                variant={isOverlayNav ? "temporary" : "permanent"}
+                open={isOverlayNav ? mobileNavOpen : true}
                 onClose={() => setMobileNavOpen(false)}
                 ModalProps={{ keepMounted: true }}
                 sx={{
-                    width: SIDEBAR_WIDTH,
+                    width: sidebarWidth,
                     flexShrink: 0,
                     ["& .MuiDrawer-paper"]: {
-                        width: SIDEBAR_WIDTH,
+                        width: sidebarWidth,
                         boxSizing: "border-box",
                         borderRight: "1px solid rgba(0,0,0,0.08)",
                     },
@@ -66,7 +78,7 @@ export default function App() {
             </Drawer>
 
             <Box component="main" sx={{ flex: 1, minWidth: 0, minHeight: "100vh" }}>
-                {isMobile && (
+                {isOverlayNav && (
                     <AppBar position="sticky" color="default" elevation={1} sx={{ bgcolor: "#ffffff" }}>
                         <Toolbar variant="dense">
                             <IconButton edge="start" onClick={() => setMobileNavOpen(true)} aria-label="Open navigation">
@@ -84,8 +96,8 @@ export default function App() {
                     <Route path="/designs" element={<DesignsPage />} />
                     <Route path="/designs/:id" element={<DesignDetailsPage />} />
                     <Route path="/signature" element={<SignaturePage />} />
-                    <Route path="/templates/new" element={<EditorPage mode="new" sidebarWidth={SIDEBAR_WIDTH} />} />
-                    <Route path="/templates/:id/edit" element={<EditorPage mode="edit" sidebarWidth={SIDEBAR_WIDTH} />} />
+                    <Route path="/templates/new" element={<EditorPage mode="new" sidebarWidth={sidebarWidth} />} />
+                    <Route path="/templates/:id/edit" element={<EditorPage mode="edit" sidebarWidth={sidebarWidth} />} />
                 </Routes>
             </Box>
         </Box>

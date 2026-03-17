@@ -468,6 +468,7 @@ const DEFAULT_NEW_SIZES: Record<BlockType, { wPct: number; hPct: number }> = {
     table: { wPct: 50, hPct: 24 },
 };
 const PALETTE_WIDTH_PX = 320;
+const PALETTE_WIDTH_COMPACT_PX = 248;
 
 // ---------------- Component ----------------
 export default function TemplateEditor({
@@ -493,7 +494,10 @@ export default function TemplateEditor({
                                            persistDebounceMs = 1200,
                                        }: TemplateEditorProps) {
     const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down("lg"));
+    const isOverlayInspector = useMediaQuery(theme.breakpoints.down("md"));
+    const isCompactLayout = useMediaQuery(theme.breakpoints.down("lg"));
+    const inspectorWidthPx = isCompactLayout ? PALETTE_WIDTH_COMPACT_PX : PALETTE_WIDTH_PX;
+    const compactUiFontSize = isCompactLayout ? "0.82rem" : "0.92rem";
     const confirm = useConfirm();
     const notifications = useNotifications();
     const [template, setTemplate] = useState<Template>(() => normalizeTemplate(initialTemplate));
@@ -502,7 +506,7 @@ export default function TemplateEditor({
     const [previewMode, setPreviewMode] = useState<boolean>(defaultPreview);
     const [gridEnabled, setGridEnabled] = useState<boolean>(false);
     const [centerGuidesEnabled, setCenterGuidesEnabled] = useState<boolean>(false);
-    const [zoomPct, setZoomPct] = useState<number>(100);
+    const [zoomPct, setZoomPct] = useState<number>(isCompactLayout ? 90 : 100);
     const gridSizePx = 20;
 
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -546,6 +550,17 @@ export default function TemplateEditor({
             setActivePageId(pages[0].id);
         }
     }, [pages, activePageId]);
+
+    useEffect(() => {
+        if (!isOverlayInspector) return;
+        if (!selectedIds.length) return;
+        setInspectorOpen(true);
+    }, [isOverlayInspector, selectedIds.length]);
+
+    useEffect(() => {
+        if (!isCompactLayout) return;
+        setZoomPct((prev) => (prev > 90 ? 90 : prev));
+    }, [isCompactLayout]);
 
     function updateActivePage(mutator: (page: TemplatePage) => void) {
         setTemplate((prev) => {
@@ -1347,7 +1362,9 @@ export default function TemplateEditor({
                 sx={{
                     flex: 1,
                     p: { xs: 1.5, sm: 2, md: 3 },
-                    pr: { xs: 1.5, sm: 2, lg: `${PALETTE_WIDTH_PX + 24}px` },
+                    pr: isOverlayInspector
+                        ? { xs: 1.5, sm: 2, md: 3 }
+                        : { xs: 1.5, sm: 2, md: `${inspectorWidthPx + 20}px` },
                     overflow: "auto",
                     minWidth: 0,
                 }}
@@ -1363,6 +1380,13 @@ export default function TemplateEditor({
                         border: "1px solid rgba(0,0,0,0.1)",
                         bgcolor: "rgba(255,255,255,0.92)",
                         backdropFilter: "blur(6px)",
+                        "& .MuiButton-root": {
+                            fontSize: compactUiFontSize,
+                            px: isCompactLayout ? 1 : 1.5,
+                        },
+                        "& .MuiTypography-root": {
+                            fontSize: compactUiFontSize,
+                        },
                     }}
                 >
                     <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: "wrap", rowGap: 1 }}>
@@ -1408,7 +1432,7 @@ export default function TemplateEditor({
                         >
                             {previewMode ? "Edit" : "Preview"}
                         </Button>
-                        {isMobile && (
+                        {isOverlayInspector && (
                             <Button
                                 size="small"
                                 variant="outlined"
@@ -1916,17 +1940,20 @@ export default function TemplateEditor({
 
             {/* RIGHT: palette + inspector + preview */}
             <Drawer
-                variant={isMobile ? "temporary" : "permanent"}
+                variant={isOverlayInspector ? "temporary" : "permanent"}
                 anchor="right"
-                open={isMobile ? inspectorOpen : true}
+                open={isOverlayInspector ? inspectorOpen : true}
                 onClose={() => setInspectorOpen(false)}
                 ModalProps={{ keepMounted: true }}
                 PaperProps={{
                     sx: {
-                        width: { xs: "min(90vw, 360px)", md: `${PALETTE_WIDTH_PX}px` },
+                        width: { xs: "min(90vw, 320px)", md: `${inspectorWidthPx}px` },
                         p: 2,
                         borderLeft: "1px solid",
                         borderColor: "divider",
+                        "& .MuiTypography-root": { fontSize: compactUiFontSize },
+                        "& .MuiButton-root": { fontSize: compactUiFontSize, px: isCompactLayout ? 1 : 1.5 },
+                        "& .MuiFormLabel-root, & .MuiInputBase-input": { fontSize: compactUiFontSize },
                     },
                 }}
             >
