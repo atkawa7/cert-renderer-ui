@@ -1,14 +1,16 @@
 import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 import {
     Box,
-    Button,
     Dialog,
     DialogActions,
     DialogContent,
     DialogTitle,
     Stack,
     Typography,
+    useTheme,
 } from "@mui/material";
+import { alpha } from "@mui/material/styles";
+import AntBtn from "./AntBtn";
 import WarningAmberRoundedIcon from "@mui/icons-material/WarningAmberRounded";
 
 type ConfirmOptions = {
@@ -28,6 +30,7 @@ type PendingConfirm = {
 };
 
 export function ConfirmDialogProvider({ children }: { children: React.ReactNode }) {
+    const theme = useTheme();
     const [pending, setPending] = useState<PendingConfirm | null>(null);
     const [open, setOpen] = useState(false);
     const [dialogOptions, setDialogOptions] = useState<ConfirmOptions | null>(null);
@@ -74,7 +77,7 @@ export function ConfirmDialogProvider({ children }: { children: React.ReactNode 
                     sx: {
                         borderRadius: 3,
                         overflow: "hidden",
-                        boxShadow: "0 24px 80px rgba(9, 18, 36, 0.35)",
+                        boxShadow: `0 24px 80px ${alpha(theme.palette.primary.dark, 0.35)}`,
                     },
                 }}
             >
@@ -82,8 +85,8 @@ export function ConfirmDialogProvider({ children }: { children: React.ReactNode 
                     sx={{
                         px: 2.5,
                         py: 1.5,
-                        background: "linear-gradient(120deg, #fff5f5 0%, #fff 55%, #fff8ec 100%)",
-                        borderBottom: "1px solid rgba(0,0,0,0.06)",
+                        backgroundColor: destructive ? alpha(theme.palette.error.main, 0.08) : alpha(theme.palette.primary.main, 0.08),
+                        borderBottom: `1px solid ${theme.palette.divider}`,
                     }}
                 >
                     <Stack direction="row" spacing={1.2} alignItems="center">
@@ -94,8 +97,8 @@ export function ConfirmDialogProvider({ children }: { children: React.ReactNode 
                                 borderRadius: "50%",
                                 display: "grid",
                                 placeItems: "center",
-                                bgcolor: destructive ? "#ffe7e7" : "#fff0d6",
-                                color: destructive ? "#d62828" : "#a15c00",
+                                bgcolor: destructive ? alpha(theme.palette.error.main, 0.14) : alpha(theme.palette.primary.main, 0.14),
+                                color: destructive ? theme.palette.error.dark : theme.palette.primary.dark,
                             }}
                         >
                             <WarningAmberRoundedIcon fontSize="small" />
@@ -106,21 +109,17 @@ export function ConfirmDialogProvider({ children }: { children: React.ReactNode 
                     </Stack>
                 </Box>
                 <DialogContent sx={{ pt: 2.2, pb: 1.2 }}>
-                    <Typography variant="body2" sx={{ color: "#2f3a4a", lineHeight: 1.55 }}>
+                    <Typography variant="body2" sx={{ color: "text.secondary", lineHeight: 1.55 }}>
                         {message}
                     </Typography>
                 </DialogContent>
                 <DialogActions sx={{ px: 2.5, pb: 2.2, pt: 0.5 }}>
-                    <Button variant="text" onClick={() => close(false)}>
+                    <AntBtn antType="text" onClick={() => close(false)}>
                         {cancelText}
-                    </Button>
-                    <Button
-                        variant="contained"
-                        color={destructive ? "error" : "primary"}
-                        onClick={() => close(true)}
-                    >
+                    </AntBtn>
+                    <AntBtn antType="primary" danger={destructive} onClick={() => close(true)}>
                         {confirmText}
-                    </Button>
+                    </AntBtn>
                 </DialogActions>
             </Dialog>
         </ConfirmDialogContext.Provider>
