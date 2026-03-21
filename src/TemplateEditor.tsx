@@ -21,11 +21,13 @@ import {
     TextField,
     ToggleButton,
     ToggleButtonGroup,
+    Tooltip,
     Typography,
     useMediaQuery,
     useTheme,
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
+import DeleteForeverIcon from "@mui/icons-material/DeleteForever";
 import AddPhotoAlternateIcon from "@mui/icons-material/AddPhotoAlternate";
 import TextFieldsIcon from "@mui/icons-material/TextFields";
 import HorizontalRuleIcon from "@mui/icons-material/HorizontalRule";
@@ -34,6 +36,28 @@ import TableChartIcon from "@mui/icons-material/TableChart";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import EditIcon from "@mui/icons-material/Edit";
 import TuneIcon from "@mui/icons-material/Tune";
+import UndoIcon from "@mui/icons-material/Undo";
+import RedoIcon from "@mui/icons-material/Redo";
+import ZoomInIcon from "@mui/icons-material/ZoomIn";
+import ZoomOutIcon from "@mui/icons-material/ZoomOut";
+import SaveIcon from "@mui/icons-material/Save";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import FileUploadIcon from "@mui/icons-material/FileUpload";
+import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import NoteAddIcon from "@mui/icons-material/NoteAdd";
+import ViewSidebarIcon from "@mui/icons-material/ViewSidebar";
+import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
+import FlipToFrontIcon from "@mui/icons-material/FlipToFront";
+import FlipToBackIcon from "@mui/icons-material/FlipToBack";
+import AlignHorizontalLeftIcon from "@mui/icons-material/AlignHorizontalLeft";
+import AlignHorizontalCenterIcon from "@mui/icons-material/AlignHorizontalCenter";
+import AlignHorizontalRightIcon from "@mui/icons-material/AlignHorizontalRight";
+import AlignVerticalTopIcon from "@mui/icons-material/AlignVerticalTop";
+import AlignVerticalCenterIcon from "@mui/icons-material/AlignVerticalCenter";
+import AlignVerticalBottomIcon from "@mui/icons-material/AlignVerticalBottom";
 import { Rnd, type RndDragCallback, type RndResizeCallback } from "react-rnd";
 import { useConfirm } from "./components/ConfirmDialogProvider";
 import { useNotifications } from "./components/NotificationsProvider";
@@ -1387,22 +1411,20 @@ export default function TemplateEditor({
                         bgcolor: toolbarMinimized ? "transparent" : "rgba(255,255,255,0.92)",
                         backdropFilter: toolbarMinimized ? "none" : "blur(6px)",
                         boxShadow: toolbarMinimized ? "none" : undefined,
-                        "& .MuiButton-root": {
-                            fontSize: compactUiFontSize,
-                            px: isCompactLayout ? 1 : 1.5,
+                        "& .MuiIconButton-root": {
+                            p: "4px",
                         },
                         "& .MuiTypography-root": {
                             fontSize: compactUiFontSize,
                         },
                     }}
                 >
-                    <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: "wrap", rowGap: 1 }}>
-                        <Typography variant="subtitle2" sx={{ minWidth: 120 }}>
-                            Template Toolbar
-                        </Typography>
-                        <Button size="small" variant="outlined" onClick={() => setToolbarMinimized((v) => !v)}>
-                            {toolbarMinimized ? "Expand Toolbar" : "Minimize Toolbar"}
-                        </Button>
+                    <Stack direction="row" spacing={0.5} alignItems="center" sx={{ flexWrap: "wrap", rowGap: 0.5 }}>
+                        <Tooltip title={toolbarMinimized ? "Expand Toolbar" : "Minimize Toolbar"}>
+                            <IconButton size="small" onClick={() => setToolbarMinimized((v) => !v)}>
+                                {toolbarMinimized ? <ExpandMoreIcon fontSize="small" /> : <ExpandLessIcon fontSize="small" />}
+                            </IconButton>
+                        </Tooltip>
                         {!toolbarMinimized && (
                             <>
                         <ToggleButtonGroup
@@ -1413,6 +1435,7 @@ export default function TemplateEditor({
                                 if (!v) return;
                                 setActivePageId(v);
                             }}
+                            sx={{ "& .MuiToggleButton-root": { py: "2px", px: 1, fontSize: 11 } }}
                         >
                             {pages.map((p) => (
                                 <ToggleButton key={p.id} value={p.id}>
@@ -1421,215 +1444,240 @@ export default function TemplateEditor({
                             ))}
                         </ToggleButtonGroup>
                         {pages.length < 2 && (
-                            <Button
-                                size="small"
-                                variant="outlined"
-                                onClick={addBackPageIfMissing}
-                                disabled={previewMode}
-                            >
-                                Add Back Page
-                            </Button>
+                            <Tooltip title="Add Back Page">
+                                <span>
+                                    <IconButton size="small" onClick={addBackPageIfMissing} disabled={previewMode}>
+                                        <NoteAddIcon fontSize="small" />
+                                    </IconButton>
+                                </span>
+                            </Tooltip>
                         )}
-                        <Button size="small" variant="outlined" onClick={undo} disabled={!canUndo}>
-                            Undo
-                        </Button>
-                        <Button size="small" variant="outlined" onClick={redo} disabled={!canRedo}>
-                            Redo
-                        </Button>
-                        <Button
-                            size="small"
-                            variant={previewMode ? "contained" : "outlined"}
-                            startIcon={previewMode ? <EditIcon /> : <VisibilityIcon />}
-                            onClick={() => setPreviewMode((v) => !v)}
-                        >
-                            {previewMode ? "Edit" : "Preview"}
-                        </Button>
+                        <Tooltip title="Undo">
+                            <span>
+                                <IconButton size="small" onClick={undo} disabled={!canUndo}>
+                                    <UndoIcon fontSize="small" />
+                                </IconButton>
+                            </span>
+                        </Tooltip>
+                        <Tooltip title="Redo">
+                            <span>
+                                <IconButton size="small" onClick={redo} disabled={!canRedo}>
+                                    <RedoIcon fontSize="small" />
+                                </IconButton>
+                            </span>
+                        </Tooltip>
+                        <Tooltip title={previewMode ? "Edit" : "Preview"}>
+                            <IconButton
+                                size="small"
+                                onClick={() => setPreviewMode((v) => !v)}
+                                color={previewMode ? "primary" : "default"}
+                            >
+                                {previewMode ? <EditIcon fontSize="small" /> : <VisibilityIcon fontSize="small" />}
+                            </IconButton>
+                        </Tooltip>
                         {onToggleAppSidebar && (
-                            <Button size="small" variant="outlined" onClick={onToggleAppSidebar}>
-                                {appSidebarHidden ? "Show Sidebar" : "Maximize Canvas"}
-                            </Button>
+                            <Tooltip title={appSidebarHidden ? "Show Sidebar" : "Maximize Canvas"}>
+                                <IconButton size="small" onClick={onToggleAppSidebar}>
+                                    <ViewSidebarIcon fontSize="small" />
+                                </IconButton>
+                            </Tooltip>
                         )}
                         {isOverlayInspector && (
-                            <Button
-                                size="small"
-                                variant="outlined"
-                                startIcon={<TuneIcon />}
-                                onClick={() => setInspectorOpen(true)}
-                            >
-                                Inspector
-                            </Button>
+                            <Tooltip title="Inspector">
+                                <IconButton size="small" onClick={() => setInspectorOpen(true)}>
+                                    <TuneIcon fontSize="small" />
+                                </IconButton>
+                            </Tooltip>
                         )}
                         <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
-                        <Button
-                            size="small"
-                            variant="outlined"
-                            startIcon={<TextFieldsIcon />}
-                            draggable={!previewMode}
-                            onDragStart={(e) => onPaletteDragStart(e, "text")}
-                            onClick={() => addBlockCentered("text")}
-                            disabled={previewMode}
-                        >
-                            Text
-                        </Button>
-                        <Button
-                            size="small"
-                            variant="outlined"
-                            startIcon={<AddPhotoAlternateIcon />}
-                            draggable={!previewMode}
-                            onDragStart={(e) => onPaletteDragStart(e, "image")}
-                            onClick={() => addBlockCentered("image")}
-                            disabled={previewMode}
-                        >
-                            Image
-                        </Button>
-                        <Button
-                            size="small"
-                            variant="outlined"
-                            startIcon={<HorizontalRuleIcon />}
-                            draggable={!previewMode}
-                            onDragStart={(e) => onPaletteDragStart(e, "horizontal-line")}
-                            onClick={() => addBlockCentered("horizontal-line")}
-                            disabled={previewMode}
-                        >
-                            Line
-                        </Button>
-                        <Button
-                            size="small"
-                            variant="outlined"
-                            startIcon={<FormatListBulletedIcon />}
-                            draggable={!previewMode}
-                            onDragStart={(e) => onPaletteDragStart(e, "list")}
-                            onClick={() => addBlockCentered("list")}
-                            disabled={previewMode}
-                        >
-                            List
-                        </Button>
-                        <Button
-                            size="small"
-                            variant="outlined"
-                            startIcon={<TableChartIcon />}
-                            draggable={!previewMode}
-                            onDragStart={(e) => onPaletteDragStart(e, "table")}
-                            onClick={() => addBlockCentered("table")}
-                            disabled={previewMode}
-                        >
-                            Table
-                        </Button>
-                        <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
-                        <Button
-                            size="small"
-                            variant="outlined"
-                            onClick={() => setZoomPct((z) => clampNum(z - 10, 25, 300))}
-                        >
-                            -
-                        </Button>
-                        <Button size="small" variant="outlined" onClick={() => setZoomPct(100)}>
-                            {zoomPct}%
-                        </Button>
-                        <Button
-                            size="small"
-                            variant="outlined"
-                            onClick={() => setZoomPct((z) => clampNum(z + 10, 25, 300))}
-                        >
-                            +
-                        </Button>
-                        <FormControlLabel
-                            sx={{ ml: 0.5 }}
-                            control={
-                                <Switch
+                        <Tooltip title="Add Text (drag or click)">
+                            <span>
+                                <IconButton
                                     size="small"
-                                    checked={gridEnabled}
-                                    onChange={(_, checked) => setGridEnabled(checked)}
+                                    draggable={!previewMode}
+                                    onDragStart={(e) => onPaletteDragStart(e, "text")}
+                                    onClick={() => addBlockCentered("text")}
                                     disabled={previewMode}
-                                />
-                            }
-                            label="Grid"
-                        />
-                        <FormControlLabel
-                            sx={{ ml: 0.5 }}
-                            control={
-                                <Switch
+                                >
+                                    <TextFieldsIcon fontSize="small" />
+                                </IconButton>
+                            </span>
+                        </Tooltip>
+                        <Tooltip title="Add Image (drag or click)">
+                            <span>
+                                <IconButton
                                     size="small"
-                                    checked={centerGuidesEnabled}
-                                    onChange={(_, checked) => setCenterGuidesEnabled(checked)}
-                                />
-                            }
-                            label="Center Guides"
-                        />
+                                    draggable={!previewMode}
+                                    onDragStart={(e) => onPaletteDragStart(e, "image")}
+                                    onClick={() => addBlockCentered("image")}
+                                    disabled={previewMode}
+                                >
+                                    <AddPhotoAlternateIcon fontSize="small" />
+                                </IconButton>
+                            </span>
+                        </Tooltip>
+                        <Tooltip title="Add Line (drag or click)">
+                            <span>
+                                <IconButton
+                                    size="small"
+                                    draggable={!previewMode}
+                                    onDragStart={(e) => onPaletteDragStart(e, "horizontal-line")}
+                                    onClick={() => addBlockCentered("horizontal-line")}
+                                    disabled={previewMode}
+                                >
+                                    <HorizontalRuleIcon fontSize="small" />
+                                </IconButton>
+                            </span>
+                        </Tooltip>
+                        <Tooltip title="Add List (drag or click)">
+                            <span>
+                                <IconButton
+                                    size="small"
+                                    draggable={!previewMode}
+                                    onDragStart={(e) => onPaletteDragStart(e, "list")}
+                                    onClick={() => addBlockCentered("list")}
+                                    disabled={previewMode}
+                                >
+                                    <FormatListBulletedIcon fontSize="small" />
+                                </IconButton>
+                            </span>
+                        </Tooltip>
+                        <Tooltip title="Add Table (drag or click)">
+                            <span>
+                                <IconButton
+                                    size="small"
+                                    draggable={!previewMode}
+                                    onDragStart={(e) => onPaletteDragStart(e, "table")}
+                                    onClick={() => addBlockCentered("table")}
+                                    disabled={previewMode}
+                                >
+                                    <TableChartIcon fontSize="small" />
+                                </IconButton>
+                            </span>
+                        </Tooltip>
                         <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
-                        <Button size="small" variant="outlined" onClick={copyJson}>
-                            Copy JSON
-                        </Button>
-                        <Button
-                            size="small"
-                            variant="outlined"
-                            onClick={() => importInputRef.current?.click()}
-                        >
-                            Import
-                        </Button>
+                        <Tooltip title="Zoom Out">
+                            <IconButton size="small" onClick={() => setZoomPct((z) => clampNum(z - 10, 25, 300))}>
+                                <ZoomOutIcon fontSize="small" />
+                            </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Reset Zoom">
+                            <Button size="small" variant="text" onClick={() => setZoomPct(100)} sx={{ minWidth: 40, px: 0.5, fontSize: 11 }}>
+                                {zoomPct}%
+                            </Button>
+                        </Tooltip>
+                        <Tooltip title="Zoom In">
+                            <IconButton size="small" onClick={() => setZoomPct((z) => clampNum(z + 10, 25, 300))}>
+                                <ZoomInIcon fontSize="small" />
+                            </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Grid">
+                            <FormControlLabel
+                                sx={{ ml: 0.5, mr: 0 }}
+                                control={
+                                    <Switch
+                                        size="small"
+                                        checked={gridEnabled}
+                                        onChange={(_, checked) => setGridEnabled(checked)}
+                                        disabled={previewMode}
+                                    />
+                                }
+                                label={<Typography sx={{ fontSize: 11 }}>Grid</Typography>}
+                            />
+                        </Tooltip>
+                        <Tooltip title="Center Guides">
+                            <FormControlLabel
+                                sx={{ ml: 0.5, mr: 0 }}
+                                control={
+                                    <Switch
+                                        size="small"
+                                        checked={centerGuidesEnabled}
+                                        onChange={(_, checked) => setCenterGuidesEnabled(checked)}
+                                    />
+                                }
+                                label={<Typography sx={{ fontSize: 11 }}>Guides</Typography>}
+                            />
+                        </Tooltip>
+                        <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+                        <Tooltip title="Copy JSON">
+                            <IconButton size="small" onClick={copyJson}>
+                                <ContentCopyIcon fontSize="small" />
+                            </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Import">
+                            <IconButton size="small" onClick={() => importInputRef.current?.click()}>
+                                <FileUploadIcon fontSize="small" />
+                            </IconButton>
+                        </Tooltip>
                         {onConvertToDesign && (
-                            <Button
-                                size="small"
-                                variant="outlined"
-                                onClick={handleConvertToDesignAction}
-                                disabled={convertingDesign}
-                            >
-                                {convertingDesign ? "Converting..." : convertToDesignLabel}
-                            </Button>
+                            <Tooltip title={convertingDesign ? "Converting..." : convertToDesignLabel}>
+                                <span>
+                                    <IconButton size="small" onClick={handleConvertToDesignAction} disabled={convertingDesign}>
+                                        <AutoFixHighIcon fontSize="small" />
+                                    </IconButton>
+                                </span>
+                            </Tooltip>
                         )}
-                        <Button
-                            size="small"
-                            variant="outlined"
-                            onClick={handleSaveAction}
-                            disabled={savingExternal}
-                        >
-                            {savingExternal ? "Saving..." : saveButtonLabel}
-                        </Button>
-                        <Button
-                            size="small"
-                            startIcon={<DeleteIcon />}
-                            color="error"
-                            variant="outlined"
-                            onClick={deleteSelected}
-                            disabled={previewMode || selectedIds.length === 0}
-                        >
-                            Delete
-                        </Button>
+                        <Tooltip title={savingExternal ? "Saving..." : saveButtonLabel}>
+                            <span>
+                                <IconButton size="small" onClick={handleSaveAction} disabled={savingExternal}>
+                                    <SaveIcon fontSize="small" />
+                                </IconButton>
+                            </span>
+                        </Tooltip>
+                        <Tooltip title="Delete Selected">
+                            <span>
+                                <IconButton
+                                    size="small"
+                                    color="error"
+                                    onClick={deleteSelected}
+                                    disabled={previewMode || selectedIds.length === 0}
+                                >
+                                    <DeleteIcon fontSize="small" />
+                                </IconButton>
+                            </span>
+                        </Tooltip>
                         {onRenderTemplate && (
-                            <Button
-                                size="small"
-                                variant="contained"
-                                onClick={() => {
-                                    setRenderDialogError(null);
-                                    setRenderDataJson((prev) => injectVarDefaultsIntoRenderDataJson(prev, template));
-                                    setRenderDialogOpen(true);
-                                }}
-                                disabled={renderingExternal}
-                            >
-                                {renderingExternal ? "Rendering..." : renderButtonLabel}
-                            </Button>
+                            <Tooltip title={renderingExternal ? "Rendering..." : renderButtonLabel}>
+                                <span>
+                                    <IconButton
+                                        size="small"
+                                        color="primary"
+                                        onClick={() => {
+                                            setRenderDialogError(null);
+                                            setRenderDataJson((prev) => injectVarDefaultsIntoRenderDataJson(prev, template));
+                                            setRenderDialogOpen(true);
+                                        }}
+                                        disabled={renderingExternal}
+                                    >
+                                        <PictureAsPdfIcon fontSize="small" />
+                                    </IconButton>
+                                </span>
+                            </Tooltip>
                         )}
                         <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
                         {onBackToDesign && (
-                            <Button size="small" variant="contained" onClick={onBackToDesign}>
-                                {backToDesignLabel}
-                            </Button>
+                            <Tooltip title={backToDesignLabel}>
+                                <IconButton size="small" onClick={onBackToDesign}>
+                                    <ArrowBackIcon fontSize="small" />
+                                </IconButton>
+                            </Tooltip>
                         )}
                         {onBackToTemplates && (
-                            <Button size="small" variant="contained" onClick={onBackToTemplates}>
-                                Back to templates
-                            </Button>
+                            <Tooltip title="Back to templates">
+                                <IconButton size="small" onClick={onBackToTemplates}>
+                                    <ArrowBackIcon fontSize="small" />
+                                </IconButton>
+                            </Tooltip>
                         )}
                         {onDeleteTemplate && (
-                            <Button
-                                size="small"
-                                variant="outlined"
-                                color="error"
-                                onClick={onDeleteTemplate}
-                                disabled={deletingTemplate}
-                            >
-                                {deletingTemplate ? "Deleting..." : deleteTemplateLabel}
-                            </Button>
+                            <Tooltip title={deletingTemplate ? "Deleting..." : deleteTemplateLabel}>
+                                <span>
+                                    <IconButton size="small" color="error" onClick={onDeleteTemplate} disabled={deletingTemplate}>
+                                        <DeleteForeverIcon fontSize="small" />
+                                    </IconButton>
+                                </span>
+                            </Tooltip>
                         )}
                             </>
                         )}
@@ -2002,6 +2050,8 @@ export default function TemplateEditor({
                         onPatch={(patch) => updateBlock(selectedBlock.id, patch)}
                         onStylePatch={(patch) => updateBlockStyle(selectedBlock.id, patch)}
                         onToggleLock={() => toggleLock(selectedBlock.id)}
+                        onSendToBack={() => moveLayer(selectedBlock.id, "back")}
+                        onBringToFront={() => moveLayer(selectedBlock.id, "front")}
                     />
                 ) : (
                     <Typography variant="body2" color="text.secondary">
@@ -2009,84 +2059,52 @@ export default function TemplateEditor({
                     </Typography>
                 )}
 
-                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
                     Align Selection
                 </Typography>
-                <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
-                    <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={() => alignSelected("left")}
-                        disabled={previewMode || selectedIds.length < 2}
-                    >
-                        Left
-                    </Button>
-                    <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={() => alignSelected("h-center")}
-                        disabled={previewMode || selectedIds.length < 2}
-                    >
-                        Center
-                    </Button>
-                    <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={() => alignSelected("right")}
-                        disabled={previewMode || selectedIds.length < 2}
-                    >
-                        Right
-                    </Button>
-                </Stack>
-                <Stack direction="row" spacing={1}>
-                    <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={() => alignSelected("top")}
-                        disabled={previewMode || selectedIds.length < 2}
-                    >
-                        Top
-                    </Button>
-                    <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={() => alignSelected("v-center")}
-                        disabled={previewMode || selectedIds.length < 2}
-                    >
-                        Middle
-                    </Button>
-                    <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={() => alignSelected("bottom")}
-                        disabled={previewMode || selectedIds.length < 2}
-                    >
-                        Bottom
-                    </Button>
+                <Stack direction="row" spacing={0.25}>
+                    {([
+                        { mode: "left",     icon: <AlignHorizontalLeftIcon fontSize="small" />,   title: "Align Left" },
+                        { mode: "h-center", icon: <AlignHorizontalCenterIcon fontSize="small" />, title: "Align Center" },
+                        { mode: "right",    icon: <AlignHorizontalRightIcon fontSize="small" />,  title: "Align Right" },
+                        { mode: "top",      icon: <AlignVerticalTopIcon fontSize="small" />,      title: "Align Top" },
+                        { mode: "v-center", icon: <AlignVerticalCenterIcon fontSize="small" />,   title: "Align Middle" },
+                        { mode: "bottom",   icon: <AlignVerticalBottomIcon fontSize="small" />,   title: "Align Bottom" },
+                    ] as const).map(({ mode, icon, title }) => (
+                        <Tooltip key={mode} title={title}>
+                            <span>
+                                <IconButton
+                                    size="small"
+                                    onClick={() => alignSelected(mode)}
+                                    disabled={previewMode || selectedIds.length < 2}
+                                >
+                                    {icon}
+                                </IconButton>
+                            </span>
+                        </Tooltip>
+                    ))}
                 </Stack>
 
                 <Divider sx={{ my: 2 }} />
 
-                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
                     Layers
                 </Typography>
-                <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
-                    <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={() => moveSelectedLayers("front")}
-                        disabled={previewMode || selectedIds.length === 0}
-                    >
-                        Send to front
-                    </Button>
-                    <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={() => moveSelectedLayers("back")}
-                        disabled={previewMode || selectedIds.length === 0}
-                    >
-                        Send to back
-                    </Button>
+                <Stack direction="row" spacing={0.25}>
+                    <Tooltip title="Bring to Front">
+                        <span>
+                            <IconButton size="small" onClick={() => moveSelectedLayers("front")} disabled={previewMode || selectedIds.length === 0}>
+                                <FlipToFrontIcon fontSize="small" />
+                            </IconButton>
+                        </span>
+                    </Tooltip>
+                    <Tooltip title="Send to Back">
+                        <span>
+                            <IconButton size="small" onClick={() => moveSelectedLayers("back")} disabled={previewMode || selectedIds.length === 0}>
+                                <FlipToBackIcon fontSize="small" />
+                            </IconButton>
+                        </span>
+                    </Tooltip>
                 </Stack>
                 <Divider sx={{ my: 2 }} />
 
@@ -2186,7 +2204,8 @@ export default function TemplateEditor({
                         fullWidth
                         label="Background SVG"
                         multiline
-                        minRows={6}
+                        minRows={3}
+                        maxRows={6}
                         value={(activePage?.background as Background | undefined)?.svg ?? ""}
                         onChange={(e) =>
                             updateActivePage((page) => {

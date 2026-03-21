@@ -1,11 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
     Alert,
     Box,
     Button,
     Card,
     CardActions,
-    CardContent,
     CardMedia,
     Chip,
     CircularProgress,
@@ -16,8 +15,10 @@ import {
     Pagination,
     Stack,
     TextField,
+    Tooltip,
     Typography,
 } from "@mui/material";
+import AddCircleIcon from "@mui/icons-material/AddCircle";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import { useConfirm } from "../components/ConfirmDialogProvider";
 import { appConfig } from "../appConfig";
@@ -96,7 +97,6 @@ function DesignImagePreviewDialog({ imageUrl, title, onClose }: { imageUrl: stri
 function DesignCardItem({
     design,
     deleting,
-    onUse,
     onDelete,
     onPreview,
 }: {
@@ -107,26 +107,45 @@ function DesignCardItem({
     onPreview: () => void;
 }) {
     return (
-        <Card sx={{ width: 340, borderRadius: 3 }}>
-            <CardMedia
-                component="img"
-                height="180"
-                image={`${appConfig.assetBaseUrl}${design.thumbnailUrl}`}
-                alt={design.name}
-                onClick={onPreview}
-                sx={{ objectFit: "cover", bgcolor: "#f1f4f8", cursor: "zoom-in" }}
-            />
-            <CardContent/>
-            <CardActions sx={{ px: 2, pb: 2 }}>
-                <Button fullWidth variant="contained"
-                        component={RouterLink}
-                        to={`/designs/${encodeURIComponent(design.id)}`}>Use Design</Button>
-                {!design.defaultDesign && (
-                    <Button fullWidth variant="outlined" color="error" onClick={onDelete} disabled={deleting}>
-                        {deleting ? "Deleting..." : "Delete"}
+        <Card elevation={0} sx={{ width: 200, borderRadius: 2, border: "none", bgcolor: "transparent" }}>
+            <Box sx={{ position: "relative", "&:hover .use-overlay": { opacity: 1 } }}>
+                <CardMedia
+                    component="img"
+                    height="110"
+                    image={`${appConfig.assetBaseUrl}${design.thumbnailUrl}`}
+                    alt={design.name}
+                    onClick={onPreview}
+                    sx={{ objectFit: "cover", bgcolor: "#f1f4f8", cursor: "zoom-in", display: "block" }}
+                />
+                <Box
+                    className="use-overlay"
+                    component={RouterLink}
+                    to={`/designs/${encodeURIComponent(design.id)}`}
+                    sx={{
+                        position: "absolute",
+                        inset: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        bgcolor: "rgba(0,0,0,0.35)",
+                        opacity: 0,
+                        transition: "opacity 0.2s",
+                        textDecoration: "none",
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <Tooltip title="Use Design">
+                        <AddCircleIcon sx={{ fontSize: 40, color: "white", filter: "drop-shadow(0 1px 3px rgba(0,0,0,0.5))" }} />
+                    </Tooltip>
+                </Box>
+            </Box>
+            {!design.defaultDesign && (
+                <CardActions sx={{ px: 1, pb: 1, pt: 0.5 }}>
+                    <Button fullWidth size="small" variant="outlined" color="error" onClick={onDelete} disabled={deleting}>
+                        {deleting ? "..." : "Delete"}
                     </Button>
-                )}
-            </CardActions>
+                </CardActions>
+            )}
         </Card>
     );
 }
@@ -137,8 +156,10 @@ export default function DesignsPage() {
     const [designs, setDesigns] = useState<DesignSummary[]>([]);
     const [query, setQuery] = useState("");
     const [page, setPage] = useState(0);
-    const [size] = useState(9);
+    const [size, setSize] = useState(16);
     const [totalPages, setTotalPages] = useState(0);
+    const sizeRef = useRef(16);
+    const mountedRef = useRef(false);
     const [loading, setLoading] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [creating, setCreating] = useState(false);
@@ -153,11 +174,11 @@ export default function DesignsPage() {
         templateJson: JSON.stringify({}),
     });
 
-    async function loadDesignPage(targetPage = page, targetQuery = query) {
+    async function loadDesignPage(targetPage = page, targetQuery = query, targetSize = size) {
         setLoading(true);
         setErrorMsg(null);
         try {
-            const result = await listDesigns(targetQuery, targetPage, size);
+            const result = await listDesigns(targetQuery, targetPage, targetSize);
             setDesigns(result.items);
             setTotalPages(result.totalPages);
             setPage(result.page);
@@ -168,8 +189,35 @@ export default function DesignsPage() {
         }
     }
 
+    function computePageSize(): number {
+        const CARD_W = 200;
+        const CARD_H = 150;
+        const GAP = 16;
+        const OVERHEAD = 230;
+        const containerW = window.innerWidth - 48;
+        const cols = Math.max(1, Math.floor((containerW + GAP) / (CARD_W + GAP)));
+        const rows = Math.max(1, Math.floor((window.innerHeight - OVERHEAD + GAP) / (CARD_H + GAP)));
+        return cols * rows;
+    }
+
     useEffect(() => {
-        void loadDesignPage(0, "");
+        const initial = computePageSize();
+        sizeRef.current = initial;
+        setSize(initial);
+        mountedRef.current = true;
+        void loadDesignPage(0, "", initial);
+
+        function onResize() {
+            const next = computePageSize();
+            if (next !== sizeRef.current) {
+                sizeRef.current = next;
+                setSize(next);
+                void loadDesignPage(0, query, next);
+            }
+        }
+
+        window.addEventListener("resize", onResize);
+        return () => window.removeEventListener("resize", onResize);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 

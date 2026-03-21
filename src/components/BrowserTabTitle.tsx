@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
 
-const APP_TITLE = "Renderer UI";
+const APP_TITLE = "Certificates";
 
 export default function BrowserTabTitle() {
     const { pathname } = useLocation();

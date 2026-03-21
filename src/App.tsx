@@ -28,7 +28,7 @@ export default function App() {
         <>
             <Toolbar sx={{ minHeight: isCompactNav ? 52 : 64 }}>
                 <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                    Renderer UI
+                    Certificates
                 </Typography>
             </Toolbar>
             <Divider />
@@ -87,7 +87,7 @@ export default function App() {
                                 <MenuIcon />
                             </IconButton>
                             <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                                Renderer UI
+                                Certificates
                             </Typography>
                         </Toolbar>
                     </AppBar>

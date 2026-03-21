@@ -1,7 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
     Box,
-    Button,
     Divider,
     IconButton,
     InputAdornment,
@@ -9,13 +8,23 @@ import {
     TextField,
     ToggleButton,
     ToggleButtonGroup,
+    Tooltip,
     Typography,
 } from "@mui/material";
 import LockIcon from "@mui/icons-material/Lock";
 import LockOpenIcon from "@mui/icons-material/LockOpen";
 import AddPhotoAlternateIcon from "@mui/icons-material/AddPhotoAlternate";
+import ClearIcon from "@mui/icons-material/Clear";
 import RemoveIcon from "@mui/icons-material/Remove";
 import AddIcon from "@mui/icons-material/Add";
+import FormatAlignLeftIcon from "@mui/icons-material/FormatAlignLeft";
+import FormatAlignCenterIcon from "@mui/icons-material/FormatAlignCenter";
+import FormatAlignRightIcon from "@mui/icons-material/FormatAlignRight";
+import FormatListBulletedIcon from "@mui/icons-material/FormatListBulleted";
+import FormatListNumberedIcon from "@mui/icons-material/FormatListNumbered";
+import TableRowsIcon from "@mui/icons-material/TableRows";
+import FlipToBackIcon from "@mui/icons-material/FlipToBack";
+import FlipToFrontIcon from "@mui/icons-material/FlipToFront";
 import type {
     BaseBlockStyle,
     Block,
@@ -508,10 +517,26 @@ function BorderInspectorFields({
                     onStylePatch({ borderStyle: v });
                 }}
             >
-                <ToggleButton value="none">None</ToggleButton>
-                <ToggleButton value="solid">Solid</ToggleButton>
-                <ToggleButton value="dashed">Dashed</ToggleButton>
-                <ToggleButton value="dotted">Dotted</ToggleButton>
+                <Tooltip title="No border">
+                    <ToggleButton value="none">
+                        <Box sx={{ width: 16, height: 16, border: "2px solid", borderColor: "action.disabled", borderRadius: "2px", opacity: 0.3 }} />
+                    </ToggleButton>
+                </Tooltip>
+                <Tooltip title="Solid border">
+                    <ToggleButton value="solid">
+                        <Box sx={{ width: 16, height: 16, border: "2px solid currentColor", borderRadius: "2px" }} />
+                    </ToggleButton>
+                </Tooltip>
+                <Tooltip title="Dashed border">
+                    <ToggleButton value="dashed">
+                        <Box sx={{ width: 16, height: 16, border: "2px dashed currentColor", borderRadius: "2px" }} />
+                    </ToggleButton>
+                </Tooltip>
+                <Tooltip title="Dotted border">
+                    <ToggleButton value="dotted">
+                        <Box sx={{ width: 16, height: 16, border: "3px dotted currentColor", borderRadius: "2px" }} />
+                    </ToggleButton>
+                </Tooltip>
             </ToggleButtonGroup>
 
             <Stack direction="row" spacing={1}>
@@ -672,11 +697,15 @@ export function Inspector({
     onPatch,
     onStylePatch,
     onToggleLock,
+    onSendToBack,
+    onBringToFront,
 }: {
     block: Block;
     onPatch: (patch: Partial<Block>) => void;
     onStylePatch: (patch: Partial<BaseBlockStyle & Record<string, unknown>>) => void;
     onToggleLock: () => void;
+    onSendToBack: () => void;
+    onBringToFront: () => void;
 }) {
     const s = block.style;
     const locked = Boolean((block as any).locked);
@@ -716,9 +745,23 @@ export function Inspector({
         <Stack spacing={1.5}>
             <Stack direction="row" alignItems="center" justifyContent="space-between">
                 <Typography variant="subtitle2">{block.type.toUpperCase()} • {block.id}</Typography>
-                <IconButton onClick={onToggleLock} size="small" title={locked ? "Unlock" : "Lock"}>
-                    {locked ? <LockIcon /> : <LockOpenIcon />}
-                </IconButton>
+                <Stack direction="row" spacing={0.25}>
+                    <Tooltip title="Send to Back">
+                        <IconButton size="small" onClick={onSendToBack}>
+                            <FlipToBackIcon fontSize="small" />
+                        </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Bring to Front">
+                        <IconButton size="small" onClick={onBringToFront}>
+                            <FlipToFrontIcon fontSize="small" />
+                        </IconButton>
+                    </Tooltip>
+                    <Tooltip title={locked ? "Unlock" : "Lock"}>
+                        <IconButton onClick={onToggleLock} size="small">
+                            {locked ? <LockIcon fontSize="small" /> : <LockOpenIcon fontSize="small" />}
+                        </IconButton>
+                    </Tooltip>
+                </Stack>
             </Stack>
 
             {isTextBlock(block) && (
@@ -743,7 +786,8 @@ export function Inspector({
                     <TextField
                         fullWidth
                         multiline
-                        minRows={4}
+                        minRows={3}
+                        maxRows={6}
                         label="List items (one per line)"
                         value={block.value ?? ""}
                         onChange={(e) => onPatch({ value: e.target.value } as Partial<Block>)}
@@ -754,8 +798,8 @@ export function Inspector({
                         onChange={(_, v) => v && onStylePatch({ listType: v })}
                         size="small"
                     >
-                        <ToggleButton value="bullet">Bulleted</ToggleButton>
-                        <ToggleButton value="number">Numbered</ToggleButton>
+                        <Tooltip title="Bulleted"><ToggleButton value="bullet"><FormatListBulletedIcon fontSize="small" /></ToggleButton></Tooltip>
+                        <Tooltip title="Numbered"><ToggleButton value="number"><FormatListNumberedIcon fontSize="small" /></ToggleButton></Tooltip>
                     </ToggleButtonGroup>
                 </>
             )}
@@ -772,7 +816,8 @@ export function Inspector({
                     <TextField
                         fullWidth
                         multiline
-                        minRows={5}
+                        minRows={3}
+                        maxRows={6}
                         label="Table rows (use | for columns)"
                         value={block.value ?? ""}
                         onChange={(e) => onPatch({ value: e.target.value } as Partial<Block>)}
@@ -787,13 +832,14 @@ export function Inspector({
                         }}
                         size="small"
                     >
-                        <ToggleButton value="true">Header row on</ToggleButton>
-                        <ToggleButton value="false">Header row off</ToggleButton>
+                        <Tooltip title="Header row on"><ToggleButton value="true"><TableRowsIcon fontSize="small" /></ToggleButton></Tooltip>
+                        <Tooltip title="Header row off"><ToggleButton value="false" sx={{ opacity: 0.5 }}><TableRowsIcon fontSize="small" /></ToggleButton></Tooltip>
                     </ToggleButtonGroup>
                     <TextField
                         fullWidth
                         multiline
-                        minRows={4}
+                        minRows={2}
+                        maxRows={5}
                         label="Column styles JSON"
                         value={columnStylesJson}
                         onChange={(e) => setColumnStylesJson(e.target.value)}
@@ -803,7 +849,8 @@ export function Inspector({
                     <TextField
                         fullWidth
                         multiline
-                        minRows={4}
+                        minRows={2}
+                        maxRows={5}
                         label="Row styles JSON"
                         value={rowStylesJson}
                         onChange={(e) => setRowStylesJson(e.target.value)}
@@ -813,7 +860,8 @@ export function Inspector({
                     <TextField
                         fullWidth
                         multiline
-                        minRows={4}
+                        minRows={2}
+                        maxRows={5}
                         label="Cell styles JSON"
                         value={cellStylesJson}
                         onChange={(e) => setCellStylesJson(e.target.value)}
@@ -829,19 +877,24 @@ export function Inspector({
                         fullWidth
                         multiline
                         minRows={2}
+                        maxRows={4}
                         label="Image value (path/url or JSON)"
                         value={imageValueText}
                         onChange={(e) => setImageValueText(e.target.value)}
                         onBlur={() => onPatch({ value: parseImageEditorValue(imageValueText) } as Partial<Block>)}
                         helperText='Supports string URL/path or JSON like {"type":"svg","svg":"<svg ...>...</svg>"}'
                     />
-                    <Stack direction="row" spacing={1}>
-                        <Button variant="outlined" startIcon={<AddPhotoAlternateIcon />} onClick={() => imageUploadInputRef.current?.click()}>
-                            Upload image
-                        </Button>
-                        <Button variant="text" color="inherit" onClick={() => onPatch({ value: "" } as Partial<Block>)}>
-                            Clear
-                        </Button>
+                    <Stack direction="row" spacing={0.5}>
+                        <Tooltip title="Upload image">
+                            <IconButton size="small" onClick={() => imageUploadInputRef.current?.click()}>
+                                <AddPhotoAlternateIcon fontSize="small" />
+                            </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Clear image">
+                            <IconButton size="small" onClick={() => onPatch({ value: "" } as Partial<Block>)}>
+                                <ClearIcon fontSize="small" />
+                            </IconButton>
+                        </Tooltip>
                     </Stack>
 
                     <Box
@@ -951,9 +1004,9 @@ export function Inspector({
                         onChange={(_, v) => v && onStylePatch({ textAlign: v })}
                         size="small"
                     >
-                        <ToggleButton value="left">Left</ToggleButton>
-                        <ToggleButton value="center">Center</ToggleButton>
-                        <ToggleButton value="right">Right</ToggleButton>
+                        <Tooltip title="Align left"><ToggleButton value="left"><FormatAlignLeftIcon fontSize="small" /></ToggleButton></Tooltip>
+                        <Tooltip title="Align center"><ToggleButton value="center"><FormatAlignCenterIcon fontSize="small" /></ToggleButton></Tooltip>
+                        <Tooltip title="Align right"><ToggleButton value="right"><FormatAlignRightIcon fontSize="small" /></ToggleButton></Tooltip>
                     </ToggleButtonGroup>
                 </>
             )}
