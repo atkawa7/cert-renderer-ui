@@ -229,6 +229,8 @@ export type TemplateEditorProps = {
     saveButtonLabel?: string;
     onRenderTemplate?: (template: Template, data: unknown) => void | Promise<void>;
     renderButtonLabel?: string;
+    onDownloadRenderedFo?: (template: Template, data: unknown) => void | Promise<void>;
+    downloadRenderedFoLabel?: string;
     onDownloadTemplate?: (template: Template) => void | Promise<void>;
     downloadButtonLabel?: string;
     defaultRenderDataJson?: string;
@@ -508,6 +510,8 @@ export default function TemplateEditor({
                                            saveButtonLabel = "Save",
                                            onRenderTemplate,
                                            renderButtonLabel = "Render PDF",
+                                           onDownloadRenderedFo,
+                                           downloadRenderedFoLabel = "Download Rendered FO",
                                            onDownloadTemplate,
                                            downloadButtonLabel = "Download Template",
                                            defaultRenderDataJson = "{}",
@@ -547,6 +551,7 @@ export default function TemplateEditor({
     const [editingId, setEditingId] = useState<string | null>(null);
     const [savingExternal, setSavingExternal] = useState<boolean>(false);
     const [renderingExternal, setRenderingExternal] = useState<boolean>(false);
+    const [downloadingRenderedFoExternal, setDownloadingRenderedFoExternal] = useState<boolean>(false);
     const [downloadingExternal, setDownloadingExternal] = useState<boolean>(false);
     const [convertingDesign, setConvertingDesign] = useState<boolean>(false);
     const [renderDataJson, setRenderDataJson] = useState<string>(defaultRenderDataJson);
@@ -932,14 +937,8 @@ export default function TemplateEditor({
 
     async function handleRenderAction() {
         if (!onRenderTemplate) return;
-        let parsedData: unknown;
-        try {
-            parsedData = JSON.parse(renderDataJson || "{}");
-        } catch {
-            setRenderDialogError("Render data must be valid JSON.");
-            notifications.warning("Render data must be valid JSON", { title: "Render" });
-            return;
-        }
+        const parsedData = parseRenderDialogData();
+        if (parsedData === undefined) return;
         try {
             setRenderDialogError(null);
             setRenderingExternal(true);
@@ -949,6 +948,32 @@ export default function TemplateEditor({
             notifications.error(err?.message || "Failed to render template", { title: "Render" });
         } finally {
             setRenderingExternal(false);
+        }
+    }
+
+    async function handleDownloadRenderedFoAction() {
+        if (!onDownloadRenderedFo) return;
+        const parsedData = parseRenderDialogData();
+        if (parsedData === undefined) return;
+        try {
+            setRenderDialogError(null);
+            setDownloadingRenderedFoExternal(true);
+            await onDownloadRenderedFo(deepClone(template), parsedData);
+            setRenderDialogOpen(false);
+        } catch (err: any) {
+            notifications.error(err?.message || "Failed to download rendered FO", { title: "Render" });
+        } finally {
+            setDownloadingRenderedFoExternal(false);
+        }
+    }
+
+    function parseRenderDialogData(): unknown | undefined {
+        try {
+            return JSON.parse(renderDataJson || "{}");
+        } catch {
+            setRenderDialogError("Render data must be valid JSON.");
+            notifications.warning("Render data must be valid JSON", { title: "Render" });
+            return undefined;
         }
     }
 
@@ -2398,7 +2423,7 @@ export default function TemplateEditor({
             <Dialog
                 open={renderDialogOpen}
                 onClose={() => {
-                    if (renderingExternal) return;
+                    if (renderingExternal || downloadingRenderedFoExternal) return;
                     setRenderDialogOpen(false);
                     setRenderDialogError(null);
                 }}
@@ -2429,10 +2454,19 @@ export default function TemplateEditor({
                             setRenderDialogOpen(false);
                             setRenderDialogError(null);
                         }}
-                        disabled={renderingExternal}
+                        disabled={renderingExternal || downloadingRenderedFoExternal}
                     >
                         Cancel
                     </Button>
+                    {onDownloadRenderedFo && (
+                        <Button
+                            onClick={handleDownloadRenderedFoAction}
+                            variant="outlined"
+                            disabled={renderingExternal || downloadingRenderedFoExternal}
+                        >
+                            {downloadingRenderedFoExternal ? "Downloading FO..." : downloadRenderedFoLabel}
+                        </Button>
+                    )}
                     <Button onClick={handleRenderAction} variant="contained" disabled={renderingExternal}>
                         {renderingExternal ? "Rendering..." : "Render PDF"}
                     </Button>

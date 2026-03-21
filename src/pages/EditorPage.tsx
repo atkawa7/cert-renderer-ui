@@ -10,6 +10,7 @@ import {
     downloadTemplateById,
     getDesignById,
     getTemplateById,
+    renderTemplateFo,
     renderTemplatePdf,
     updateTemplateById,
     type TemplateDetail,
@@ -117,6 +118,7 @@ export default function EditorPage({
     const [loading, setLoading] = useState(mode === "edit" || (mode === "new" && Boolean(designId)));
     const [saving, setSaving] = useState(false);
     const [rendering, setRendering] = useState(false);
+    const [downloadingRenderedFo, setDownloadingRenderedFo] = useState(false);
     const [downloading, setDownloading] = useState(false);
     const [deleting, setDeleting] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -262,6 +264,24 @@ export default function EditorPage({
         }
     }
 
+    async function handleDownloadRenderedFo(next: Template, data: unknown) {
+        setDownloadingRenderedFo(true);
+        try {
+            const file = await renderTemplateFo({
+                template: next,
+                data,
+                assetBaseUrl: appConfig.assetBaseUrl,
+                fileName: (next.name || "template").trim(),
+            });
+            downloadBlob(file.fileName, file.blob);
+            notifications.success("FO downloaded");
+        } catch (err: any) {
+            notifications.error(err?.message || "Failed to download FO", { title: "Render" });
+        } finally {
+            setDownloadingRenderedFo(false);
+        }
+    }
+
     async function handleDownloadTemplate(next: Template) {
         setDownloading(true);
         try {
@@ -360,6 +380,8 @@ export default function EditorPage({
                 saveButtonLabel={saving ? "Saving..." : "Save to backend"}
                 onRenderTemplate={handleRenderTemplate}
                 renderButtonLabel={rendering ? "Rendering..." : "Render PDF (XSL-FO)"}
+                onDownloadRenderedFo={handleDownloadRenderedFo}
+                downloadRenderedFoLabel={downloadingRenderedFo ? "Downloading FO..." : "Download rendered FO"}
                 onDownloadTemplate={handleDownloadTemplate}
                 downloadButtonLabel={downloading ? "Downloading..." : "Download template"}
                 defaultRenderDataJson={`{\n  "recipient": { "name": "Jane Doe" },\n  "certificate": { "uuid": "CERT-2026-0001", "issued_on": "2026-03-07" }\n}`}

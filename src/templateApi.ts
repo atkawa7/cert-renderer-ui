@@ -232,3 +232,30 @@ export async function renderTemplatePdf(payload: {
     }
     return await res.blob();
 }
+
+export async function renderTemplateFo(payload: {
+    template: Template;
+    data?: unknown;
+    assetBaseUrl?: string;
+    fileName?: string;
+}): Promise<DownloadedFile> {
+    const res = await fetch(`${API_BASE}/templates/render/fo`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || `Render failed (${res.status})`);
+    }
+
+    return {
+        blob: await res.blob(),
+        fileName: parseDownloadFileName(
+            res.headers.get("Content-Disposition"),
+            payload.fileName || payload.template?.name || "template",
+            "fo.xml"
+        ),
+    };
+}
