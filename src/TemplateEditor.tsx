@@ -630,6 +630,7 @@ export default function TemplateEditor({
         const h = w / aspectRatio;
         setCanvasSize({ w, h });
     }, [canvasBaseWidth, aspectRatio, zoomPct]);
+    const viewportTextScale = useMemo(() => clampNum(canvasSize.w / 900, 0.45, 1), [canvasSize.w]);
 
     const bgUrl = useMemo(() => {
         const bg = activePage?.background as Background | undefined;
@@ -1936,6 +1937,7 @@ export default function TemplateEditor({
                                                     assetBaseUrl={assetBaseUrl}
                                                     editing={isEditing}
                                                     previewMode={previewMode}
+                                                    viewportScale={viewportTextScale}
                                                     renderData={renderDataForPreview}
                                                     onChangeText={(txt) => {
                                                         updateBlock(b.id, { value: txt } as Partial<Block>);

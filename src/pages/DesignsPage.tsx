@@ -116,22 +116,11 @@ function DesignCardItem({
                 onClick={onPreview}
                 sx={{ objectFit: "cover", bgcolor: "#f1f4f8", cursor: "zoom-in" }}
             />
-            <CardContent>
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
-                    <Typography
-                        variant="subtitle1"
-                        component={RouterLink}
-                        to={`/designs/${encodeURIComponent(design.id)}`}
-                        sx={{ fontWeight: 700, textDecoration: "none", color: "inherit", "&:hover": { textDecoration: "underline" } }}
-                    >
-                        {design.name}
-                    </Typography>
-                    {design.defaultDesign && <Chip size="small" color="info" label="Default" />}
-                </Stack>
-                <Typography variant="body2" color="text.secondary">{design.description || "-"}</Typography>
-            </CardContent>
+            <CardContent/>
             <CardActions sx={{ px: 2, pb: 2 }}>
-                <Button fullWidth variant="contained" onClick={onUse}>Use Design</Button>
+                <Button fullWidth variant="contained"
+                        component={RouterLink}
+                        to={`/designs/${encodeURIComponent(design.id)}`}>Use Design</Button>
                 {!design.defaultDesign && (
                     <Button fullWidth variant="outlined" color="error" onClick={onDelete} disabled={deleting}>
                         {deleting ? "Deleting..." : "Delete"}

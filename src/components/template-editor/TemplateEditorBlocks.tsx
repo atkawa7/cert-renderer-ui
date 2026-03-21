@@ -179,6 +179,7 @@ export function BlockRenderer({
     assetBaseUrl,
     editing,
     previewMode,
+    viewportScale = 1,
     renderData,
     onChangeText,
     onCommitText,
@@ -188,6 +189,7 @@ export function BlockRenderer({
     assetBaseUrl: string;
     editing: boolean;
     previewMode: boolean;
+    viewportScale?: number;
     renderData?: unknown;
     onChangeText: (text: string) => void;
     onCommitText: (text: string) => void;
@@ -227,6 +229,7 @@ export function BlockRenderer({
                     block={block}
                     editing={editing}
                     previewMode={previewMode}
+                    viewportScale={viewportScale}
                     onChange={onChangeText}
                     onCommit={onCommitText}
                     onCancel={onCancelEdit}
@@ -263,7 +266,7 @@ export function BlockRenderer({
 
     if (isListBlock(block)) {
         const s = block.style;
-        const fontSizePx = clampNum(parseEmToNumber(s.fontSize, 20), 6, 220);
+        const fontSizePx = clampNum(parseEmToNumber(s.fontSize, 20) * viewportScale, 5, 220);
         const fromVar = readPath(renderData, block.var ?? "");
         const items =
             Array.isArray(fromVar)
@@ -303,7 +306,7 @@ export function BlockRenderer({
 
     if (isTableBlock(block)) {
         const s = block.style;
-        const fontSizePx = clampNum(parseEmToNumber(s.fontSize, 18), 6, 220);
+        const fontSizePx = clampNum(parseEmToNumber(s.fontSize, 18) * viewportScale, 5, 220);
         const fromVar = readPath(renderData, block.var ?? "");
         const runtimeColumns = Array.isArray((fromVar as any)?.columns)
             ? (fromVar as any).columns.map((c: unknown) => String(c ?? ""))
@@ -568,6 +571,7 @@ function EditableText({
     block,
     editing,
     previewMode,
+    viewportScale = 1,
     onChange,
     onCommit,
     onCancel,
@@ -575,6 +579,7 @@ function EditableText({
     block: TextBlock;
     editing: boolean;
     previewMode: boolean;
+    viewportScale?: number;
     onChange: (text: string) => void;
     onCommit: (text: string) => void;
     onCancel: () => void;
@@ -584,7 +589,7 @@ function EditableText({
     const caretOffsetRef = useRef<number | null>(null);
 
     const fontSizeNum = parseFloat(String(s.fontSize ?? "24").replace("em", ""));
-    const fontSizePx = clampNum(Number.isNaN(fontSizeNum) ? 24 : fontSizeNum, 6, 220);
+    const fontSizePx = clampNum((Number.isNaN(fontSizeNum) ? 24 : fontSizeNum) * viewportScale, 5, 220);
 
     useEffect(() => {
         if (editing && ref.current) {
