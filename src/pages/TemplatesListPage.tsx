@@ -11,9 +11,10 @@ import {
     TextField,
     Typography,
 } from "@mui/material";
+import DownloadIcon from "@mui/icons-material/Download";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import { appConfig } from "../appConfig";
-import { deleteTemplateById, listTemplates, type TemplateSummary } from "../templateApi";
+import { deleteTemplateById, downloadTemplateById, listTemplates, type TemplateSummary } from "../templateApi";
 import { useConfirm } from "../components/ConfirmDialogProvider";
 import { useNotifications } from "../components/NotificationsProvider";
 
@@ -33,6 +34,18 @@ export default function TemplatesListPage() {
     const [loadingList, setLoadingList] = useState(false);
     const [loadingEditor, setLoadingEditor] = useState(false);
     const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [downloadingId, setDownloadingId] = useState<string | null>(null);
+
+    function saveBlob(blob: Blob, fileName: string) {
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = blobUrl;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(blobUrl);
+    }
 
     async function loadTemplates() {
         setLoadingList(true);
@@ -76,6 +89,20 @@ export default function TemplatesListPage() {
             notifications.error(err?.message || "Failed to delete template", { title: "Templates" });
         } finally {
             setDeletingId(null);
+        }
+    }
+
+    async function downloadTemplate(id: string) {
+        const template = templates.find((t) => t.id === id);
+        setDownloadingId(id);
+        try {
+            const file = await downloadTemplateById(id, template?.name || "template");
+            saveBlob(file.blob, file.fileName);
+            notifications.success("Template downloaded");
+        } catch (err: any) {
+            notifications.error(err?.message || "Failed to download template", { title: "Templates" });
+        } finally {
+            setDownloadingId(null);
         }
     }
 
@@ -148,6 +175,19 @@ export default function TemplatesListPage() {
                                 disabled={loadingEditor}
                             >
                                 Edit
+                            </Button>
+                            <Button
+                                size="small"
+                                variant="outlined"
+                                startIcon={<DownloadIcon />}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    void downloadTemplate(item.id);
+                                }}
+                                disabled={downloadingId === item.id}
+                                sx={{ ml: 1 }}
+                            >
+                                {downloadingId === item.id ? "Downloading..." : "Download"}
                             </Button>
                             <Button
                                 size="small"

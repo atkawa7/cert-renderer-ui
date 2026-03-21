@@ -43,6 +43,7 @@ import ZoomOutIcon from "@mui/icons-material/ZoomOut";
 import SaveIcon from "@mui/icons-material/Save";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import FileUploadIcon from "@mui/icons-material/FileUpload";
+import DownloadIcon from "@mui/icons-material/Download";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import NoteAddIcon from "@mui/icons-material/NoteAdd";
@@ -228,6 +229,8 @@ export type TemplateEditorProps = {
     saveButtonLabel?: string;
     onRenderTemplate?: (template: Template, data: unknown) => void | Promise<void>;
     renderButtonLabel?: string;
+    onDownloadTemplate?: (template: Template) => void | Promise<void>;
+    downloadButtonLabel?: string;
     defaultRenderDataJson?: string;
     onConvertToDesign?: (design: DesignCreateDraft) => void | Promise<void>;
     convertToDesignLabel?: string;
@@ -505,6 +508,8 @@ export default function TemplateEditor({
                                            saveButtonLabel = "Save",
                                            onRenderTemplate,
                                            renderButtonLabel = "Render PDF",
+                                           onDownloadTemplate,
+                                           downloadButtonLabel = "Download Template",
                                            defaultRenderDataJson = "{}",
                                            onConvertToDesign,
                                            convertToDesignLabel = "Convert to Design",
@@ -542,6 +547,7 @@ export default function TemplateEditor({
     const [editingId, setEditingId] = useState<string | null>(null);
     const [savingExternal, setSavingExternal] = useState<boolean>(false);
     const [renderingExternal, setRenderingExternal] = useState<boolean>(false);
+    const [downloadingExternal, setDownloadingExternal] = useState<boolean>(false);
     const [convertingDesign, setConvertingDesign] = useState<boolean>(false);
     const [renderDataJson, setRenderDataJson] = useState<string>(defaultRenderDataJson);
     const [renderDialogOpen, setRenderDialogOpen] = useState<boolean>(false);
@@ -944,6 +950,19 @@ export default function TemplateEditor({
         } finally {
             setRenderingExternal(false);
         }
+    }
+
+    async function handleDownloadAction() {
+        if (onDownloadTemplate) {
+            try {
+                setDownloadingExternal(true);
+                await onDownloadTemplate(deepClone(template));
+            } finally {
+                setDownloadingExternal(false);
+            }
+            return;
+        }
+        saveTemplateJson();
     }
 
     async function handleConvertToDesignAction() {
@@ -1608,6 +1627,13 @@ export default function TemplateEditor({
                             <IconButton size="small" onClick={() => importInputRef.current?.click()}>
                                 <FileUploadIcon fontSize="small" />
                             </IconButton>
+                        </Tooltip>
+                        <Tooltip title={downloadingExternal ? "Downloading..." : downloadButtonLabel}>
+                            <span>
+                                <IconButton size="small" onClick={handleDownloadAction} disabled={downloadingExternal}>
+                                    <DownloadIcon fontSize="small" />
+                                </IconButton>
+                            </span>
                         </Tooltip>
                         {onConvertToDesign && (
                             <Tooltip title={convertingDesign ? "Converting..." : convertToDesignLabel}>

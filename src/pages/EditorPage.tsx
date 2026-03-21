@@ -6,6 +6,8 @@ import {
     createDesign,
     createTemplate,
     deleteTemplateById,
+    downloadTemplate,
+    downloadTemplateById,
     getDesignById,
     getTemplateById,
     renderTemplatePdf,
@@ -78,6 +80,17 @@ function downloadPdfBlob(fileBaseName: string, blob: Blob) {
     URL.revokeObjectURL(blobUrl);
 }
 
+function downloadBlob(fileName: string, blob: Blob) {
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(blobUrl);
+}
+
 export default function EditorPage({
     mode,
     sidebarWidth: _sidebarWidth,
@@ -104,6 +117,7 @@ export default function EditorPage({
     const [loading, setLoading] = useState(mode === "edit" || (mode === "new" && Boolean(designId)));
     const [saving, setSaving] = useState(false);
     const [rendering, setRendering] = useState(false);
+    const [downloading, setDownloading] = useState(false);
     const [deleting, setDeleting] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const persistInFlightRef = useRef(false);
@@ -248,6 +262,24 @@ export default function EditorPage({
         }
     }
 
+    async function handleDownloadTemplate(next: Template) {
+        setDownloading(true);
+        try {
+            const file = templateId
+                ? await downloadTemplateById(templateId, next.name || "template")
+                : await downloadTemplate({
+                      template: next,
+                      fileName: (next.name || "template").trim(),
+                  });
+            downloadBlob(file.fileName, file.blob);
+            notifications.success("Template downloaded");
+        } catch (err: any) {
+            notifications.error(err?.message || "Failed to download template", { title: "Template" });
+        } finally {
+            setDownloading(false);
+        }
+    }
+
     async function handleConvertTemplateToDesign(payload: {
         name: string;
         description?: string;
@@ -328,6 +360,8 @@ export default function EditorPage({
                 saveButtonLabel={saving ? "Saving..." : "Save to backend"}
                 onRenderTemplate={handleRenderTemplate}
                 renderButtonLabel={rendering ? "Rendering..." : "Render PDF (XSL-FO)"}
+                onDownloadTemplate={handleDownloadTemplate}
+                downloadButtonLabel={downloading ? "Downloading..." : "Download template"}
                 defaultRenderDataJson={`{\n  "recipient": { "name": "Jane Doe" },\n  "certificate": { "uuid": "CERT-2026-0001", "issued_on": "2026-03-07" }\n}`}
                 onConvertToDesign={handleConvertTemplateToDesign}
                 onBackToDesign={

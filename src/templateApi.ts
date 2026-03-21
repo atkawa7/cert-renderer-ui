@@ -57,6 +57,11 @@ export type DesignDetail = {
 
 const API_BASE = appConfig.rendererApiBase;
 
+export type DownloadedFile = {
+    blob: Blob;
+    fileName: string;
+};
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     const res = await fetch(`${API_BASE}${path}`, {
         headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
@@ -70,6 +75,21 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 
     if (res.status === 204) return undefined as T;
     return (await res.json()) as T;
+}
+
+function parseDownloadFileName(headerValue: string | null, fallbackBaseName: string, extension: string): string {
+    const base = (fallbackBaseName.trim() || "template").replace(/[^a-zA-Z0-9._-]+/g, "_");
+    const fallback = `${base}.${extension}`;
+    if (!headerValue) return fallback;
+
+    const utf8Match = /filename\*=UTF-8''([^;]+)/i.exec(headerValue);
+    if (utf8Match?.[1]) {
+        return decodeURIComponent(utf8Match[1]).replace(/[/\\]/g, "_");
+    }
+
+    const asciiMatch = /filename="([^"]+)"/i.exec(headerValue) ?? /filename=([^;]+)/i.exec(headerValue);
+    if (!asciiMatch?.[1]) return fallback;
+    return asciiMatch[1].trim().replace(/^"+|"+$/g, "").replace(/[/\\]/g, "_") || fallback;
 }
 
 export async function listTemplates(query = "", page = 0, size = 50): Promise<TemplateSummary[]> {
@@ -151,6 +171,47 @@ export async function deleteTemplateById(id: string): Promise<void> {
     await apiFetch<void>(`/templates/${id}`, {
         method: "DELETE",
     });
+}
+
+export async function downloadTemplateById(id: string, fallbackName = "template"): Promise<DownloadedFile> {
+    const res = await fetch(`${API_BASE}/templates/${id}/download`, {
+        method: "GET",
+    });
+
+    if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || `Download failed (${res.status})`);
+    }
+
+    return {
+        blob: await res.blob(),
+        fileName: parseDownloadFileName(res.headers.get("Content-Disposition"), fallbackName, "fo.ftl"),
+    };
+}
+
+export async function downloadTemplate(payload: {
+    template: Template;
+    fileName?: string;
+}): Promise<DownloadedFile> {
+    const res = await fetch(`${API_BASE}/templates/download`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || `Download failed (${res.status})`);
+    }
+
+    return {
+        blob: await res.blob(),
+        fileName: parseDownloadFileName(
+            res.headers.get("Content-Disposition"),
+            payload.fileName || payload.template?.name || "template",
+            "fo.ftl"
+        ),
+    };
 }
 
 export async function renderTemplatePdf(payload: {
