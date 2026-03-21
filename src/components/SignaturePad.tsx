@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Box, Button, Paper, Stack, Typography } from "@mui/material";
+import { Box, Paper, Stack, Typography } from "@mui/material";
+import AntBtn from "./AntBtn";
 
 type Point = { x: number; y: number };
 type Stroke = Point[];
@@ -245,8 +246,8 @@ export default function SignaturePad() {
                     </Typography>
                 </Box>
                 <Stack direction="row" spacing={1}>
-                    <Button size="small" variant="outlined" onClick={undo} disabled={!hasInk}>Undo</Button>
-                    <Button size="small" variant="outlined" color="error" onClick={clearAll} disabled={!hasInk}>Clear</Button>
+                    <AntBtn onClick={undo} disabled={!hasInk}>Undo</AntBtn>
+                    <AntBtn danger onClick={clearAll} disabled={!hasInk}>Clear</AntBtn>
                 </Stack>
             </Stack>
 
@@ -271,8 +272,8 @@ export default function SignaturePad() {
             </Box>
 
             <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
-                <Button variant="contained" onClick={downloadPng} disabled={!hasInk}>Download PNG</Button>
-                <Button variant="outlined" onClick={downloadSvg} disabled={!hasInk}>Download SVG</Button>
+                <AntBtn antType="primary" onClick={downloadPng} disabled={!hasInk}>Download PNG</AntBtn>
+                <AntBtn onClick={downloadSvg} disabled={!hasInk}>Download SVG</AntBtn>
             </Stack>
         </Paper>
     );

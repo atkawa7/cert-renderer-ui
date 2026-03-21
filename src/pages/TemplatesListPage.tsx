@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import {
     Box,
-    Button,
     CircularProgress,
     Divider,
     List,
@@ -12,6 +11,7 @@ import {
     Typography,
 } from "@mui/material";
 import DownloadIcon from "@mui/icons-material/Download";
+import AntBtn from "../components/AntBtn";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import { appConfig } from "../appConfig";
 import { deleteTemplateById, downloadTemplateById, listTemplates, type TemplateSummary } from "../templateApi";
@@ -116,9 +116,9 @@ export default function TemplatesListPage() {
                     </Typography>
                 </Box>
                 <Stack direction="row" spacing={1}>
-                    <Button variant="contained" component={RouterLink} to="/designs">Create from design</Button>
-                    <Button variant="outlined" component={RouterLink} to="/templates/new">Blank template</Button>
-                    <Button variant="outlined" onClick={() => void loadTemplates()} disabled={loadingList}>Refresh</Button>
+                    <AntBtn antType="primary" component={RouterLink} to="/designs">Create from design</AntBtn>
+                    <AntBtn component={RouterLink} to="/templates/new">Blank template</AntBtn>
+                    <AntBtn onClick={() => void loadTemplates()} disabled={loadingList}>Refresh</AntBtn>
                 </Stack>
             </Stack>
 
@@ -133,7 +133,7 @@ export default function TemplatesListPage() {
                         if (e.key === "Enter") void loadTemplates();
                     }}
                 />
-                <Button variant="outlined" onClick={() => void loadTemplates()} disabled={loadingList}>Search</Button>
+                <AntBtn onClick={() => void loadTemplates()} disabled={loadingList}>Search</AntBtn>
             </Stack>
 
             <Divider sx={{ mb: 1 }} />
@@ -165,9 +165,7 @@ export default function TemplatesListPage() {
                                 }
                                 secondary={`Updated: ${formatDate(item.updatedAt)}  |  Created: ${formatDate(item.createdAt)}`}
                             />
-                            <Button
-                                size="small"
-                                variant="outlined"
+                            <AntBtn
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     openEditor(item.id);
@@ -175,10 +173,8 @@ export default function TemplatesListPage() {
                                 disabled={loadingEditor}
                             >
                                 Edit
-                            </Button>
-                            <Button
-                                size="small"
-                                variant="outlined"
+                            </AntBtn>
+                            <AntBtn
                                 startIcon={<DownloadIcon />}
                                 onClick={(e) => {
                                     e.stopPropagation();
@@ -188,11 +184,9 @@ export default function TemplatesListPage() {
                                 sx={{ ml: 1 }}
                             >
                                 {downloadingId === item.id ? "Downloading..." : "Download"}
-                            </Button>
-                            <Button
-                                size="small"
-                                variant="outlined"
-                                color="error"
+                            </AntBtn>
+                            <AntBtn
+                                danger
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     void deleteTemplate(item.id);
@@ -201,7 +195,7 @@ export default function TemplatesListPage() {
                                 sx={{ ml: 1 }}
                             >
                                 {deletingId === item.id ? "Deleting..." : "Delete"}
-                            </Button>
+                            </AntBtn>
                         </ListItemButton>
                     ))}
                 </List>

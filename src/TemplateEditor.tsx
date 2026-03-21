@@ -2,7 +2,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
     Box,
-    Button,
     Dialog,
     DialogActions,
     DialogContent,
@@ -26,6 +25,7 @@ import {
     useMediaQuery,
     useTheme,
 } from "@mui/material";
+import AntBtn from "./components/AntBtn";
 import DeleteIcon from "@mui/icons-material/Delete";
 import DeleteForeverIcon from "@mui/icons-material/DeleteForever";
 import AddPhotoAlternateIcon from "@mui/icons-material/AddPhotoAlternate";
@@ -121,7 +121,7 @@ function clampNum(n: number, min: number, max: number) {
 }
 
 // ---------------- Template model types ----------------
-export type Background = { url: string; type: "image" | "color" | "svg"; color?: string; svg?: string };
+export type Background = { url: string; type: "image" | "color" | "svg"; color?: string; svg?: string; placeholder?: unknown };
 export type BlockType = "text" | "image" | "horizontal-line" | "list" | "table";
 export type BaseBlockStyle = {
     top?: string;
@@ -229,6 +229,12 @@ export type TemplateEditorProps = {
     saveButtonLabel?: string;
     onRenderTemplate?: (template: Template, data: unknown) => void | Promise<void>;
     renderButtonLabel?: string;
+    onBatchRenderCertificates?: (template: Template, data: unknown[]) => void | Promise<void>;
+    batchRenderButtonLabel?: string;
+    onStoreCertificate?: (template: Template, data: unknown) => void | Promise<void>;
+    storeCertificateLabel?: string;
+    onStoreCertificateBatch?: (template: Template, data: unknown[]) => void | Promise<void>;
+    storeCertificateBatchLabel?: string;
     onDownloadRenderedFo?: (template: Template, data: unknown) => void | Promise<void>;
     downloadRenderedFoLabel?: string;
     onDownloadTemplate?: (template: Template) => void | Promise<void>;
@@ -300,12 +306,88 @@ function parseTableValue(raw: string): { columns: string[]; rows: Array<Record<s
     });
     return { columns, rows };
 }
+const TEMPLATE_PLACEHOLDER_PATTERN = /\[([^\]]+)]/g;
+const BASE64_IMAGE_PREFIX_PATTERN = /^(data:image\/[a-zA-Z0-9.+-]+;base64,).+/i;
+
+function extractPlaceholderPaths(value: string): Array<{ path: string; exact: boolean }> {
+    const raw = String(value ?? "");
+    const trimmed = raw.trim();
+    const exact = trimmed.match(/^\[([^\]]+)]$/);
+    if (exact?.[1]) {
+        return [{ path: exact[1].trim(), exact: true }];
+    }
+
+    const out: Array<{ path: string; exact: boolean }> = [];
+    TEMPLATE_PLACEHOLDER_PATTERN.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = TEMPLATE_PLACEHOLDER_PATTERN.exec(raw)) !== null) {
+        const path = String(match[1] ?? "").trim();
+        if (path) {
+            out.push({ path, exact: false });
+        }
+    }
+    return out;
+}
+
+function collectValuePlaceholders(
+    value: unknown,
+    fallbackValue: unknown,
+    out: Array<{ path: string; defaultValue: unknown }>
+) {
+    if (typeof value === "string") {
+        for (const found of extractPlaceholderPaths(value)) {
+            out.push({
+                path: found.path,
+                defaultValue: found.exact && fallbackValue !== undefined ? compactRenderDataDefault(fallbackValue) : "",
+            });
+        }
+        return;
+    }
+
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            collectValuePlaceholders(item, fallbackValue, out);
+        }
+        return;
+    }
+
+    if (isPlainObject(value)) {
+        const objectFallback = Object.prototype.hasOwnProperty.call(value, "placeholder")
+            ? (value as Record<string, unknown>).placeholder
+            : fallbackValue;
+        for (const [key, item] of Object.entries(value)) {
+            if (key === "placeholder") continue;
+            collectValuePlaceholders(item, objectFallback, out);
+        }
+    }
+}
+
+function compactRenderDataDefault(value: unknown): unknown {
+    if (typeof value === "string") {
+        const match = value.match(BASE64_IMAGE_PREFIX_PATTERN);
+        return match ? match[1] : value;
+    }
+    if (Array.isArray(value)) {
+        return value.map((item) => compactRenderDataDefault(item));
+    }
+    if (isPlainObject(value)) {
+        const out: Record<string, unknown> = {};
+        for (const [key, item] of Object.entries(value)) {
+            out[key] = compactRenderDataDefault(item);
+        }
+        return out;
+    }
+    return value;
+}
+
 function collectVarSpecs(template: Template): Array<{ path: string; defaultValue: unknown }> {
     const out: Array<{ path: string; defaultValue: unknown }> = [];
     const pages = template.pages ?? [];
     for (const page of pages) {
+        collectValuePlaceholders(page.background, page.background?.placeholder, out);
         for (const raw of page.blocks ?? []) {
             const b = normalizeBlock(raw as Block);
+            collectValuePlaceholders(b, (b as any).placeholder, out);
             const varPath = String((b as any).var ?? "").trim();
             if (!varPath) continue;
             if (b.type === "list") {
@@ -510,6 +592,12 @@ export default function TemplateEditor({
                                            saveButtonLabel = "Save",
                                            onRenderTemplate,
                                            renderButtonLabel = "Render PDF",
+                                           onBatchRenderCertificates,
+                                           batchRenderButtonLabel = "Generate Batch ZIP",
+                                           onStoreCertificate,
+                                           storeCertificateLabel = "Generate and Store",
+                                           onStoreCertificateBatch,
+                                           storeCertificateBatchLabel = "Store Batch",
                                            onDownloadRenderedFo,
                                            downloadRenderedFoLabel = "Download Rendered FO",
                                            onDownloadTemplate,
@@ -551,6 +639,9 @@ export default function TemplateEditor({
     const [editingId, setEditingId] = useState<string | null>(null);
     const [savingExternal, setSavingExternal] = useState<boolean>(false);
     const [renderingExternal, setRenderingExternal] = useState<boolean>(false);
+    const [batchRenderingExternal, setBatchRenderingExternal] = useState<boolean>(false);
+    const [storingCertificateExternal, setStoringCertificateExternal] = useState<boolean>(false);
+    const [storingCertificateBatchExternal, setStoringCertificateBatchExternal] = useState<boolean>(false);
     const [downloadingRenderedFoExternal, setDownloadingRenderedFoExternal] = useState<boolean>(false);
     const [downloadingExternal, setDownloadingExternal] = useState<boolean>(false);
     const [convertingDesign, setConvertingDesign] = useState<boolean>(false);
@@ -964,6 +1055,69 @@ export default function TemplateEditor({
             notifications.error(err?.message || "Failed to download rendered FO", { title: "Render" });
         } finally {
             setDownloadingRenderedFoExternal(false);
+        }
+    }
+
+    async function handleBatchRenderAction() {
+        if (!onBatchRenderCertificates) return;
+        const parsedData = parseRenderDialogData();
+        if (parsedData === undefined) return;
+        if (!Array.isArray(parsedData)) {
+            setRenderDialogError("Batch generation requires a JSON array of certificate data.");
+            notifications.warning("Batch generation requires a JSON array", { title: "Certificates" });
+            return;
+        }
+        try {
+            setRenderDialogError(null);
+            setBatchRenderingExternal(true);
+            await onBatchRenderCertificates(deepClone(template), parsedData);
+            setRenderDialogOpen(false);
+        } catch (err: any) {
+            notifications.error(err?.message || "Failed to generate certificate batch", { title: "Certificates" });
+        } finally {
+            setBatchRenderingExternal(false);
+        }
+    }
+
+    async function handleStoreCertificateAction() {
+        if (!onStoreCertificate) return;
+        const parsedData = parseRenderDialogData();
+        if (parsedData === undefined) return;
+        if (Array.isArray(parsedData)) {
+            setRenderDialogError("Single certificate storage requires a JSON object.");
+            notifications.warning("Single certificate storage requires a JSON object", { title: "Certificates" });
+            return;
+        }
+        try {
+            setRenderDialogError(null);
+            setStoringCertificateExternal(true);
+            await onStoreCertificate(deepClone(template), parsedData);
+            setRenderDialogOpen(false);
+        } catch (err: any) {
+            notifications.error(err?.message || "Failed to store certificate", { title: "Certificates" });
+        } finally {
+            setStoringCertificateExternal(false);
+        }
+    }
+
+    async function handleStoreCertificateBatchAction() {
+        if (!onStoreCertificateBatch) return;
+        const parsedData = parseRenderDialogData();
+        if (parsedData === undefined) return;
+        if (!Array.isArray(parsedData)) {
+            setRenderDialogError("Batch storage requires a JSON array of certificate data.");
+            notifications.warning("Batch storage requires a JSON array", { title: "Certificates" });
+            return;
+        }
+        try {
+            setRenderDialogError(null);
+            setStoringCertificateBatchExternal(true);
+            await onStoreCertificateBatch(deepClone(template), parsedData);
+            setRenderDialogOpen(false);
+        } catch (err: any) {
+            notifications.error(err?.message || "Failed to store certificate batch", { title: "Certificates" });
+        } finally {
+            setStoringCertificateBatchExternal(false);
         }
     }
 
@@ -1606,9 +1760,9 @@ export default function TemplateEditor({
                             </IconButton>
                         </Tooltip>
                         <Tooltip title="Reset Zoom">
-                            <Button size="small" variant="text" onClick={() => setZoomPct(100)} sx={{ minWidth: 40, px: 0.5, fontSize: 11 }}>
+                            <AntBtn antType="text" onClick={() => setZoomPct(100)} sx={{ minWidth: 40, px: 0.5, fontSize: 11 }}>
                                 {zoomPct}%
-                            </Button>
+                            </AntBtn>
                         </Tooltip>
                         <Tooltip title="Zoom In">
                             <IconButton size="small" onClick={() => setZoomPct((z) => clampNum(z + 10, 25, 300))}>
@@ -2423,24 +2577,25 @@ export default function TemplateEditor({
             <Dialog
                 open={renderDialogOpen}
                 onClose={() => {
-                    if (renderingExternal || downloadingRenderedFoExternal) return;
+                    if (renderingExternal || downloadingRenderedFoExternal || batchRenderingExternal || storingCertificateExternal || storingCertificateBatchExternal) return;
                     setRenderDialogOpen(false);
                     setRenderDialogError(null);
                 }}
                 maxWidth="sm"
                 fullWidth
             >
-                <DialogTitle>Render PDF</DialogTitle>
+                <DialogTitle>Generate Certificates</DialogTitle>
                 <DialogContent>
                     <TextField
                         fullWidth
                         multiline
                         minRows={8}
                         maxRows={12}
-                        label="Render Data (JSON)"
+                        label="Certificate Data (JSON)"
                         value={renderDataJson}
                         onChange={(e) => setRenderDataJson(e.target.value)}
                         sx={{ mt: 1 }}
+                        helperText="Use a JSON object for one certificate or a JSON array for batch generation."
                     />
                     {renderDialogError && (
                         <Typography color="error" variant="body2" sx={{ mt: 1 }}>
@@ -2449,27 +2604,51 @@ export default function TemplateEditor({
                     )}
                 </DialogContent>
                 <DialogActions>
-                    <Button
+                    <AntBtn
+                        antType="text"
                         onClick={() => {
                             setRenderDialogOpen(false);
                             setRenderDialogError(null);
                         }}
-                        disabled={renderingExternal || downloadingRenderedFoExternal}
+                        disabled={renderingExternal || downloadingRenderedFoExternal || batchRenderingExternal || storingCertificateExternal || storingCertificateBatchExternal}
                     >
                         Cancel
-                    </Button>
+                    </AntBtn>
+                    {onStoreCertificate && (
+                        <AntBtn
+                            onClick={handleStoreCertificateAction}
+                            disabled={renderingExternal || downloadingRenderedFoExternal || batchRenderingExternal || storingCertificateExternal || storingCertificateBatchExternal}
+                        >
+                            {storingCertificateExternal ? "Storing..." : storeCertificateLabel}
+                        </AntBtn>
+                    )}
+                    {onStoreCertificateBatch && (
+                        <AntBtn
+                            onClick={handleStoreCertificateBatchAction}
+                            disabled={renderingExternal || downloadingRenderedFoExternal || batchRenderingExternal || storingCertificateExternal || storingCertificateBatchExternal}
+                        >
+                            {storingCertificateBatchExternal ? "Storing batch..." : storeCertificateBatchLabel}
+                        </AntBtn>
+                    )}
+                    {onBatchRenderCertificates && (
+                        <AntBtn
+                            onClick={handleBatchRenderAction}
+                            disabled={renderingExternal || downloadingRenderedFoExternal || batchRenderingExternal || storingCertificateExternal || storingCertificateBatchExternal}
+                        >
+                            {batchRenderingExternal ? "Generating batch..." : batchRenderButtonLabel}
+                        </AntBtn>
+                    )}
                     {onDownloadRenderedFo && (
-                        <Button
+                        <AntBtn
                             onClick={handleDownloadRenderedFoAction}
-                            variant="outlined"
-                            disabled={renderingExternal || downloadingRenderedFoExternal}
+                            disabled={renderingExternal || downloadingRenderedFoExternal || batchRenderingExternal || storingCertificateExternal || storingCertificateBatchExternal}
                         >
                             {downloadingRenderedFoExternal ? "Downloading FO..." : downloadRenderedFoLabel}
-                        </Button>
+                        </AntBtn>
                     )}
-                    <Button onClick={handleRenderAction} variant="contained" disabled={renderingExternal}>
-                        {renderingExternal ? "Rendering..." : "Render PDF"}
-                    </Button>
+                    <AntBtn antType="primary" onClick={handleRenderAction} disabled={renderingExternal}>
+                        {renderingExternal ? "Generating..." : renderButtonLabel}
+                    </AntBtn>
                 </DialogActions>
             </Dialog>
         </Box>

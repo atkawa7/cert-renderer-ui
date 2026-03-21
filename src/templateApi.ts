@@ -55,6 +55,26 @@ export type DesignDetail = {
     updatedAt: string;
 };
 
+export type CertificateSummary = {
+    id: string;
+    templateId?: string | null;
+    templateName: string;
+    recipientFirstName?: string | null;
+    recipientLastName?: string | null;
+    certificateReference?: string | null;
+    certificateDate?: string | null;
+    programName?: string | null;
+    programCode?: string | null;
+    organizationName?: string | null;
+    fileName: string;
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type CertificateDetail = CertificateSummary & {
+    data: unknown;
+};
+
 const API_BASE = appConfig.rendererApiBase;
 
 export type DownloadedFile = {
@@ -142,6 +162,19 @@ export async function getTemplateById(id: string): Promise<TemplateDetail> {
     return await apiFetch<TemplateDetail>(`/templates/${id}`);
 }
 
+export async function listCertificates(query = "", page = 0, size = 50): Promise<CertificateSummary[]> {
+    const params = new URLSearchParams();
+    if (query.trim()) params.set("query", query.trim());
+    params.set("page", String(page));
+    params.set("size", String(size));
+    const data = await apiFetch<PageResponse<CertificateSummary>>(`/certificates?${params.toString()}`);
+    return data.content ?? [];
+}
+
+export async function getCertificateById(id: string): Promise<CertificateDetail> {
+    return await apiFetch<CertificateDetail>(`/certificates/${id}`);
+}
+
 export async function createTemplate(payload: {
     name: string;
     template: Template;
@@ -214,13 +247,13 @@ export async function downloadTemplate(payload: {
     };
 }
 
-export async function renderTemplatePdf(payload: {
+export async function generateCertificatePdf(payload: {
     template: Template;
     data?: unknown;
     assetBaseUrl?: string;
     fileName?: string;
 }): Promise<Blob> {
-    const res = await fetch(`${API_BASE}/templates/render`, {
+    const res = await fetch(`${API_BASE}/templates/certificates`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -231,6 +264,103 @@ export async function renderTemplatePdf(payload: {
         throw new Error(text || `Render failed (${res.status})`);
     }
     return await res.blob();
+}
+
+export async function generateCertificateBatch(payload: {
+    template: Template;
+    certificates: Array<unknown | { data?: unknown; fileName?: string }>;
+    assetBaseUrl?: string;
+    fileName?: string;
+}): Promise<DownloadedFile> {
+    const certificates = payload.certificates.map((item) => {
+        if (item && typeof item === "object" && ("data" in item || "fileName" in item)) {
+            const typed = item as { data?: unknown; fileName?: string };
+            return { data: typed.data ?? {}, fileName: typed.fileName };
+        }
+        return { data: item ?? {} };
+    });
+
+    const res = await fetch(`${API_BASE}/templates/certificates/batch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            template: payload.template,
+            certificates,
+            assetBaseUrl: payload.assetBaseUrl,
+            fileName: payload.fileName,
+        }),
+    });
+
+    if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || `Batch render failed (${res.status})`);
+    }
+
+    return {
+        blob: await res.blob(),
+        fileName: parseDownloadFileName(
+            res.headers.get("Content-Disposition"),
+            payload.fileName || payload.template?.name || "certificates",
+            "zip"
+        ),
+    };
+}
+
+export async function storeCertificate(payload: {
+    template: Template;
+    data?: unknown;
+    assetBaseUrl?: string;
+    fileName?: string;
+}): Promise<CertificateDetail> {
+    return await apiFetch<CertificateDetail>("/templates/certificates/store", {
+        method: "POST",
+        body: JSON.stringify(payload),
+    });
+}
+
+export async function storeCertificateBatch(payload: {
+    template: Template;
+    certificates: Array<unknown | { data?: unknown; fileName?: string }>;
+    assetBaseUrl?: string;
+    fileName?: string;
+}): Promise<CertificateSummary[]> {
+    const certificates = payload.certificates.map((item) => {
+        if (item && typeof item === "object" && ("data" in item || "fileName" in item)) {
+            const typed = item as { data?: unknown; fileName?: string };
+            return { data: typed.data ?? {}, fileName: typed.fileName };
+        }
+        return { data: item ?? {} };
+    });
+
+    return await apiFetch<CertificateSummary[]>("/templates/certificates/batch/store", {
+        method: "POST",
+        body: JSON.stringify({
+            template: payload.template,
+            certificates,
+            assetBaseUrl: payload.assetBaseUrl,
+            fileName: payload.fileName,
+        }),
+    });
+}
+
+export function certificateViewUrl(id: string): string {
+    return `${API_BASE}/certificates/${id}/view`;
+}
+
+export async function downloadCertificateById(id: string, fallbackName = "certificate"): Promise<DownloadedFile> {
+    const res = await fetch(`${API_BASE}/certificates/${id}/download`, {
+        method: "GET",
+    });
+
+    if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || `Download failed (${res.status})`);
+    }
+
+    return {
+        blob: await res.blob(),
+        fileName: parseDownloadFileName(res.headers.get("Content-Disposition"), fallbackName, "pdf"),
+    };
 }
 
 export async function renderTemplateFo(payload: {

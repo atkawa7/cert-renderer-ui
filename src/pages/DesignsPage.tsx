@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import {
     Alert,
     Box,
-    Button,
     Card,
     CardActions,
     CardMedia,
@@ -18,6 +17,7 @@ import {
     Tooltip,
     Typography,
 } from "@mui/material";
+import AntBtn from "../components/AntBtn";
 import AddCircleIcon from "@mui/icons-material/AddCircle";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import { useConfirm } from "../components/ConfirmDialogProvider";
@@ -66,8 +66,8 @@ function DesignCreateDialog({
                 </Stack>
             </DialogContent>
             <DialogActions>
-                <Button onClick={onClose} disabled={creating}>Cancel</Button>
-                <Button variant="contained" onClick={onSubmit} disabled={creating}>{creating ? "Creating..." : "Add Design"}</Button>
+                <AntBtn antType="text" onClick={onClose} disabled={creating}>Cancel</AntBtn>
+                <AntBtn antType="primary" onClick={onSubmit} disabled={creating}>{creating ? "Creating..." : "Add Design"}</AntBtn>
             </DialogActions>
         </Dialog>
     );
@@ -88,7 +88,7 @@ function DesignImagePreviewDialog({ imageUrl, title, onClose }: { imageUrl: stri
                 )}
             </DialogContent>
             <DialogActions>
-                <Button onClick={onClose}>Close</Button>
+                <AntBtn antType="text" onClick={onClose}>Close</AntBtn>
             </DialogActions>
         </Dialog>
     );
@@ -141,9 +141,9 @@ function DesignCardItem({
             </Box>
             {!design.defaultDesign && (
                 <CardActions sx={{ px: 1, pb: 1, pt: 0.5 }}>
-                    <Button fullWidth size="small" variant="outlined" color="error" onClick={onDelete} disabled={deleting}>
+                    <AntBtn fullWidth danger onClick={onDelete} disabled={deleting}>
                         {deleting ? "..." : "Delete"}
-                    </Button>
+                    </AntBtn>
                 </CardActions>
             )}
         </Card>
@@ -274,9 +274,9 @@ export default function DesignsPage() {
                     </Typography>
                 </Box>
                 <Stack direction="row" spacing={1}>
-                    <Button variant="contained" onClick={() => setCreateDialogOpen(true)}>Add Design</Button>
-                    <Button variant="outlined" component={RouterLink} to="/templates/new">Start Blank</Button>
-                    <Button variant="outlined" onClick={() => void loadDesignPage(page, query)} disabled={loading}>Refresh</Button>
+                    <AntBtn antType="primary" onClick={() => setCreateDialogOpen(true)}>Add Design</AntBtn>
+                    <AntBtn component={RouterLink} to="/templates/new">Start Blank</AntBtn>
+                    <AntBtn onClick={() => void loadDesignPage(page, query)} disabled={loading}>Refresh</AntBtn>
                 </Stack>
             </Stack>
 
@@ -291,7 +291,7 @@ export default function DesignsPage() {
                         if (e.key === "Enter") void loadDesignPage(0, query);
                     }}
                 />
-                <Button variant="outlined" onClick={() => void loadDesignPage(0, query)} disabled={loading}>Search</Button>
+                <AntBtn onClick={() => void loadDesignPage(0, query)} disabled={loading}>Search</AntBtn>
             </Stack>
 
             {errorMsg && <Alert severity="error" sx={{ mb: 2 }}>{errorMsg}</Alert>}

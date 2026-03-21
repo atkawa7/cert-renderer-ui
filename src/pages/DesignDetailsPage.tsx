@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Alert, Box, Button, CircularProgress, Stack, Typography } from "@mui/material";
+import { Alert, Box, CircularProgress, Stack, Typography } from "@mui/material";
+import AntBtn from "../components/AntBtn";
 import { useNavigate, useParams } from "react-router-dom";
 import { appConfig } from "../appConfig";
 import { getDesignById, type DesignDetail } from "../templateApi";
@@ -49,7 +50,7 @@ export default function DesignDetailsPage() {
         <Box sx={{ p: 3, maxWidth: 980, mx: "auto" }}>
             <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
                 <Typography variant="h5">Design Detail</Typography>
-                <Button variant="outlined" onClick={() => navigate("/designs")}>Back to designs</Button>
+                <AntBtn onClick={() => navigate("/designs")}>Back to designs</AntBtn>
             </Stack>
 
             {loading ? (
@@ -75,9 +76,9 @@ export default function DesignDetailsPage() {
                         Updated: {formatDate(design.updatedAt)} | Created: {formatDate(design.createdAt)}
                     </Typography>
                     <Stack direction="row" spacing={1}>
-                        <Button variant="contained" onClick={() => navigate(`/templates/new?design=${encodeURIComponent(design.id)}`)}>
+                        <AntBtn antType="primary" onClick={() => navigate(`/templates/new?design=${encodeURIComponent(design.id)}`)}>
                             Use Design
-                        </Button>
+                        </AntBtn>
                     </Stack>
                 </Stack>
             )}

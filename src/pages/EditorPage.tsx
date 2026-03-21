@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Box, Button, CircularProgress, Stack, Typography } from "@mui/material";
+import { Alert, Box, CircularProgress, Stack, Typography } from "@mui/material";
+import AntBtn from "../components/AntBtn";
 import { Link as RouterLink, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import TemplateEditor, { type Template } from "../TemplateEditor";
 import {
@@ -8,10 +9,13 @@ import {
     deleteTemplateById,
     downloadTemplate,
     downloadTemplateById,
+    generateCertificateBatch,
+    generateCertificatePdf,
     getDesignById,
     getTemplateById,
     renderTemplateFo,
-    renderTemplatePdf,
+    storeCertificate,
+    storeCertificateBatch,
     updateTemplateById,
     type TemplateDetail,
 } from "../templateApi";
@@ -118,6 +122,9 @@ export default function EditorPage({
     const [loading, setLoading] = useState(mode === "edit" || (mode === "new" && Boolean(designId)));
     const [saving, setSaving] = useState(false);
     const [rendering, setRendering] = useState(false);
+    const [batchRendering, setBatchRendering] = useState(false);
+    const [storingCertificate, setStoringCertificate] = useState(false);
+    const [storingBatchCertificates, setStoringBatchCertificates] = useState(false);
     const [downloadingRenderedFo, setDownloadingRenderedFo] = useState(false);
     const [downloading, setDownloading] = useState(false);
     const [deleting, setDeleting] = useState(false);
@@ -249,18 +256,72 @@ export default function EditorPage({
     async function handleRenderTemplate(next: Template, data: unknown) {
         setRendering(true);
         try {
-            const pdf = await renderTemplatePdf({
+            const pdf = await generateCertificatePdf({
                 template: next,
                 data,
                 assetBaseUrl: appConfig.assetBaseUrl,
-                fileName: (next.name || "template").trim(),
+                fileName: (next.name || "certificate").trim(),
             });
-            downloadPdfBlob(next.name || "template", pdf);
-            notifications.success("PDF rendered");
+            downloadPdfBlob(next.name || "certificate", pdf);
+            notifications.success("Certificate generated");
         } catch (err: any) {
-            notifications.error(err?.message || "Failed to render PDF", { title: "Render" });
+            notifications.error(err?.message || "Failed to generate certificate", { title: "Certificates" });
         } finally {
             setRendering(false);
+        }
+    }
+
+    async function handleBatchRenderCertificates(next: Template, data: unknown[]) {
+        setBatchRendering(true);
+        try {
+            const file = await generateCertificateBatch({
+                template: next,
+                certificates: data,
+                assetBaseUrl: appConfig.assetBaseUrl,
+                fileName: (next.name || "certificates").trim(),
+            });
+            downloadBlob(file.fileName, file.blob);
+            notifications.success("Certificate batch generated");
+        } catch (err: any) {
+            notifications.error(err?.message || "Failed to generate certificate batch", { title: "Certificates" });
+        } finally {
+            setBatchRendering(false);
+        }
+    }
+
+    async function handleStoreCertificate(next: Template, data: unknown) {
+        setStoringCertificate(true);
+        try {
+            await storeCertificate({
+                template: next,
+                data,
+                assetBaseUrl: appConfig.assetBaseUrl,
+                fileName: (next.name || "certificate").trim(),
+            });
+            notifications.success("Certificate stored");
+            navigate("/certificates");
+        } catch (err: any) {
+            notifications.error(err?.message || "Failed to store certificate", { title: "Certificates" });
+        } finally {
+            setStoringCertificate(false);
+        }
+    }
+
+    async function handleStoreCertificateBatch(next: Template, data: unknown[]) {
+        setStoringBatchCertificates(true);
+        try {
+            const created = await storeCertificateBatch({
+                template: next,
+                certificates: data,
+                assetBaseUrl: appConfig.assetBaseUrl,
+                fileName: (next.name || "certificates").trim(),
+            });
+            notifications.success(`${created.length} certificates stored`);
+            navigate("/certificates");
+        } catch (err: any) {
+            notifications.error(err?.message || "Failed to store certificate batch", { title: "Certificates" });
+        } finally {
+            setStoringBatchCertificates(false);
         }
     }
 
@@ -361,9 +422,9 @@ export default function EditorPage({
         return (
             <Box sx={{ p: 3 }}>
                 <Alert severity="error" sx={{ mb: 2 }}>{errorMsg}</Alert>
-                <Button variant="contained" component={RouterLink} to="/templates">
+                <AntBtn antType="primary" component={RouterLink} to="/templates">
                     Back to templates
-                </Button>
+                </AntBtn>
             </Box>
         );
     }
@@ -379,12 +440,18 @@ export default function EditorPage({
                 onSaveTemplate={handleSaveTemplate}
                 saveButtonLabel={saving ? "Saving..." : "Save to backend"}
                 onRenderTemplate={handleRenderTemplate}
-                renderButtonLabel={rendering ? "Rendering..." : "Render PDF (XSL-FO)"}
+                renderButtonLabel={rendering ? "Generating..." : "Generate certificate PDF"}
+                onBatchRenderCertificates={handleBatchRenderCertificates}
+                batchRenderButtonLabel={batchRendering ? "Generating batch..." : "Generate batch ZIP"}
+                onStoreCertificate={handleStoreCertificate}
+                storeCertificateLabel={storingCertificate ? "Storing..." : "Generate and store"}
+                onStoreCertificateBatch={handleStoreCertificateBatch}
+                storeCertificateBatchLabel={storingBatchCertificates ? "Storing batch..." : "Store batch"}
                 onDownloadRenderedFo={handleDownloadRenderedFo}
                 downloadRenderedFoLabel={downloadingRenderedFo ? "Downloading FO..." : "Download rendered FO"}
                 onDownloadTemplate={handleDownloadTemplate}
                 downloadButtonLabel={downloading ? "Downloading..." : "Download template"}
-                defaultRenderDataJson={`{\n  "recipient": { "name": "Jane Doe" },\n  "certificate": { "uuid": "CERT-2026-0001", "issued_on": "2026-03-07" }\n}`}
+                defaultRenderDataJson={`{\n  "recipient": {\n    "firstName": "Jane",\n    "lastName": "Doe"\n  },\n  "certificate": {\n    "uuid": "CERT-2026-0001",\n    "reference": "REF-2026-0001",\n    "issued_on": "2026-03-07"\n  },\n  "program": {\n    "name": "Advanced Document Rendering",\n    "code": "ADR-101"\n  },\n  "institution": {\n    "name": "Dokuma Institute"\n  }\n}`}
                 onConvertToDesign={handleConvertTemplateToDesign}
                 onBackToDesign={
                     sourceDesignId
