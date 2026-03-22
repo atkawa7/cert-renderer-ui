@@ -5,6 +5,7 @@ import CollectionsOutlinedIcon from "@mui/icons-material/CollectionsOutlined";
 import BorderColorOutlinedIcon from "@mui/icons-material/BorderColorOutlined";
 import ImageOutlinedIcon from "@mui/icons-material/ImageOutlined";
 import WorkspacePremiumOutlinedIcon from "@mui/icons-material/WorkspacePremiumOutlined";
+import QrCode2OutlinedIcon from "@mui/icons-material/QrCode2Outlined";
 import MenuIcon from "@mui/icons-material/Menu";
 import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeOutlinedIcon from "@mui/icons-material/LightModeOutlined";
@@ -16,6 +17,7 @@ import EditorPage from "./pages/EditorPage";
 import TemplatesListPage from "./pages/TemplatesListPage";
 import SignaturePage from "./pages/SignaturePage";
 import Base64ImageViewerPage from "./pages/Base64ImageViewerPage";
+import QrDecoderPage from "./pages/QrDecoderPage";
 import CertificatesPage from "./pages/CertificatesPage";
 import CertificateViewerPage from "./pages/CertificateViewerPage";
 
@@ -85,6 +87,13 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                         primaryTypographyProps={{ fontSize: isCompactNav ? "0.9rem" : "1rem" }}
                     />
                 </ListItemButton>
+                <ListItemButton component={RouterLink} to="/qr-decoder" onClick={() => setMobileNavOpen(false)}>
+                    <QrCode2OutlinedIcon fontSize="small" sx={{ mr: 1 }} />
+                    <ListItemText
+                        primary="QR Decoder"
+                        primaryTypographyProps={{ fontSize: isCompactNav ? "0.9rem" : "1rem" }}
+                    />
+                </ListItemButton>
             </List>
         </>
     );
@@ -139,6 +148,7 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                     <Route path="/certificates" element={<CertificatesPage />} />
                     <Route path="/certificates/:id/view" element={<CertificateViewerPage />} />
                     <Route path="/base64-image" element={<Base64ImageViewerPage />} />
+                    <Route path="/qr-decoder" element={<QrDecoderPage />} />
                     <Route
                         path="/templates/new"
                         element={
