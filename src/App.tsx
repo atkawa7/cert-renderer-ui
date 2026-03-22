@@ -326,8 +326,8 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                         anchorEl={toolsMenuAnchor}
                         open={toolsMenuOpen}
                         onClose={() => setToolsMenuAnchor(null)}
-                        anchorOrigin={{ vertical: "top", horizontal: "right" }}
-                        transformOrigin={{ vertical: "top", horizontal: "left" }}
+                        anchorOrigin={{ vertical: "top", horizontal: "left" }}
+                        transformOrigin={{ vertical: "top", horizontal: "right" }}
                     >
                         <MenuItem
                             component={RouterLink}
