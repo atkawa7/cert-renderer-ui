@@ -61,10 +61,13 @@ export default function LoginPage() {
                         <Link component={RouterLink} to="/register">
                             Create account
                         </Link>
+                        {" | "}
+                        <Link component={RouterLink} to="/app/setup">
+                            Setup app
+                        </Link>
                     </Typography>
                 </Stack>
             </Paper>
         </Box>
     );
 }
-

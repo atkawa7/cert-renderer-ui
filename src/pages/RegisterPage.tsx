@@ -10,12 +10,13 @@ export default function RegisterPage() {
     const notifications = useNotifications();
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
+    const [invitationToken, setInvitationToken] = useState("");
     const [loading, setLoading] = useState(false);
 
     async function submit() {
         setLoading(true);
         try {
-            await register({ username, password });
+            await register({ username, password, invitationToken: invitationToken.trim() || undefined });
             notifications.success("Account created");
             navigate("/workspaces", { replace: true });
         } catch (err: any) {
@@ -53,6 +54,13 @@ export default function RegisterPage() {
                             if (e.key === "Enter") void submit();
                         }}
                     />
+                    <TextField
+                        fullWidth
+                        label="Invitation Token (if required)"
+                        size="small"
+                        value={invitationToken}
+                        onChange={(e) => setInvitationToken(e.target.value)}
+                    />
                     <AntBtn antType="primary" onClick={() => void submit()} disabled={loading}>
                         {loading ? "Creating..." : "Register"}
                     </AntBtn>
@@ -67,4 +75,3 @@ export default function RegisterPage() {
         </Box>
     );
 }
-

@@ -140,6 +140,7 @@ export type WorkspaceMembership = {
 export type AuthResponse = {
     userId: string;
     username: string;
+    admin: boolean;
     apiKey: string;
     tokenType: string;
 };
@@ -147,7 +148,14 @@ export type AuthResponse = {
 export type AuthUser = {
     userId: string;
     username: string;
+    admin: boolean;
     createdAt: string;
+};
+
+export type AppSetupStatus = {
+    setupEnabled: boolean;
+    setupCompleted: boolean;
+    registrationMode: "self" | "invitation" | string;
 };
 
 const API_BASE = appConfig.rendererApiBase;
@@ -578,7 +586,7 @@ export async function listWorkspaces(): Promise<WorkspaceSummary[]> {
     return await apiFetch<WorkspaceSummary[]>("/workspaces");
 }
 
-export async function register(payload: { username: string; password: string }): Promise<AuthResponse> {
+export async function register(payload: { username: string; password: string; invitationToken?: string }): Promise<AuthResponse> {
     const response = await fetch(`${API_BASE}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -636,6 +644,57 @@ export async function currentUser(): Promise<AuthUser> {
         throw new Error(text || `Auth check failed (${response.status})`);
     }
     return (await response.json()) as AuthUser;
+}
+
+export async function appSetupStatus(): Promise<AppSetupStatus> {
+    const response = await fetch(`${API_BASE}/app/setup/status`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+    });
+    if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        throw new Error(text || `Setup status failed (${response.status})`);
+    }
+    return (await response.json()) as AppSetupStatus;
+}
+
+export async function initializeAppSetup(payload: {
+    username: string;
+    password: string;
+    registrationMode: "self" | "invitation";
+}): Promise<AuthResponse> {
+    const response = await fetch(`${API_BASE}/app/setup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        throw new Error(text || `Setup initialization failed (${response.status})`);
+    }
+    const auth = (await response.json()) as AuthResponse;
+    setCurrentApiKey(auth.apiKey);
+    setCurrentUserId(auth.userId);
+    return auth;
+}
+
+export async function createInvitation(username: string): Promise<{ username: string; invitationToken: string }> {
+    const apiKey = getCurrentApiKey();
+    if (!apiKey) throw new Error("No API key set");
+    const response = await fetch(`${API_BASE}/auth/invitations`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "X-API-Key": apiKey,
+            Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({ username }),
+    });
+    if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        throw new Error(text || `Invitation failed (${response.status})`);
+    }
+    return (await response.json()) as { username: string; invitationToken: string };
 }
 
 export async function createWorkspace(payload: { name: string }): Promise<WorkspaceSummary> {

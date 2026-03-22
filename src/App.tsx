@@ -33,6 +33,7 @@ import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import LogoutPage from "./pages/LogoutPage";
 import ProfilePage from "./pages/ProfilePage";
+import AppSetupPage from "./pages/AppSetupPage";
 import { getCurrentApiKey, getCurrentUserId, getCurrentWorkspaceId } from "./templateApi";
 
 const SIDEBAR_WIDTH = 260;
@@ -70,6 +71,7 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                 <Routes>
                     <Route path="/login" element={<LoginPage />} />
                     <Route path="/register" element={<RegisterPage />} />
+                    <Route path="/app/setup" element={<AppSetupPage />} />
                     <Route path="*" element={<Navigate to="/login" replace />} />
                 </Routes>
             </Box>
@@ -227,6 +229,7 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                     <Route path="/" element={<Navigate to="/templates" replace />} />
                     <Route path="/login" element={<Navigate to="/templates" replace />} />
                     <Route path="/register" element={<Navigate to="/templates" replace />} />
+                    <Route path="/app/setup" element={<Navigate to="/templates" replace />} />
                     <Route path="/templates" element={<TemplatesListPage />} />
                     <Route path="/designs" element={<DesignsPage />} />
                     <Route path="/designs/:id" element={<DesignDetailsPage />} />
