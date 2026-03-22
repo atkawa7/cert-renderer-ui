@@ -182,7 +182,12 @@ export function getCurrentUserId(): string {
 }
 
 export function setCurrentUserId(userId: string): void {
-    window.localStorage.setItem(USER_ID_KEY, userId.trim() || "demo-user");
+    const nextValue = userId.trim() || "demo-user";
+    const currentValue = getCurrentUserId();
+    if (nextValue === currentValue) {
+        return;
+    }
+    window.localStorage.setItem(USER_ID_KEY, nextValue);
     emitSessionChanged();
 }
 
@@ -197,8 +202,13 @@ export function getCurrentApiKey(): string | null {
 }
 
 export function setCurrentApiKey(apiKey: string | null): void {
-    if (apiKey && apiKey.trim()) {
-        window.localStorage.setItem(API_KEY_KEY, apiKey.trim());
+    const nextValue = apiKey?.trim() || null;
+    const currentValue = getCurrentApiKey();
+    if (nextValue === currentValue) {
+        return;
+    }
+    if (nextValue) {
+        window.localStorage.setItem(API_KEY_KEY, nextValue);
     } else {
         window.localStorage.removeItem(API_KEY_KEY);
     }
@@ -206,8 +216,13 @@ export function setCurrentApiKey(apiKey: string | null): void {
 }
 
 export function setCurrentWorkspaceId(workspaceId: string | null): void {
-    if (workspaceId && workspaceId.trim()) {
-        window.localStorage.setItem(WORKSPACE_ID_KEY, workspaceId.trim());
+    const nextValue = workspaceId?.trim() || null;
+    const currentValue = getCurrentWorkspaceId();
+    if (nextValue === currentValue) {
+        return;
+    }
+    if (nextValue) {
+        window.localStorage.setItem(WORKSPACE_ID_KEY, nextValue);
     } else {
         window.localStorage.removeItem(WORKSPACE_ID_KEY);
     }

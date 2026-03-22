@@ -52,7 +52,7 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
     const [sidebarHidden, setSidebarHidden] = useState(false);
     const [toolsOpen, setToolsOpen] = useState(true);
-    const [sessionVersion, setSessionVersion] = useState(0);
+    const [, setSessionVersion] = useState(0);
     const [workspaceReady, setWorkspaceReady] = useState(false);
     const [preferencesReady, setPreferencesReady] = useState(false);
     const [cookieConsentCompleted, setCookieConsentCompleted] = useState(false);
@@ -106,7 +106,7 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
         return () => {
             cancelled = true;
         };
-    }, [isAuthenticated, sessionVersion]);
+    }, [isAuthenticated]);
 
     useEffect(() => {
         if (!isAuthenticated || !workspaceReady) return;
@@ -133,7 +133,7 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
         return () => {
             cancelled = true;
         };
-    }, [isAuthenticated, workspaceReady, activeUserId, sessionVersion]);
+    }, [isAuthenticated, workspaceReady, activeUserId]);
 
     if (!isAuthenticated) {
         return (
