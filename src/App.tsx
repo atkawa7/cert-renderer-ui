@@ -1,15 +1,9 @@
 import { useEffect, useState } from "react";
-import { AppBar, Avatar, Box, CircularProgress, Collapse, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Drawer, IconButton, List, ListItemButton, ListItemText, Menu, MenuItem, Paper, Stack, Toolbar, Tooltip, Typography, useMediaQuery, useTheme, type PaletteMode } from "@mui/material";
+import { AppBar, Avatar, Box, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Drawer, IconButton, List, ListItemButton, ListItemText, Menu, MenuItem, Paper, Stack, Toolbar, Tooltip, Typography, useMediaQuery, useTheme, type PaletteMode } from "@mui/material";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import CollectionsOutlinedIcon from "@mui/icons-material/CollectionsOutlined";
-import BorderColorOutlinedIcon from "@mui/icons-material/BorderColorOutlined";
-import ImageOutlinedIcon from "@mui/icons-material/ImageOutlined";
 import WorkspacePremiumOutlinedIcon from "@mui/icons-material/WorkspacePremiumOutlined";
 import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
-import QrCode2OutlinedIcon from "@mui/icons-material/QrCode2Outlined";
-import BuildOutlinedIcon from "@mui/icons-material/BuildOutlined";
-import ExpandLessIcon from "@mui/icons-material/ExpandLess";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import MenuIcon from "@mui/icons-material/Menu";
 import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeOutlinedIcon from "@mui/icons-material/LightModeOutlined";
@@ -48,7 +42,6 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
     const sidebarWidth = isCompactNav ? SIDEBAR_WIDTH_COMPACT : SIDEBAR_WIDTH;
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
     const [sidebarHidden, setSidebarHidden] = useState(false);
-    const [toolsOpen, setToolsOpen] = useState(true);
     const [, setSessionVersion] = useState(0);
     const [workspaceReady, setWorkspaceReady] = useState(false);
     const [preferencesReady, setPreferencesReady] = useState(false);
@@ -58,7 +51,6 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
     const [profileMenuAnchor, setProfileMenuAnchor] = useState<null | HTMLElement>(null);
     const effectiveSidebarWidth = sidebarHidden ? 0 : sidebarWidth;
     const activeUserId = getCurrentUserId();
-    const activeWorkspaceId = getCurrentWorkspaceId();
     const isAuthenticated = Boolean(getCurrentApiKey());
     const profileMenuOpen = Boolean(profileMenuAnchor);
     const avatarLabel = (activeUserId || "U").slice(0, 1).toUpperCase();
@@ -173,9 +165,6 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                 <Typography variant="h6" sx={{ fontWeight: 700, flexGrow: 1 }}>
                     Certificates
                 </Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ mr: 1 }}>
-                    {activeUserId} / {activeWorkspaceId ?? "no-workspace"}
-                </Typography>
                 <Tooltip title={themeMode === "light" ? "Switch to dark mode" : "Switch to light mode"}>
                     <IconButton onClick={onToggleTheme} aria-label="Toggle theme">
                         {themeMode === "light" ? <DarkModeOutlinedIcon fontSize="small" /> : <LightModeOutlinedIcon fontSize="small" />}
@@ -212,42 +201,6 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                         primaryTypographyProps={{ fontSize: isCompactNav ? "0.9rem" : "1rem" }}
                     />
                 </ListItemButton>
-            </List>
-            <Divider />
-            <List>
-                <ListItemButton onClick={() => setToolsOpen((v) => !v)}>
-                    <BuildOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
-                    <ListItemText
-                        primary="Tools"
-                        primaryTypographyProps={{ fontSize: isCompactNav ? "0.9rem" : "1rem" }}
-                    />
-                    {toolsOpen ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
-                </ListItemButton>
-                <Collapse in={toolsOpen} timeout="auto" unmountOnExit>
-                    <List disablePadding>
-                        <ListItemButton component={RouterLink} to="/signature" onClick={() => setMobileNavOpen(false)} sx={{ pl: 4 }}>
-                            <BorderColorOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
-                            <ListItemText
-                                primary="Signature"
-                                primaryTypographyProps={{ fontSize: isCompactNav ? "0.9rem" : "1rem" }}
-                            />
-                        </ListItemButton>
-                        <ListItemButton component={RouterLink} to="/base64-image" onClick={() => setMobileNavOpen(false)} sx={{ pl: 4 }}>
-                            <ImageOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
-                            <ListItemText
-                                primary="Base64 Image"
-                                primaryTypographyProps={{ fontSize: isCompactNav ? "0.9rem" : "1rem" }}
-                            />
-                        </ListItemButton>
-                        <ListItemButton component={RouterLink} to="/qr-decoder" onClick={() => setMobileNavOpen(false)} sx={{ pl: 4 }}>
-                            <QrCode2OutlinedIcon fontSize="small" sx={{ mr: 1 }} />
-                            <ListItemText
-                                primary="QR Decoder"
-                                primaryTypographyProps={{ fontSize: isCompactNav ? "0.9rem" : "1rem" }}
-                            />
-                        </ListItemButton>
-                    </List>
-                </Collapse>
             </List>
         </>
     );
@@ -302,6 +255,16 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                         open={profileMenuOpen}
                         onClose={() => setProfileMenuAnchor(null)}
                     >
+                        <MenuItem component={RouterLink} to="/signature" onClick={() => setProfileMenuAnchor(null)}>
+                            Signature Tool
+                        </MenuItem>
+                        <MenuItem component={RouterLink} to="/base64-image" onClick={() => setProfileMenuAnchor(null)}>
+                            Base64 Image Tool
+                        </MenuItem>
+                        <MenuItem component={RouterLink} to="/qr-decoder" onClick={() => setProfileMenuAnchor(null)}>
+                            QR Decoder Tool
+                        </MenuItem>
+                        <Divider />
                         <MenuItem component={RouterLink} to="/profile" onClick={() => setProfileMenuAnchor(null)}>
                             Profile
                         </MenuItem>
