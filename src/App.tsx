@@ -1,14 +1,11 @@
 import { useEffect, useState } from "react";
-import { AppBar, Box, CircularProgress, Collapse, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Drawer, IconButton, List, ListItemButton, ListItemText, Paper, Stack, Toolbar, Tooltip, Typography, useMediaQuery, useTheme, type PaletteMode } from "@mui/material";
+import { AppBar, Avatar, Box, CircularProgress, Collapse, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Drawer, IconButton, List, ListItemButton, ListItemText, Menu, MenuItem, Paper, Stack, Toolbar, Tooltip, Typography, useMediaQuery, useTheme, type PaletteMode } from "@mui/material";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import CollectionsOutlinedIcon from "@mui/icons-material/CollectionsOutlined";
 import BorderColorOutlinedIcon from "@mui/icons-material/BorderColorOutlined";
 import ImageOutlinedIcon from "@mui/icons-material/ImageOutlined";
 import WorkspacePremiumOutlinedIcon from "@mui/icons-material/WorkspacePremiumOutlined";
 import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
-import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
-import PersonOutlineOutlinedIcon from "@mui/icons-material/PersonOutlineOutlined";
-import LogoutOutlinedIcon from "@mui/icons-material/LogoutOutlined";
 import QrCode2OutlinedIcon from "@mui/icons-material/QrCode2Outlined";
 import BuildOutlinedIcon from "@mui/icons-material/BuildOutlined";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
@@ -58,10 +55,13 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
     const [cookieConsentCompleted, setCookieConsentCompleted] = useState(false);
     const [onboardingOpen, setOnboardingOpen] = useState(false);
     const [onboardingStep, setOnboardingStep] = useState(0);
+    const [profileMenuAnchor, setProfileMenuAnchor] = useState<null | HTMLElement>(null);
     const effectiveSidebarWidth = sidebarHidden ? 0 : sidebarWidth;
     const activeUserId = getCurrentUserId();
     const activeWorkspaceId = getCurrentWorkspaceId();
     const isAuthenticated = Boolean(getCurrentApiKey());
+    const profileMenuOpen = Boolean(profileMenuAnchor);
+    const avatarLabel = (activeUserId || "U").slice(0, 1).toUpperCase();
     const onboardingSteps = [
         {
             title: "Create Or Select Workspace",
@@ -212,27 +212,6 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                         primaryTypographyProps={{ fontSize: isCompactNav ? "0.9rem" : "1rem" }}
                     />
                 </ListItemButton>
-                <ListItemButton component={RouterLink} to="/workspaces" onClick={() => setMobileNavOpen(false)}>
-                    <GroupsOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
-                    <ListItemText
-                        primary="Workspaces"
-                        primaryTypographyProps={{ fontSize: isCompactNav ? "0.9rem" : "1rem" }}
-                    />
-                </ListItemButton>
-                <ListItemButton component={RouterLink} to="/profile" onClick={() => setMobileNavOpen(false)}>
-                    <PersonOutlineOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
-                    <ListItemText
-                        primary="Profile"
-                        primaryTypographyProps={{ fontSize: isCompactNav ? "0.9rem" : "1rem" }}
-                    />
-                </ListItemButton>
-                <ListItemButton component={RouterLink} to="/logout" onClick={() => setMobileNavOpen(false)}>
-                    <LogoutOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
-                    <ListItemText
-                        primary="Logout"
-                        primaryTypographyProps={{ fontSize: isCompactNav ? "0.9rem" : "1rem" }}
-                    />
-                </ListItemButton>
             </List>
             <Divider />
             <List>
@@ -295,6 +274,45 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
             </Drawer>
 
             <Box component="main" sx={{ flex: 1, minWidth: 0, minHeight: "100vh" }}>
+                <Box
+                    sx={{
+                        position: "fixed",
+                        top: 10,
+                        right: 10,
+                        zIndex: (muiTheme) => muiTheme.zIndex.drawer + 2,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 1,
+                    }}
+                >
+                    <Tooltip title={themeMode === "light" ? "Switch to dark mode" : "Switch to light mode"}>
+                        <IconButton onClick={onToggleTheme} aria-label="Toggle theme" size="small">
+                            {themeMode === "light" ? <DarkModeOutlinedIcon fontSize="small" /> : <LightModeOutlinedIcon fontSize="small" />}
+                        </IconButton>
+                    </Tooltip>
+                    <IconButton
+                        aria-label="Open profile menu"
+                        onClick={(event) => setProfileMenuAnchor(event.currentTarget)}
+                        size="small"
+                    >
+                        <Avatar sx={{ width: 32, height: 32, fontSize: "0.9rem" }}>{avatarLabel}</Avatar>
+                    </IconButton>
+                    <Menu
+                        anchorEl={profileMenuAnchor}
+                        open={profileMenuOpen}
+                        onClose={() => setProfileMenuAnchor(null)}
+                    >
+                        <MenuItem component={RouterLink} to="/profile" onClick={() => setProfileMenuAnchor(null)}>
+                            Profile
+                        </MenuItem>
+                        <MenuItem component={RouterLink} to="/workspaces" onClick={() => setProfileMenuAnchor(null)}>
+                            Workspaces
+                        </MenuItem>
+                        <MenuItem component={RouterLink} to="/logout" onClick={() => setProfileMenuAnchor(null)}>
+                            Logout
+                        </MenuItem>
+                    </Menu>
+                </Box>
                 {isOverlayNav && (
                     <AppBar position="sticky" color="default" elevation={1}>
                         <Toolbar variant="dense">
@@ -304,13 +322,7 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                             <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
                                 Certificates
                             </Typography>
-                            <Box sx={{ ml: "auto" }}>
-                                <Tooltip title={themeMode === "light" ? "Switch to dark mode" : "Switch to light mode"}>
-                                    <IconButton onClick={onToggleTheme} aria-label="Toggle theme">
-                                        {themeMode === "light" ? <DarkModeOutlinedIcon fontSize="small" /> : <LightModeOutlinedIcon fontSize="small" />}
-                                    </IconButton>
-                                </Tooltip>
-                            </Box>
+                            <Box sx={{ ml: "auto" }} />
                         </Toolbar>
                     </AppBar>
                 )}
