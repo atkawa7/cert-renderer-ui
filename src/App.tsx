@@ -7,7 +7,8 @@ import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
 import MenuIcon from "@mui/icons-material/Menu";
 import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeOutlinedIcon from "@mui/icons-material/LightModeOutlined";
-import { Link as RouterLink, Navigate, Route, Routes } from "react-router-dom";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import { Link as RouterLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import BrowserTabTitle from "./components/BrowserTabTitle";
 import DesignsPage from "./pages/DesignsPage";
 import DesignDetailsPage from "./pages/DesignDetailsPage";
@@ -36,6 +37,7 @@ type AppProps = {
 };
 
 export default function App({ themeMode, onToggleTheme }: AppProps) {
+    const location = useLocation();
     const theme = useTheme();
     const isOverlayNav = useMediaQuery(theme.breakpoints.down("md"));
     const isCompactNav = useMediaQuery(theme.breakpoints.down("lg"));
@@ -49,13 +51,19 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
     const [onboardingOpen, setOnboardingOpen] = useState(false);
     const [onboardingStep, setOnboardingStep] = useState(0);
     const [profileMenuAnchor, setProfileMenuAnchor] = useState<null | HTMLElement>(null);
+    const [toolsMenuAnchor, setToolsMenuAnchor] = useState<null | HTMLElement>(null);
     const [activeWorkspaceLabel, setActiveWorkspaceLabel] = useState<string>("none");
     const effectiveSidebarWidth = sidebarHidden ? 0 : sidebarWidth;
     const activeUserId = getCurrentUserId();
     const activeWorkspaceId = getCurrentWorkspaceId();
     const isAuthenticated = Boolean(getCurrentApiKey());
     const profileMenuOpen = Boolean(profileMenuAnchor);
+    const toolsMenuOpen = Boolean(toolsMenuAnchor);
     const avatarLabel = (activeUserId || "U").slice(0, 1).toUpperCase();
+    const isEditorRoute =
+        location.pathname === "/templates/new"
+        || (location.pathname.startsWith("/templates/") && location.pathname.endsWith("/edit"));
+    const editorInspectorOffsetPx = isCompactNav ? 268 : 340;
     const onboardingSteps = [
         {
             title: "Create Or Select Workspace",
@@ -259,19 +267,22 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
             <Box component="main" sx={{ flex: 1, minWidth: 0, minHeight: "100vh" }}>
                 <Box
                     sx={{
-                        position: "sticky",
-                        top: 0,
-                        zIndex: (muiTheme) => muiTheme.zIndex.appBar,
                         display: "flex",
                         justifyContent: "flex-end",
                         alignItems: "center",
                         gap: 1,
-                        px: 2,
-                        py: 1,
-                        bgcolor: "background.default",
+                        px: { xs: 1.5, sm: 2, md: 3 },
+                        pr: { md: isEditorRoute ? `${editorInspectorOffsetPx}px` : undefined },
+                        pt: { xs: 1, sm: 1.5 },
+                        pb: 0.5,
                     }}
                 >
-                    <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>
+                    <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        noWrap
+                        sx={{ mr: 0.5, maxWidth: { xs: 180, sm: 260, md: 360 } }}
+                    >
                         Workspace: {activeWorkspaceLabel}
                     </Typography>
                     <Tooltip title={themeMode === "light" ? "Switch to dark mode" : "Switch to light mode"}>
@@ -289,16 +300,16 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                     <Menu
                         anchorEl={profileMenuAnchor}
                         open={profileMenuOpen}
-                        onClose={() => setProfileMenuAnchor(null)}
+                        onClose={() => {
+                            setProfileMenuAnchor(null);
+                            setToolsMenuAnchor(null);
+                        }}
                     >
-                        <MenuItem component={RouterLink} to="/signature" onClick={() => setProfileMenuAnchor(null)}>
-                            Signature Tool
-                        </MenuItem>
-                        <MenuItem component={RouterLink} to="/base64-image" onClick={() => setProfileMenuAnchor(null)}>
-                            Base64 Image Tool
-                        </MenuItem>
-                        <MenuItem component={RouterLink} to="/qr-decoder" onClick={() => setProfileMenuAnchor(null)}>
-                            QR Decoder Tool
+                        <MenuItem onClick={(event) => setToolsMenuAnchor(event.currentTarget)}>
+                            <Box sx={{ display: "flex", alignItems: "center", width: "100%", justifyContent: "space-between", gap: 2 }}>
+                                <span>Tools</span>
+                                <ChevronRightIcon fontSize="small" />
+                            </Box>
                         </MenuItem>
                         <Divider />
                         <MenuItem component={RouterLink} to="/profile" onClick={() => setProfileMenuAnchor(null)}>
@@ -309,6 +320,44 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                         </MenuItem>
                         <MenuItem component={RouterLink} to="/logout" onClick={() => setProfileMenuAnchor(null)}>
                             Logout
+                        </MenuItem>
+                    </Menu>
+                    <Menu
+                        anchorEl={toolsMenuAnchor}
+                        open={toolsMenuOpen}
+                        onClose={() => setToolsMenuAnchor(null)}
+                        anchorOrigin={{ vertical: "top", horizontal: "right" }}
+                        transformOrigin={{ vertical: "top", horizontal: "left" }}
+                    >
+                        <MenuItem
+                            component={RouterLink}
+                            to="/qr-decoder"
+                            onClick={() => {
+                                setToolsMenuAnchor(null);
+                                setProfileMenuAnchor(null);
+                            }}
+                        >
+                            QR Code
+                        </MenuItem>
+                        <MenuItem
+                            component={RouterLink}
+                            to="/base64-image"
+                            onClick={() => {
+                                setToolsMenuAnchor(null);
+                                setProfileMenuAnchor(null);
+                            }}
+                        >
+                            Bas64 Image
+                        </MenuItem>
+                        <MenuItem
+                            component={RouterLink}
+                            to="/signature"
+                            onClick={() => {
+                                setToolsMenuAnchor(null);
+                                setProfileMenuAnchor(null);
+                            }}
+                        >
+                            Signature
                         </MenuItem>
                     </Menu>
                 </Box>
