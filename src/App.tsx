@@ -26,7 +26,7 @@ import LogoutPage from "./pages/LogoutPage";
 import ProfilePage from "./pages/ProfilePage";
 import AppSetupPage from "./pages/AppSetupPage";
 import AntBtn from "./components/AntBtn";
-import { ensureActiveWorkspace, getAuthPreferences, getCurrentApiKey, getCurrentUserId, getCurrentWorkspaceId, setCurrentApiKey, subscribeSessionChange, updateAuthPreferences } from "./templateApi";
+import { ensureActiveWorkspace, getAuthPreferences, getCurrentApiKey, getCurrentUserId, getCurrentWorkspaceId, listWorkspaces, setCurrentApiKey, subscribeSessionChange, updateAuthPreferences } from "./templateApi";
 
 const SIDEBAR_WIDTH = 260;
 const SIDEBAR_WIDTH_COMPACT = 196;
@@ -49,6 +49,7 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
     const [onboardingOpen, setOnboardingOpen] = useState(false);
     const [onboardingStep, setOnboardingStep] = useState(0);
     const [profileMenuAnchor, setProfileMenuAnchor] = useState<null | HTMLElement>(null);
+    const [activeWorkspaceLabel, setActiveWorkspaceLabel] = useState<string>("none");
     const effectiveSidebarWidth = sidebarHidden ? 0 : sidebarWidth;
     const activeUserId = getCurrentUserId();
     const activeWorkspaceId = getCurrentWorkspaceId();
@@ -127,6 +128,34 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
             cancelled = true;
         };
     }, [isAuthenticated, workspaceReady, activeUserId]);
+
+    useEffect(() => {
+        let cancelled = false;
+        async function loadWorkspaceLabel() {
+            if (!activeWorkspaceId) {
+                setActiveWorkspaceLabel("none");
+                return;
+            }
+            try {
+                const workspaces = await listWorkspaces();
+                if (cancelled) return;
+                const match = workspaces.find((workspace) => workspace.id === activeWorkspaceId);
+                if (match) {
+                    setActiveWorkspaceLabel(`${match.name} (${match.id})`);
+                } else {
+                    setActiveWorkspaceLabel(activeWorkspaceId);
+                }
+            } catch {
+                if (!cancelled) {
+                    setActiveWorkspaceLabel(activeWorkspaceId);
+                }
+            }
+        }
+        void loadWorkspaceLabel();
+        return () => {
+            cancelled = true;
+        };
+    }, [activeWorkspaceId]);
 
     if (!isAuthenticated) {
         return (
@@ -243,7 +272,7 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                     }}
                 >
                     <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>
-                        Workspace: {activeWorkspaceId ?? "none"}
+                        Workspace: {activeWorkspaceLabel}
                     </Typography>
                     <Tooltip title={themeMode === "light" ? "Switch to dark mode" : "Switch to light mode"}>
                         <IconButton onClick={onToggleTheme} aria-label="Toggle theme" size="small">
