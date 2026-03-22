@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Box, Link, Paper, Stack, TextField, Typography } from "@mui/material";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import AntBtn from "../components/AntBtn";
-import { register } from "../templateApi";
+import { ensureActiveWorkspace, register } from "../templateApi";
 import { useNotifications } from "../components/NotificationsProvider";
 
 export default function RegisterPage() {
@@ -17,8 +17,9 @@ export default function RegisterPage() {
         setLoading(true);
         try {
             await register({ username, password, invitationToken: invitationToken.trim() || undefined });
+            await ensureActiveWorkspace();
             notifications.success("Account created");
-            navigate("/workspaces", { replace: true });
+            navigate("/templates", { replace: true });
         } catch (err: any) {
             notifications.error(err?.message || "Registration failed", { title: "Auth" });
         } finally {

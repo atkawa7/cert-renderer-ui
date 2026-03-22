@@ -162,6 +162,7 @@ const API_BASE = appConfig.rendererApiBase;
 const USER_ID_KEY = "renderer:userId";
 const WORKSPACE_ID_KEY = "renderer:workspaceId";
 const API_KEY_KEY = "renderer:apiKey";
+const SESSION_EVENT = "renderer:session-changed";
 
 export type DownloadedFile = {
     blob: Blob;
@@ -175,6 +176,7 @@ export function getCurrentUserId(): string {
 
 export function setCurrentUserId(userId: string): void {
     window.localStorage.setItem(USER_ID_KEY, userId.trim() || "demo-user");
+    emitSessionChanged();
 }
 
 export function getCurrentWorkspaceId(): string | null {
@@ -193,6 +195,7 @@ export function setCurrentApiKey(apiKey: string | null): void {
     } else {
         window.localStorage.removeItem(API_KEY_KEY);
     }
+    emitSessionChanged();
 }
 
 export function setCurrentWorkspaceId(workspaceId: string | null): void {
@@ -201,6 +204,21 @@ export function setCurrentWorkspaceId(workspaceId: string | null): void {
     } else {
         window.localStorage.removeItem(WORKSPACE_ID_KEY);
     }
+    emitSessionChanged();
+}
+
+function emitSessionChanged() {
+    window.dispatchEvent(new Event(SESSION_EVENT));
+}
+
+export function subscribeSessionChange(listener: () => void): () => void {
+    const handler = () => listener();
+    window.addEventListener(SESSION_EVENT, handler);
+    window.addEventListener("storage", handler);
+    return () => {
+        window.removeEventListener(SESSION_EVENT, handler);
+        window.removeEventListener("storage", handler);
+    };
 }
 
 function workspaceHeaders(requireWorkspace = true): Record<string, string> {
@@ -630,6 +648,22 @@ export async function logout(): Promise<void> {
         throw new Error(text || `Logout failed (${response.status})`);
     }
     setCurrentApiKey(null);
+    setCurrentWorkspaceId(null);
+}
+
+export async function ensureActiveWorkspace(): Promise<string> {
+    const workspaces = await listWorkspaces();
+    if (workspaces.length === 0) {
+        const created = await createWorkspace({ name: "My Workspace" });
+        setCurrentWorkspaceId(created.id);
+        return created.id;
+    }
+    const currentWorkspaceId = getCurrentWorkspaceId();
+    if (currentWorkspaceId && workspaces.some((workspace) => workspace.id === currentWorkspaceId)) {
+        return currentWorkspaceId;
+    }
+    setCurrentWorkspaceId(workspaces[0].id);
+    return workspaces[0].id;
 }
 
 export async function currentUser(): Promise<AuthUser> {

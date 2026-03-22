@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Box, Link, Paper, Stack, TextField, Typography } from "@mui/material";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import AntBtn from "../components/AntBtn";
-import { login } from "../templateApi";
+import { ensureActiveWorkspace, login } from "../templateApi";
 import { useNotifications } from "../components/NotificationsProvider";
 
 export default function LoginPage() {
@@ -16,8 +16,9 @@ export default function LoginPage() {
         setLoading(true);
         try {
             await login({ username, password });
+            await ensureActiveWorkspace();
             notifications.success("Signed in");
-            navigate("/workspaces", { replace: true });
+            navigate("/templates", { replace: true });
         } catch (err: any) {
             notifications.error(err?.message || "Login failed", { title: "Auth" });
         } finally {

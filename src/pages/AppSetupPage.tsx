@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Alert, Box, Link, MenuItem, Paper, Stack, TextField, Typography } from "@mui/material";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import AntBtn from "../components/AntBtn";
-import { appSetupStatus, initializeAppSetup } from "../templateApi";
+import { appSetupStatus, ensureActiveWorkspace, initializeAppSetup } from "../templateApi";
 import { useNotifications } from "../components/NotificationsProvider";
 
 export default function AppSetupPage() {
@@ -43,8 +43,9 @@ export default function AppSetupPage() {
         setLoading(true);
         try {
             await initializeAppSetup({ username, password, registrationMode });
+            await ensureActiveWorkspace();
             notifications.success("App setup complete. Admin created.");
-            navigate("/workspaces", { replace: true });
+            navigate("/templates", { replace: true });
         } catch (err: any) {
             notifications.error(err?.message || "Setup failed", { title: "Setup" });
         } finally {
@@ -111,4 +112,3 @@ export default function AppSetupPage() {
         </Box>
     );
 }
-

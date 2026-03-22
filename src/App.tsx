@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { AppBar, Box, Collapse, Divider, Drawer, IconButton, List, ListItemButton, ListItemText, Toolbar, Tooltip, Typography, useMediaQuery, useTheme, type PaletteMode } from "@mui/material";
+import { useEffect, useState } from "react";
+import { AppBar, Box, CircularProgress, Collapse, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Drawer, IconButton, List, ListItemButton, ListItemText, Stack, Toolbar, Tooltip, Typography, useMediaQuery, useTheme, type PaletteMode } from "@mui/material";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import CollectionsOutlinedIcon from "@mui/icons-material/CollectionsOutlined";
 import BorderColorOutlinedIcon from "@mui/icons-material/BorderColorOutlined";
@@ -34,10 +34,12 @@ import RegisterPage from "./pages/RegisterPage";
 import LogoutPage from "./pages/LogoutPage";
 import ProfilePage from "./pages/ProfilePage";
 import AppSetupPage from "./pages/AppSetupPage";
-import { getCurrentApiKey, getCurrentUserId, getCurrentWorkspaceId } from "./templateApi";
+import AntBtn from "./components/AntBtn";
+import { ensureActiveWorkspace, getCurrentApiKey, getCurrentUserId, getCurrentWorkspaceId, setCurrentApiKey, subscribeSessionChange } from "./templateApi";
 
 const SIDEBAR_WIDTH = 260;
 const SIDEBAR_WIDTH_COMPACT = 196;
+const ONBOARDING_KEY_PREFIX = "renderer:onboarding:v1:";
 
 type AppProps = {
     themeMode: PaletteMode;
@@ -52,10 +54,69 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
     const [sidebarHidden, setSidebarHidden] = useState(false);
     const [toolsOpen, setToolsOpen] = useState(true);
+    const [sessionVersion, setSessionVersion] = useState(0);
+    const [workspaceReady, setWorkspaceReady] = useState(false);
+    const [onboardingOpen, setOnboardingOpen] = useState(false);
+    const [onboardingStep, setOnboardingStep] = useState(0);
     const effectiveSidebarWidth = sidebarHidden ? 0 : sidebarWidth;
     const activeUserId = getCurrentUserId();
     const activeWorkspaceId = getCurrentWorkspaceId();
     const isAuthenticated = Boolean(getCurrentApiKey());
+    const onboardingSteps = [
+        {
+            title: "Create Or Select Workspace",
+            body: "Work inside your org workspace. Templates, certificates, institutions, and members are scoped to it.",
+        },
+        {
+            title: "Build From Designs",
+            body: "Use global designs or workspace designs to create templates. Internal designs from other workspaces are blocked.",
+        },
+        {
+            title: "Issue And Verify Certificates",
+            body: "Generate certificates, view their VC payload and QR, and verify institutions with DNS TXT records before issuing.",
+        },
+    ];
+
+    useEffect(() => {
+        return subscribeSessionChange(() => {
+            setSessionVersion((value) => value + 1);
+        });
+    }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+        async function prepareWorkspace() {
+            if (!isAuthenticated) {
+                setWorkspaceReady(false);
+                return;
+            }
+            setWorkspaceReady(false);
+            try {
+                await ensureActiveWorkspace();
+                if (!cancelled) {
+                    setWorkspaceReady(true);
+                }
+            } catch {
+                if (!cancelled) {
+                    setCurrentApiKey(null);
+                }
+            }
+        }
+        void prepareWorkspace();
+        return () => {
+            cancelled = true;
+        };
+    }, [isAuthenticated, sessionVersion]);
+
+    useEffect(() => {
+        if (!isAuthenticated || !workspaceReady) return;
+        const key = `${ONBOARDING_KEY_PREFIX}${activeUserId}`;
+        const completed = window.localStorage.getItem(key) === "true";
+        if (!completed) {
+            setOnboardingStep(0);
+            setOnboardingOpen(true);
+        }
+    }, [isAuthenticated, workspaceReady, activeUserId]);
 
     if (!isAuthenticated) {
         return (
@@ -74,6 +135,17 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                     <Route path="/app/setup" element={<AppSetupPage />} />
                     <Route path="*" element={<Navigate to="/login" replace />} />
                 </Routes>
+            </Box>
+        );
+    }
+
+    if (!workspaceReady) {
+        return (
+            <Box sx={{ minHeight: "100vh", display: "grid", placeItems: "center", bgcolor: "background.default", p: 2 }}>
+                <Stack direction="row" spacing={1.2} alignItems="center">
+                    <CircularProgress size={18} />
+                    <Typography>Preparing your workspace...</Typography>
+                </Stack>
             </Box>
         );
     }
@@ -266,6 +338,37 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                     />
                 </Routes>
             </Box>
+            <Dialog
+                open={onboardingOpen}
+                onClose={() => {}}
+                fullWidth
+                maxWidth="sm"
+            >
+                <DialogTitle>{`Onboarding: ${onboardingSteps[onboardingStep].title}`}</DialogTitle>
+                <DialogContent>
+                    <Typography variant="body1">{onboardingSteps[onboardingStep].body}</Typography>
+                </DialogContent>
+                <DialogActions>
+                    {onboardingStep > 0 ? (
+                        <AntBtn onClick={() => setOnboardingStep((value) => Math.max(0, value - 1))}>Back</AntBtn>
+                    ) : null}
+                    {onboardingStep < onboardingSteps.length - 1 ? (
+                        <AntBtn antType="primary" onClick={() => setOnboardingStep((value) => Math.min(onboardingSteps.length - 1, value + 1))}>
+                            Next
+                        </AntBtn>
+                    ) : (
+                        <AntBtn
+                            antType="primary"
+                            onClick={() => {
+                                window.localStorage.setItem(`${ONBOARDING_KEY_PREFIX}${activeUserId}`, "true");
+                                setOnboardingOpen(false);
+                            }}
+                        >
+                            Start Using App
+                        </AntBtn>
+                    )}
+                </DialogActions>
+            </Dialog>
         </Box>
     );
 }
