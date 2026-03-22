@@ -6,6 +6,9 @@ import BorderColorOutlinedIcon from "@mui/icons-material/BorderColorOutlined";
 import ImageOutlinedIcon from "@mui/icons-material/ImageOutlined";
 import WorkspacePremiumOutlinedIcon from "@mui/icons-material/WorkspacePremiumOutlined";
 import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
+import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
+import PersonOutlineOutlinedIcon from "@mui/icons-material/PersonOutlineOutlined";
+import LogoutOutlinedIcon from "@mui/icons-material/LogoutOutlined";
 import QrCode2OutlinedIcon from "@mui/icons-material/QrCode2Outlined";
 import BuildOutlinedIcon from "@mui/icons-material/BuildOutlined";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
@@ -25,6 +28,12 @@ import QrDecoderPage from "./pages/QrDecoderPage";
 import CertificatesPage from "./pages/CertificatesPage";
 import CertificateViewerPage from "./pages/CertificateViewerPage";
 import InstitutionsPage from "./pages/InstitutionsPage";
+import WorkspacesPage from "./pages/WorkspacesPage";
+import LoginPage from "./pages/LoginPage";
+import RegisterPage from "./pages/RegisterPage";
+import LogoutPage from "./pages/LogoutPage";
+import ProfilePage from "./pages/ProfilePage";
+import { getCurrentApiKey, getCurrentUserId, getCurrentWorkspaceId } from "./templateApi";
 
 const SIDEBAR_WIDTH = 260;
 const SIDEBAR_WIDTH_COMPACT = 196;
@@ -43,12 +52,38 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
     const [sidebarHidden, setSidebarHidden] = useState(false);
     const [toolsOpen, setToolsOpen] = useState(true);
     const effectiveSidebarWidth = sidebarHidden ? 0 : sidebarWidth;
+    const activeUserId = getCurrentUserId();
+    const activeWorkspaceId = getCurrentWorkspaceId();
+    const isAuthenticated = Boolean(getCurrentApiKey());
+
+    if (!isAuthenticated) {
+        return (
+            <Box sx={{ minHeight: "100vh", bgcolor: "background.default" }}>
+                <BrowserTabTitle />
+                <Box sx={{ position: "fixed", top: 10, right: 10 }}>
+                    <Tooltip title={themeMode === "light" ? "Switch to dark mode" : "Switch to light mode"}>
+                        <IconButton onClick={onToggleTheme} aria-label="Toggle theme">
+                            {themeMode === "light" ? <DarkModeOutlinedIcon fontSize="small" /> : <LightModeOutlinedIcon fontSize="small" />}
+                        </IconButton>
+                    </Tooltip>
+                </Box>
+                <Routes>
+                    <Route path="/login" element={<LoginPage />} />
+                    <Route path="/register" element={<RegisterPage />} />
+                    <Route path="*" element={<Navigate to="/login" replace />} />
+                </Routes>
+            </Box>
+        );
+    }
 
     const navContent = (
         <>
             <Toolbar sx={{ minHeight: isCompactNav ? 52 : 64 }}>
                 <Typography variant="h6" sx={{ fontWeight: 700, flexGrow: 1 }}>
                     Certificates
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ mr: 1 }}>
+                    {activeUserId} / {activeWorkspaceId ?? "no-workspace"}
                 </Typography>
                 <Tooltip title={themeMode === "light" ? "Switch to dark mode" : "Switch to light mode"}>
                     <IconButton onClick={onToggleTheme} aria-label="Toggle theme">
@@ -83,6 +118,27 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                     <BusinessOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
                     <ListItemText
                         primary="Institutions"
+                        primaryTypographyProps={{ fontSize: isCompactNav ? "0.9rem" : "1rem" }}
+                    />
+                </ListItemButton>
+                <ListItemButton component={RouterLink} to="/workspaces" onClick={() => setMobileNavOpen(false)}>
+                    <GroupsOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
+                    <ListItemText
+                        primary="Workspaces"
+                        primaryTypographyProps={{ fontSize: isCompactNav ? "0.9rem" : "1rem" }}
+                    />
+                </ListItemButton>
+                <ListItemButton component={RouterLink} to="/profile" onClick={() => setMobileNavOpen(false)}>
+                    <PersonOutlineOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
+                    <ListItemText
+                        primary="Profile"
+                        primaryTypographyProps={{ fontSize: isCompactNav ? "0.9rem" : "1rem" }}
+                    />
+                </ListItemButton>
+                <ListItemButton component={RouterLink} to="/logout" onClick={() => setMobileNavOpen(false)}>
+                    <LogoutOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
+                    <ListItemText
+                        primary="Logout"
                         primaryTypographyProps={{ fontSize: isCompactNav ? "0.9rem" : "1rem" }}
                     />
                 </ListItemButton>
@@ -169,12 +225,17 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                 )}
                 <Routes>
                     <Route path="/" element={<Navigate to="/templates" replace />} />
+                    <Route path="/login" element={<Navigate to="/templates" replace />} />
+                    <Route path="/register" element={<Navigate to="/templates" replace />} />
                     <Route path="/templates" element={<TemplatesListPage />} />
                     <Route path="/designs" element={<DesignsPage />} />
                     <Route path="/designs/:id" element={<DesignDetailsPage />} />
                     <Route path="/signature" element={<SignaturePage />} />
                     <Route path="/certificates" element={<CertificatesPage />} />
                     <Route path="/institutions" element={<InstitutionsPage />} />
+                    <Route path="/workspaces" element={<WorkspacesPage />} />
+                    <Route path="/profile" element={<ProfilePage />} />
+                    <Route path="/logout" element={<LogoutPage />} />
                     <Route path="/certificates/:id/view" element={<CertificateViewerPage />} />
                     <Route path="/base64-image" element={<Base64ImageViewerPage />} />
                     <Route path="/qr-decoder" element={<QrDecoderPage />} />

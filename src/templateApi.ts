@@ -3,6 +3,7 @@ import { appConfig } from "./appConfig";
 
 export type TemplateSummary = {
     id: string;
+    workspaceId?: string | null;
     name: string;
     sourceDesignId?: string | null;
     createdAt: string;
@@ -11,6 +12,7 @@ export type TemplateSummary = {
 
 export type TemplateDetail = {
     id: string;
+    workspaceId?: string | null;
     name: string;
     sourceDesignId?: string | null;
     template: Template;
@@ -36,20 +38,24 @@ export type PagedResult<T> = {
 
 export type DesignSummary = {
     id: string;
+    workspaceId?: string | null;
     name: string;
     description?: string;
     thumbnailUrl: string;
     defaultDesign: boolean;
+    globalDesign?: boolean;
     createdAt: string;
     updatedAt: string;
 };
 
 export type DesignDetail = {
     id: string;
+    workspaceId?: string | null;
     name: string;
     description?: string;
     thumbnailUrl: string;
     defaultDesign: boolean;
+    globalDesign?: boolean;
     template: Template;
     createdAt: string;
     updatedAt: string;
@@ -57,6 +63,7 @@ export type DesignDetail = {
 
 export type CertificateSummary = {
     id: string;
+    workspaceId?: string | null;
     templateId?: string | null;
     templateName: string;
     recipientFirstName?: string | null;
@@ -96,6 +103,7 @@ export type CertificateCredential = {
 
 export type InstitutionSummary = {
     id: string;
+    workspaceId?: string | null;
     name: string;
     domain: string;
     issuePath: string;
@@ -112,16 +120,103 @@ export type InstitutionDetail = InstitutionSummary & {
     verificationRecordValue: string;
 };
 
+export type WorkspaceSummary = {
+    id: string;
+    name: string;
+    slug: string;
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type WorkspaceMembership = {
+    id: string;
+    workspaceId: string;
+    userId: string;
+    role: "OWNER" | "MEMBER";
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type AuthResponse = {
+    userId: string;
+    username: string;
+    apiKey: string;
+    tokenType: string;
+};
+
+export type AuthUser = {
+    userId: string;
+    username: string;
+    createdAt: string;
+};
+
 const API_BASE = appConfig.rendererApiBase;
+const USER_ID_KEY = "renderer:userId";
+const WORKSPACE_ID_KEY = "renderer:workspaceId";
+const API_KEY_KEY = "renderer:apiKey";
 
 export type DownloadedFile = {
     blob: Blob;
     fileName: string;
 };
 
+export function getCurrentUserId(): string {
+    const raw = window.localStorage.getItem(USER_ID_KEY)?.trim();
+    return raw || "demo-user";
+}
+
+export function setCurrentUserId(userId: string): void {
+    window.localStorage.setItem(USER_ID_KEY, userId.trim() || "demo-user");
+}
+
+export function getCurrentWorkspaceId(): string | null {
+    const raw = window.localStorage.getItem(WORKSPACE_ID_KEY)?.trim();
+    return raw || null;
+}
+
+export function getCurrentApiKey(): string | null {
+    const raw = window.localStorage.getItem(API_KEY_KEY)?.trim();
+    return raw || null;
+}
+
+export function setCurrentApiKey(apiKey: string | null): void {
+    if (apiKey && apiKey.trim()) {
+        window.localStorage.setItem(API_KEY_KEY, apiKey.trim());
+    } else {
+        window.localStorage.removeItem(API_KEY_KEY);
+    }
+}
+
+export function setCurrentWorkspaceId(workspaceId: string | null): void {
+    if (workspaceId && workspaceId.trim()) {
+        window.localStorage.setItem(WORKSPACE_ID_KEY, workspaceId.trim());
+    } else {
+        window.localStorage.removeItem(WORKSPACE_ID_KEY);
+    }
+}
+
+function workspaceHeaders(requireWorkspace = true): Record<string, string> {
+    const headers: Record<string, string> = {
+        "X-User-Id": getCurrentUserId(),
+    };
+    const apiKey = getCurrentApiKey();
+    if (apiKey) {
+        headers["X-API-Key"] = apiKey;
+        headers["Authorization"] = `Bearer ${apiKey}`;
+    }
+    const workspaceId = getCurrentWorkspaceId();
+    if (workspaceId) {
+        headers["X-Workspace-Id"] = workspaceId;
+    } else if (requireWorkspace) {
+        throw new Error("Select an org workspace first in the Workspaces page.");
+    }
+    return headers;
+}
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+    const requireWorkspace = !path.startsWith("/workspaces");
     const res = await fetch(`${API_BASE}${path}`, {
-        headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+        headers: { "Content-Type": "application/json", ...workspaceHeaders(requireWorkspace), ...(init?.headers ?? {}) },
         ...init,
     });
 
@@ -290,6 +385,7 @@ export async function deleteTemplateById(id: string): Promise<void> {
 export async function downloadTemplateById(id: string, fallbackName = "template"): Promise<DownloadedFile> {
     const res = await fetch(`${API_BASE}/templates/${id}/download`, {
         method: "GET",
+        headers: workspaceHeaders(),
     });
 
     if (!res.ok) {
@@ -309,7 +405,7 @@ export async function downloadTemplate(payload: {
 }): Promise<DownloadedFile> {
     const res = await fetch(`${API_BASE}/templates/download`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...workspaceHeaders() },
         body: JSON.stringify(payload),
     });
 
@@ -336,7 +432,7 @@ export async function generateCertificatePdf(payload: {
 }): Promise<Blob> {
     const res = await fetch(`${API_BASE}/templates/certificates`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...workspaceHeaders() },
         body: JSON.stringify(payload),
     });
 
@@ -363,7 +459,7 @@ export async function generateCertificateBatch(payload: {
 
     const res = await fetch(`${API_BASE}/templates/certificates/batch`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...workspaceHeaders() },
         body: JSON.stringify({
             template: payload.template,
             certificates,
@@ -425,12 +521,19 @@ export async function storeCertificateBatch(payload: {
 }
 
 export function certificateViewUrl(id: string): string {
-    return `${API_BASE}/certificates/${id}/view`;
+    const params = new URLSearchParams();
+    params.set("userId", getCurrentUserId());
+    const workspaceId = getCurrentWorkspaceId();
+    if (workspaceId) {
+        params.set("workspaceId", workspaceId);
+    }
+    return `${API_BASE}/certificates/${id}/view?${params.toString()}`;
 }
 
 export async function downloadCertificateById(id: string, fallbackName = "certificate"): Promise<DownloadedFile> {
     const res = await fetch(`${API_BASE}/certificates/${id}/download`, {
         method: "GET",
+        headers: workspaceHeaders(),
     });
 
     if (!res.ok) {
@@ -452,7 +555,7 @@ export async function renderTemplateFo(payload: {
 }): Promise<DownloadedFile> {
     const res = await fetch(`${API_BASE}/templates/render/fo`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...workspaceHeaders() },
         body: JSON.stringify(payload),
     });
 
@@ -469,4 +572,95 @@ export async function renderTemplateFo(payload: {
             "fo.xml"
         ),
     };
+}
+
+export async function listWorkspaces(): Promise<WorkspaceSummary[]> {
+    return await apiFetch<WorkspaceSummary[]>("/workspaces");
+}
+
+export async function register(payload: { username: string; password: string }): Promise<AuthResponse> {
+    const response = await fetch(`${API_BASE}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        throw new Error(text || `Register failed (${response.status})`);
+    }
+    const auth = (await response.json()) as AuthResponse;
+    setCurrentApiKey(auth.apiKey);
+    setCurrentUserId(auth.userId);
+    return auth;
+}
+
+export async function login(payload: { username: string; password: string }): Promise<AuthResponse> {
+    const response = await fetch(`${API_BASE}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        throw new Error(text || `Login failed (${response.status})`);
+    }
+    const auth = (await response.json()) as AuthResponse;
+    setCurrentApiKey(auth.apiKey);
+    setCurrentUserId(auth.userId);
+    return auth;
+}
+
+export async function logout(): Promise<void> {
+    const apiKey = getCurrentApiKey();
+    if (!apiKey) return;
+    const response = await fetch(`${API_BASE}/auth/logout`, {
+        method: "POST",
+        headers: { "X-API-Key": apiKey, Authorization: `Bearer ${apiKey}` },
+    });
+    if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        throw new Error(text || `Logout failed (${response.status})`);
+    }
+    setCurrentApiKey(null);
+}
+
+export async function currentUser(): Promise<AuthUser> {
+    const apiKey = getCurrentApiKey();
+    if (!apiKey) throw new Error("No API key set");
+    const response = await fetch(`${API_BASE}/auth/me`, {
+        method: "GET",
+        headers: { "X-API-Key": apiKey, Authorization: `Bearer ${apiKey}` },
+    });
+    if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        throw new Error(text || `Auth check failed (${response.status})`);
+    }
+    return (await response.json()) as AuthUser;
+}
+
+export async function createWorkspace(payload: { name: string }): Promise<WorkspaceSummary> {
+    return await apiFetch<WorkspaceSummary>("/workspaces", {
+        method: "POST",
+        body: JSON.stringify(payload),
+    });
+}
+
+export async function listWorkspaceMembers(workspaceId: string): Promise<WorkspaceMembership[]> {
+    return await apiFetch<WorkspaceMembership[]>(`/workspaces/${workspaceId}/members`);
+}
+
+export async function addWorkspaceMember(
+    workspaceId: string,
+    payload: { userId: string; role?: "OWNER" | "MEMBER" }
+): Promise<WorkspaceMembership> {
+    return await apiFetch<WorkspaceMembership>(`/workspaces/${workspaceId}/members`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+    });
+}
+
+export async function removeWorkspaceMember(workspaceId: string, userId: string): Promise<void> {
+    await apiFetch<void>(`/workspaces/${workspaceId}/members/${encodeURIComponent(userId)}`, {
+        method: "DELETE",
+    });
 }
