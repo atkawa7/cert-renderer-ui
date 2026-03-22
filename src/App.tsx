@@ -51,6 +51,7 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
     const [profileMenuAnchor, setProfileMenuAnchor] = useState<null | HTMLElement>(null);
     const effectiveSidebarWidth = sidebarHidden ? 0 : sidebarWidth;
     const activeUserId = getCurrentUserId();
+    const activeWorkspaceId = getCurrentWorkspaceId();
     const isAuthenticated = Boolean(getCurrentApiKey());
     const profileMenuOpen = Boolean(profileMenuAnchor);
     const avatarLabel = (activeUserId || "U").slice(0, 1).toUpperCase();
@@ -241,6 +242,9 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                         bgcolor: "background.default",
                     }}
                 >
+                    <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>
+                        Workspace: {activeWorkspaceId ?? "none"}
+                    </Typography>
                     <Tooltip title={themeMode === "light" ? "Switch to dark mode" : "Switch to light mode"}>
                         <IconButton onClick={onToggleTheme} aria-label="Toggle theme" size="small">
                             {themeMode === "light" ? <DarkModeOutlinedIcon fontSize="small" /> : <LightModeOutlinedIcon fontSize="small" />}
