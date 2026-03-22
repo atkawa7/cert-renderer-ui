@@ -25,6 +25,7 @@ import {
     useMediaQuery,
     useTheme,
 } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import AntBtn from "./components/AntBtn";
 import DeleteIcon from "@mui/icons-material/Delete";
 import DeleteForeverIcon from "@mui/icons-material/DeleteForever";
@@ -621,8 +622,21 @@ export default function TemplateEditor({
     const theme = useTheme();
     const isOverlayInspector = useMediaQuery(theme.breakpoints.down("md"));
     const isCompactLayout = useMediaQuery(theme.breakpoints.down("lg"));
+    const isDark = theme.palette.mode === "dark";
     const inspectorWidthPx = isCompactLayout ? PALETTE_WIDTH_COMPACT_PX : PALETTE_WIDTH_PX;
     const compactUiFontSize = isCompactLayout ? "0.82rem" : "0.92rem";
+    const toolbarBorderColor = alpha(theme.palette.text.primary, isDark ? 0.34 : 0.12);
+    const toolbarBgColor = alpha(theme.palette.background.paper, isDark ? 0.9 : 0.92);
+    const checkerColor = alpha(theme.palette.text.primary, isDark ? 0.14 : 0.06);
+    const canvasBorderColor = alpha(theme.palette.text.primary, isDark ? 0.5 : 0.2);
+    const canvasShadowColor = alpha("#000000", isDark ? 0.55 : 0.15);
+    const gridLineColor = alpha(theme.palette.primary.main, isDark ? 0.28 : 0.16);
+    const guideLabelBg = alpha(theme.palette.background.paper, isDark ? 0.9 : 0.8);
+    const hintBg = alpha(theme.palette.background.paper, isDark ? 0.88 : 0.75);
+    const hintBorder = `1px dashed ${alpha(theme.palette.text.primary, isDark ? 0.42 : 0.25)}`;
+    const selectedBorderColor = theme.palette.primary.main;
+    const selectedGlowColor = alpha(theme.palette.primary.main, isDark ? 0.3 : 0.15);
+    const selectedFillColor = alpha(theme.palette.primary.main, isDark ? 0.14 : 0.04);
     const confirm = useConfirm();
     const notifications = useNotifications();
     const [template, setTemplate] = useState<Template>(() => normalizeTemplate(initialTemplate));
@@ -1583,9 +1597,8 @@ export default function TemplateEditor({
         return () => window.clearTimeout(handle);
     }, [template, onPersistSession, persistDebounceMs]);
 
-    console.log({ bgUrl });
     return (
-        <Box sx={{ display: "flex", height: "100vh", bgcolor: "#f3f5f7" }}>
+        <Box sx={{ display: "flex", height: "100vh", bgcolor: "background.default" }}>
             <Box
                 sx={{
                     flex: 1,
@@ -1605,8 +1618,8 @@ export default function TemplateEditor({
                         mb: 2,
                         p: 1.25,
                         borderRadius: 2,
-                        border: toolbarMinimized ? "none" : "1px solid rgba(0,0,0,0.1)",
-                        bgcolor: toolbarMinimized ? "transparent" : "rgba(255,255,255,0.92)",
+                        border: toolbarMinimized ? "none" : `1px solid ${toolbarBorderColor}`,
+                        bgcolor: toolbarMinimized ? "transparent" : toolbarBgColor,
                         backdropFilter: toolbarMinimized ? "none" : "blur(6px)",
                         boxShadow: toolbarMinimized ? "none" : undefined,
                         "& .MuiIconButton-root": {
@@ -1903,7 +1916,7 @@ export default function TemplateEditor({
                             p: 2,
                             borderRadius: 3,
                             background:
-                                "linear-gradient(45deg, rgba(0,0,0,0.03) 25%, transparent 25%, transparent 75%, rgba(0,0,0,0.03) 75%, rgba(0,0,0,0.03)), linear-gradient(45deg, rgba(0,0,0,0.03) 25%, transparent 25%, transparent 75%, rgba(0,0,0,0.03) 75%, rgba(0,0,0,0.03))",
+                                `linear-gradient(45deg, ${checkerColor} 25%, transparent 25%, transparent 75%, ${checkerColor} 75%, ${checkerColor}), linear-gradient(45deg, ${checkerColor} 25%, transparent 25%, transparent 75%, ${checkerColor} 75%, ${checkerColor})`,
                             backgroundSize: "24px 24px",
                             backgroundPosition: "0 0, 12px 12px",
                         }}
@@ -1942,8 +1955,8 @@ export default function TemplateEditor({
                                         bgType === "color"
                                             ? ((activePage?.background as Background | undefined)?.color || "#ffffff")
                                             : "#fff",
-                                    border: "2px solid rgba(0,0,0,0.2)",
-                                    boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
+                                    border: `2px solid ${canvasBorderColor}`,
+                                    boxShadow: `0 10px 30px ${canvasShadowColor}`,
                                     backgroundImage: bgCssImage,
                                     backgroundSize: "cover",
                                     backgroundPosition: "center",
@@ -1956,7 +1969,7 @@ export default function TemplateEditor({
                                             inset: 0,
                                             pointerEvents: "none",
                                             backgroundImage:
-                                                "linear-gradient(to right, rgba(25,118,210,0.16) 1px, transparent 1px), linear-gradient(to bottom, rgba(25,118,210,0.16) 1px, transparent 1px)",
+                                                `linear-gradient(to right, ${gridLineColor} 1px, transparent 1px), linear-gradient(to bottom, ${gridLineColor} 1px, transparent 1px)`,
                                             backgroundSize: `${gridSizePx}px ${gridSizePx}px`,
                                             backgroundPosition: `${centerGridOffsetX}px ${centerGridOffsetY}px`,
                                         }}
@@ -1995,7 +2008,7 @@ export default function TemplateEditor({
                                                 left: 8,
                                                 top: "calc(50% + 4px)",
                                                 px: 0.5,
-                                                bgcolor: "rgba(255,255,255,0.8)",
+                                                bgcolor: guideLabelBg,
                                                 borderRadius: 0.5,
                                                 color: "rgba(183, 28, 28, 0.9)",
                                                 pointerEvents: "none",
@@ -2011,7 +2024,7 @@ export default function TemplateEditor({
                                                 left: "calc(50% + 6px)",
                                                 top: 8,
                                                 px: 0.5,
-                                                bgcolor: "rgba(255,255,255,0.8)",
+                                                bgcolor: guideLabelBg,
                                                 borderRadius: 0.5,
                                                 color: "rgba(27, 94, 32, 0.9)",
                                                 pointerEvents: "none",
@@ -2035,8 +2048,8 @@ export default function TemplateEditor({
                                                 px: 1,
                                                 py: 0.5,
                                                 borderRadius: 1,
-                                                bgcolor: "rgba(255,255,255,0.75)",
-                                                border: "1px dashed rgba(0,0,0,0.25)",
+                                                bgcolor: hintBg,
+                                                border: hintBorder,
                                                 pointerEvents: "none",
                                             }}
                                         >
@@ -2052,8 +2065,8 @@ export default function TemplateEditor({
                                                 px: 1,
                                                 py: 0.5,
                                                 borderRadius: 1,
-                                                bgcolor: "rgba(255,255,255,0.75)",
-                                                border: "1px dashed rgba(0,0,0,0.25)",
+                                                bgcolor: hintBg,
+                                                border: hintBorder,
                                                 pointerEvents: "none",
                                             }}
                                         >
@@ -2080,7 +2093,7 @@ export default function TemplateEditor({
                                             sx={{
                                                 position: "absolute",
                                                 inset: 0,
-                                                border: "2px solid rgba(25,118,210,0.6)",
+                                                border: `2px solid ${alpha(selectedBorderColor, isDark ? 0.7 : 0.6)}`,
                                                 borderRadius: 2,
                                             }}
                                         />
@@ -2099,10 +2112,10 @@ export default function TemplateEditor({
                                                 size="small"
                                                 onClick={deleteSelected}
                                                 sx={{
-                                                    bgcolor: "#fff",
-                                                    border: "1px solid rgba(0,0,0,0.15)",
-                                                    boxShadow: "0 6px 20px rgba(0,0,0,0.15)",
-                                                    "&:hover": { bgcolor: "#fff" },
+                                                    bgcolor: "background.paper",
+                                                    border: `1px solid ${alpha(theme.palette.text.primary, isDark ? 0.28 : 0.15)}`,
+                                                    boxShadow: `0 6px 20px ${alpha("#000000", isDark ? 0.45 : 0.15)}`,
+                                                    "&:hover": { bgcolor: "background.paper" },
                                                 }}
                                                 title="Delete selected"
                                             >
@@ -2175,10 +2188,14 @@ export default function TemplateEditor({
                                             onResizeStop={onResizeStop}
                                             // ✅ no dotted lines / borders in preview
                                             style={{
-                                                border: previewMode ? "none" : isSelected ? "2px solid #1976d2" : "1px dashed rgba(0,0,0,0.2)",
-                                                boxShadow: previewMode ? "none" : isSelected ? "0 0 0 3px rgba(25,118,210,0.15)" : "none",
+                                                border: previewMode
+                                                    ? "none"
+                                                    : isSelected
+                                                        ? `2px solid ${selectedBorderColor}`
+                                                        : `1px dashed ${alpha(theme.palette.text.primary, isDark ? 0.35 : 0.2)}`,
+                                                boxShadow: previewMode ? "none" : isSelected ? `0 0 0 3px ${selectedGlowColor}` : "none",
                                                 borderRadius: previewMode ? 0 : 6,
-                                                background: previewMode ? "transparent" : isSelected ? "rgba(25,118,210,0.04)" : "transparent",
+                                                background: previewMode ? "transparent" : isSelected ? selectedFillColor : "transparent",
                                                 minHeight: isLine ? `${minHitPx}px` : undefined,
                                                 pointerEvents: previewMode ? "none" : "auto", // ✅ preview truly non-interactive
                                             }}

@@ -11,6 +11,7 @@ import {
     Tooltip,
     Typography,
 } from "@mui/material";
+import { alpha, useTheme } from "@mui/material/styles";
 import LockIcon from "@mui/icons-material/Lock";
 import LockOpenIcon from "@mui/icons-material/LockOpen";
 import AddPhotoAlternateIcon from "@mui/icons-material/AddPhotoAlternate";
@@ -204,6 +205,8 @@ export function BlockRenderer({
     onCommitText: (text: string) => void;
     onCancelEdit: () => void;
 }) {
+    const theme = useTheme();
+    const isDark = theme.palette.mode === "dark";
     function readPath(data: unknown, path: string): unknown {
         const key = String(path ?? "").trim();
         if (!key) return undefined;
@@ -472,7 +475,7 @@ export function BlockRenderer({
                     sx={{
                         width: "100%",
                         height: "100%",
-                        bgcolor: url ? "transparent" : "rgba(0,0,0,0.05)",
+                        bgcolor: url ? "transparent" : alpha(theme.palette.text.primary, isDark ? 0.16 : 0.05),
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
@@ -707,6 +710,7 @@ export function Inspector({
     onSendToBack: () => void;
     onBringToFront: () => void;
 }) {
+    const theme = useTheme();
     const s = block.style;
     const locked = Boolean((block as any).locked);
     const imageUploadInputRef = useRef<HTMLInputElement | null>(null);
@@ -912,8 +916,9 @@ export function Inspector({
                                 width: "100%",
                                 height: 120,
                                 borderRadius: 1,
-                                border: "1px solid rgba(0,0,0,0.15)",
-                                bgcolor: "rgba(0,0,0,0.03)",
+                                border: "1px solid",
+                                borderColor: "divider",
+                                bgcolor: alpha(theme.palette.text.primary, theme.palette.mode === "dark" ? 0.12 : 0.03),
                                 overflow: "hidden",
                             }}
                         >

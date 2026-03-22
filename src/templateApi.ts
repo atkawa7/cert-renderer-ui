@@ -66,6 +66,9 @@ export type CertificateSummary = {
     programName?: string | null;
     programCode?: string | null;
     organizationName?: string | null;
+    institutionId?: string | null;
+    institutionDomain?: string | null;
+    issueUrl?: string | null;
     fileName: string;
     createdAt: string;
     updatedAt: string;
@@ -73,6 +76,40 @@ export type CertificateSummary = {
 
 export type CertificateDetail = CertificateSummary & {
     data: unknown;
+};
+
+export type CertificateCredential = {
+    "@context"?: string[];
+    type?: string[];
+    id?: string;
+    issuer?: string;
+    issuanceDate?: string;
+    credentialSubject?: Record<string, unknown>;
+    proof?: {
+        type?: string;
+        proofPurpose?: string;
+        verificationMethod?: string;
+        created?: string;
+        jwt?: string;
+    };
+};
+
+export type InstitutionSummary = {
+    id: string;
+    name: string;
+    domain: string;
+    issuePath: string;
+    issueUrl: string;
+    verified: boolean;
+    verifiedAt?: string | null;
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type InstitutionDetail = InstitutionSummary & {
+    verificationHost: string;
+    verificationRecordName: string;
+    verificationRecordValue: string;
 };
 
 const API_BASE = appConfig.rendererApiBase;
@@ -173,6 +210,50 @@ export async function listCertificates(query = "", page = 0, size = 50): Promise
 
 export async function getCertificateById(id: string): Promise<CertificateDetail> {
     return await apiFetch<CertificateDetail>(`/certificates/${id}`);
+}
+
+export async function getCertificateCredential(id: string): Promise<CertificateCredential> {
+    return await apiFetch<CertificateCredential>(`/certificates/${id}/credential`);
+}
+
+export async function listInstitutions(query = "", page = 0, size = 50): Promise<InstitutionSummary[]> {
+    const params = new URLSearchParams();
+    if (query.trim()) params.set("query", query.trim());
+    params.set("page", String(page));
+    params.set("size", String(size));
+    const data = await apiFetch<PageResponse<InstitutionSummary>>(`/institutions?${params.toString()}`);
+    return data.content ?? [];
+}
+
+export async function createInstitution(payload: {
+    name: string;
+    domain: string;
+    issuePath: string;
+}): Promise<InstitutionDetail> {
+    return await apiFetch<InstitutionDetail>("/institutions", {
+        method: "POST",
+        body: JSON.stringify(payload),
+    });
+}
+
+export async function updateInstitutionById(
+    id: string,
+    payload: {
+        name: string;
+        domain: string;
+        issuePath: string;
+    }
+): Promise<InstitutionDetail> {
+    return await apiFetch<InstitutionDetail>(`/institutions/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(payload),
+    });
+}
+
+export async function verifyInstitutionById(id: string): Promise<InstitutionDetail> {
+    return await apiFetch<InstitutionDetail>(`/institutions/${id}/verify`, {
+        method: "POST",
+    });
 }
 
 export async function createTemplate(payload: {

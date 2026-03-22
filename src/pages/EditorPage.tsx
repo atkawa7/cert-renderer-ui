@@ -451,7 +451,7 @@ export default function EditorPage({
                 downloadRenderedFoLabel={downloadingRenderedFo ? "Downloading FO..." : "Download rendered FO"}
                 onDownloadTemplate={handleDownloadTemplate}
                 downloadButtonLabel={downloading ? "Downloading..." : "Download template"}
-                defaultRenderDataJson={`{\n  "recipient": {\n    "firstName": "Jane",\n    "lastName": "Doe"\n  },\n  "certificate": {\n    "uuid": "CERT-2026-0001",\n    "reference": "REF-2026-0001",\n    "issued_on": "2026-03-07"\n  },\n  "program": {\n    "name": "Advanced Document Rendering",\n    "code": "ADR-101"\n  },\n  "institution": {\n    "name": "Dokuma Institute"\n  }\n}`}
+                defaultRenderDataJson={`{\n  "recipient": {\n    "firstName": "Jane",\n    "lastName": "Doe"\n  },\n  "certificate": {\n    "uuid": "CERT-2026-0001",\n    "reference": "REF-2026-0001",\n    "issued_on": "2026-03-07"\n  },\n  "program": {\n    "name": "Advanced Document Rendering",\n    "code": "ADR-101"\n  },\n  "institution": {\n    "domain": "certificates.example.edu"\n  }\n}`}
                 onConvertToDesign={handleConvertTemplateToDesign}
                 onBackToDesign={
                     sourceDesignId

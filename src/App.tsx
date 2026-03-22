@@ -1,11 +1,15 @@
 import { useState } from "react";
-import { AppBar, Box, Divider, Drawer, IconButton, List, ListItemButton, ListItemText, Toolbar, Tooltip, Typography, useMediaQuery, useTheme, type PaletteMode } from "@mui/material";
+import { AppBar, Box, Collapse, Divider, Drawer, IconButton, List, ListItemButton, ListItemText, Toolbar, Tooltip, Typography, useMediaQuery, useTheme, type PaletteMode } from "@mui/material";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import CollectionsOutlinedIcon from "@mui/icons-material/CollectionsOutlined";
 import BorderColorOutlinedIcon from "@mui/icons-material/BorderColorOutlined";
 import ImageOutlinedIcon from "@mui/icons-material/ImageOutlined";
 import WorkspacePremiumOutlinedIcon from "@mui/icons-material/WorkspacePremiumOutlined";
+import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
 import QrCode2OutlinedIcon from "@mui/icons-material/QrCode2Outlined";
+import BuildOutlinedIcon from "@mui/icons-material/BuildOutlined";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import MenuIcon from "@mui/icons-material/Menu";
 import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeOutlinedIcon from "@mui/icons-material/LightModeOutlined";
@@ -20,6 +24,7 @@ import Base64ImageViewerPage from "./pages/Base64ImageViewerPage";
 import QrDecoderPage from "./pages/QrDecoderPage";
 import CertificatesPage from "./pages/CertificatesPage";
 import CertificateViewerPage from "./pages/CertificateViewerPage";
+import InstitutionsPage from "./pages/InstitutionsPage";
 
 const SIDEBAR_WIDTH = 260;
 const SIDEBAR_WIDTH_COMPACT = 196;
@@ -36,6 +41,7 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
     const sidebarWidth = isCompactNav ? SIDEBAR_WIDTH_COMPACT : SIDEBAR_WIDTH;
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
     const [sidebarHidden, setSidebarHidden] = useState(false);
+    const [toolsOpen, setToolsOpen] = useState(true);
     const effectiveSidebarWidth = sidebarHidden ? 0 : sidebarWidth;
 
     const navContent = (
@@ -66,13 +72,6 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                         primaryTypographyProps={{ fontSize: isCompactNav ? "0.9rem" : "1rem" }}
                     />
                 </ListItemButton>
-                <ListItemButton component={RouterLink} to="/signature" onClick={() => setMobileNavOpen(false)}>
-                    <BorderColorOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
-                    <ListItemText
-                        primary="Signature"
-                        primaryTypographyProps={{ fontSize: isCompactNav ? "0.9rem" : "1rem" }}
-                    />
-                </ListItemButton>
                 <ListItemButton component={RouterLink} to="/certificates" onClick={() => setMobileNavOpen(false)}>
                     <WorkspacePremiumOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
                     <ListItemText
@@ -80,20 +79,49 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                         primaryTypographyProps={{ fontSize: isCompactNav ? "0.9rem" : "1rem" }}
                     />
                 </ListItemButton>
-                <ListItemButton component={RouterLink} to="/base64-image" onClick={() => setMobileNavOpen(false)}>
-                    <ImageOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
+                <ListItemButton component={RouterLink} to="/institutions" onClick={() => setMobileNavOpen(false)}>
+                    <BusinessOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
                     <ListItemText
-                        primary="Base64 Image"
+                        primary="Institutions"
                         primaryTypographyProps={{ fontSize: isCompactNav ? "0.9rem" : "1rem" }}
                     />
                 </ListItemButton>
-                <ListItemButton component={RouterLink} to="/qr-decoder" onClick={() => setMobileNavOpen(false)}>
-                    <QrCode2OutlinedIcon fontSize="small" sx={{ mr: 1 }} />
+            </List>
+            <Divider />
+            <List>
+                <ListItemButton onClick={() => setToolsOpen((v) => !v)}>
+                    <BuildOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
                     <ListItemText
-                        primary="QR Decoder"
+                        primary="Tools"
                         primaryTypographyProps={{ fontSize: isCompactNav ? "0.9rem" : "1rem" }}
                     />
+                    {toolsOpen ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
                 </ListItemButton>
+                <Collapse in={toolsOpen} timeout="auto" unmountOnExit>
+                    <List disablePadding>
+                        <ListItemButton component={RouterLink} to="/signature" onClick={() => setMobileNavOpen(false)} sx={{ pl: 4 }}>
+                            <BorderColorOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
+                            <ListItemText
+                                primary="Signature"
+                                primaryTypographyProps={{ fontSize: isCompactNav ? "0.9rem" : "1rem" }}
+                            />
+                        </ListItemButton>
+                        <ListItemButton component={RouterLink} to="/base64-image" onClick={() => setMobileNavOpen(false)} sx={{ pl: 4 }}>
+                            <ImageOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
+                            <ListItemText
+                                primary="Base64 Image"
+                                primaryTypographyProps={{ fontSize: isCompactNav ? "0.9rem" : "1rem" }}
+                            />
+                        </ListItemButton>
+                        <ListItemButton component={RouterLink} to="/qr-decoder" onClick={() => setMobileNavOpen(false)} sx={{ pl: 4 }}>
+                            <QrCode2OutlinedIcon fontSize="small" sx={{ mr: 1 }} />
+                            <ListItemText
+                                primary="QR Decoder"
+                                primaryTypographyProps={{ fontSize: isCompactNav ? "0.9rem" : "1rem" }}
+                            />
+                        </ListItemButton>
+                    </List>
+                </Collapse>
             </List>
         </>
     );
@@ -146,6 +174,7 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                     <Route path="/designs/:id" element={<DesignDetailsPage />} />
                     <Route path="/signature" element={<SignaturePage />} />
                     <Route path="/certificates" element={<CertificatesPage />} />
+                    <Route path="/institutions" element={<InstitutionsPage />} />
                     <Route path="/certificates/:id/view" element={<CertificateViewerPage />} />
                     <Route path="/base64-image" element={<Base64ImageViewerPage />} />
                     <Route path="/qr-decoder" element={<QrDecoderPage />} />

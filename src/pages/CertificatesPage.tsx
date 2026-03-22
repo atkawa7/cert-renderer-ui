@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Box, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Stack, TextField, Typography, useTheme } from "@mui/material";
 import AntBtn from "../components/AntBtn";
-import { downloadCertificateById, getCertificateById, listCertificates, type CertificateDetail, type CertificateSummary } from "../templateApi";
+import QRCode from "qrcode";
+import { appConfig } from "../appConfig";
+import { downloadCertificateById, getCertificateById, getCertificateCredential, listCertificates, type CertificateCredential, type CertificateDetail, type CertificateSummary } from "../templateApi";
 import { useNotifications } from "../components/NotificationsProvider";
 import { useNavigate } from "react-router-dom";
 
@@ -22,6 +24,9 @@ export default function CertificatesPage() {
     const [items, setItems] = useState<CertificateSummary[]>([]);
     const [detail, setDetail] = useState<CertificateDetail | null>(null);
     const [detailLoading, setDetailLoading] = useState(false);
+    const [credential, setCredential] = useState<CertificateCredential | null>(null);
+    const [credentialLoading, setCredentialLoading] = useState(false);
+    const [credentialQrDataUrl, setCredentialQrDataUrl] = useState<string | null>(null);
 
     async function loadCertificates() {
         setLoading(true);
@@ -55,14 +60,50 @@ export default function CertificatesPage() {
 
     async function openDetails(item: CertificateSummary) {
         setDetailLoading(true);
+        setCredentialLoading(true);
+        setCredential(null);
+        setCredentialQrDataUrl(null);
         try {
-            setDetail(await getCertificateById(item.id));
+            const [detailResult, credentialResult] = await Promise.all([
+                getCertificateById(item.id),
+                getCertificateCredential(item.id),
+            ]);
+            setDetail(detailResult);
+            setCredential(credentialResult);
         } catch (err: any) {
             notifications.error(err?.message || "Failed to load certificate details", { title: "Certificates" });
         } finally {
             setDetailLoading(false);
+            setCredentialLoading(false);
         }
     }
+
+    const credentialApiUrl = useMemo(() => {
+        if (!detail?.id) return "";
+        return `${appConfig.rendererApiBase}/certificates/${detail.id}/credential`;
+    }, [detail?.id]);
+
+    useEffect(() => {
+        if (!credential || !credentialApiUrl) {
+            setCredentialQrDataUrl(null);
+            return;
+        }
+        let cancelled = false;
+        QRCode.toDataURL(credentialApiUrl, {
+            errorCorrectionLevel: "M",
+            margin: 1,
+            width: 220,
+        })
+            .then((dataUrl) => {
+                if (!cancelled) setCredentialQrDataUrl(dataUrl);
+            })
+            .catch(() => {
+                if (!cancelled) setCredentialQrDataUrl(null);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [credential, credentialApiUrl]);
 
     useEffect(() => {
         void loadCertificates();
@@ -164,6 +205,55 @@ export default function CertificatesPage() {
                             <Typography variant="body2">
                                 File: {detail.fileName}
                             </Typography>
+                            <Divider />
+                            <Typography variant="subtitle2">Verified credential</Typography>
+                            {credentialLoading ? (
+                                <Stack direction="row" spacing={1} alignItems="center">
+                                    <CircularProgress size={16} />
+                                    <Typography variant="body2">Loading credential...</Typography>
+                                </Stack>
+                            ) : credential ? (
+                                <Stack spacing={1.2}>
+                                    <Typography variant="body2" color="text.secondary">
+                                        Scan this QR code to access the credential endpoint.
+                                    </Typography>
+                                    {credentialQrDataUrl ? (
+                                        <Box
+                                            component="img"
+                                            src={credentialQrDataUrl}
+                                            alt="Credential QR code"
+                                            sx={{ width: 220, height: 220, borderRadius: 1, border: "1px solid", borderColor: "divider", bgcolor: "#fff" }}
+                                        />
+                                    ) : (
+                                        <Typography variant="body2" color="text.secondary">
+                                            QR generation failed.
+                                        </Typography>
+                                    )}
+                                    <Typography variant="caption" sx={{ wordBreak: "break-all" }}>
+                                        {credentialApiUrl}
+                                    </Typography>
+                                    <Box>
+                                        <AntBtn
+                                            antType="text"
+                                            onClick={() => {
+                                                const jwt = credential.proof?.jwt;
+                                                if (!jwt) {
+                                                    notifications.error("Credential JWT is missing", { title: "Certificates" });
+                                                    return;
+                                                }
+                                                void navigator.clipboard.writeText(jwt);
+                                                notifications.success("Credential JWT copied", { title: "Certificates" });
+                                            }}
+                                        >
+                                            Copy credential JWT
+                                        </AntBtn>
+                                    </Box>
+                                </Stack>
+                            ) : (
+                                <Typography variant="body2" color="text.secondary">
+                                    No credential available.
+                                </Typography>
+                            )}
                             <Divider />
                             <Typography variant="subtitle2">Stored render arguments</Typography>
                             <Box
