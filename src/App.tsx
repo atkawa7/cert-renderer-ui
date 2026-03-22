@@ -229,13 +229,16 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
             <Box component="main" sx={{ flex: 1, minWidth: 0, minHeight: "100vh" }}>
                 <Box
                     sx={{
-                        position: "fixed",
-                        top: 10,
-                        right: 10,
-                        zIndex: (muiTheme) => muiTheme.zIndex.drawer + 2,
+                        position: "sticky",
+                        top: 0,
+                        zIndex: (muiTheme) => muiTheme.zIndex.appBar,
                         display: "flex",
+                        justifyContent: "flex-end",
                         alignItems: "center",
                         gap: 1,
+                        px: 2,
+                        py: 1,
+                        bgcolor: "background.default",
                     }}
                 >
                     <Tooltip title={themeMode === "light" ? "Switch to dark mode" : "Switch to light mode"}>
