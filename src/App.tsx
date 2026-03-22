@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AppBar, Box, CircularProgress, Collapse, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Drawer, IconButton, List, ListItemButton, ListItemText, Stack, Toolbar, Tooltip, Typography, useMediaQuery, useTheme, type PaletteMode } from "@mui/material";
+import { AppBar, Box, CircularProgress, Collapse, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Drawer, IconButton, List, ListItemButton, ListItemText, Paper, Stack, Toolbar, Tooltip, Typography, useMediaQuery, useTheme, type PaletteMode } from "@mui/material";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import CollectionsOutlinedIcon from "@mui/icons-material/CollectionsOutlined";
 import BorderColorOutlinedIcon from "@mui/icons-material/BorderColorOutlined";
@@ -35,12 +35,10 @@ import LogoutPage from "./pages/LogoutPage";
 import ProfilePage from "./pages/ProfilePage";
 import AppSetupPage from "./pages/AppSetupPage";
 import AntBtn from "./components/AntBtn";
-import { ensureActiveWorkspace, getCurrentApiKey, getCurrentUserId, getCurrentWorkspaceId, setCurrentApiKey, subscribeSessionChange } from "./templateApi";
+import { ensureActiveWorkspace, getAuthPreferences, getCurrentApiKey, getCurrentUserId, getCurrentWorkspaceId, setCurrentApiKey, subscribeSessionChange, updateAuthPreferences } from "./templateApi";
 
 const SIDEBAR_WIDTH = 260;
 const SIDEBAR_WIDTH_COMPACT = 196;
-const ONBOARDING_KEY_PREFIX = "renderer:onboarding:v1:";
-
 type AppProps = {
     themeMode: PaletteMode;
     onToggleTheme: () => void;
@@ -56,6 +54,8 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
     const [toolsOpen, setToolsOpen] = useState(true);
     const [sessionVersion, setSessionVersion] = useState(0);
     const [workspaceReady, setWorkspaceReady] = useState(false);
+    const [preferencesReady, setPreferencesReady] = useState(false);
+    const [cookieConsentCompleted, setCookieConsentCompleted] = useState(false);
     const [onboardingOpen, setOnboardingOpen] = useState(false);
     const [onboardingStep, setOnboardingStep] = useState(0);
     const effectiveSidebarWidth = sidebarHidden ? 0 : sidebarWidth;
@@ -110,13 +110,30 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
 
     useEffect(() => {
         if (!isAuthenticated || !workspaceReady) return;
-        const key = `${ONBOARDING_KEY_PREFIX}${activeUserId}`;
-        const completed = window.localStorage.getItem(key) === "true";
-        if (!completed) {
-            setOnboardingStep(0);
-            setOnboardingOpen(true);
+        let cancelled = false;
+        async function loadPreferences() {
+            setPreferencesReady(false);
+            try {
+                const preferences = await getAuthPreferences();
+                if (cancelled) return;
+                setCookieConsentCompleted(preferences.cookieConsentCompleted);
+                if (!preferences.onboardingCompleted) {
+                    setOnboardingStep(0);
+                    setOnboardingOpen(true);
+                } else {
+                    setOnboardingOpen(false);
+                }
+            } finally {
+                if (!cancelled) {
+                    setPreferencesReady(true);
+                }
+            }
         }
-    }, [isAuthenticated, workspaceReady, activeUserId]);
+        void loadPreferences();
+        return () => {
+            cancelled = true;
+        };
+    }, [isAuthenticated, workspaceReady, activeUserId, sessionVersion]);
 
     if (!isAuthenticated) {
         return (
@@ -139,7 +156,7 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
         );
     }
 
-    if (!workspaceReady) {
+    if (!workspaceReady || !preferencesReady) {
         return (
             <Box sx={{ minHeight: "100vh", display: "grid", placeItems: "center", bgcolor: "background.default", p: 2 }}>
                 <Stack direction="row" spacing={1.2} alignItems="center">
@@ -359,8 +376,8 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                     ) : (
                         <AntBtn
                             antType="primary"
-                            onClick={() => {
-                                window.localStorage.setItem(`${ONBOARDING_KEY_PREFIX}${activeUserId}`, "true");
+                            onClick={async () => {
+                                await updateAuthPreferences({ onboardingCompleted: true });
                                 setOnboardingOpen(false);
                             }}
                         >
@@ -369,6 +386,37 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                     )}
                 </DialogActions>
             </Dialog>
+            {!cookieConsentCompleted ? (
+                <Paper
+                    elevation={2}
+                    sx={{
+                        position: "fixed",
+                        left: 16,
+                        right: 16,
+                        bottom: 16,
+                        p: 2,
+                        zIndex: (muiTheme) => muiTheme.zIndex.modal + 1,
+                        border: "1px solid",
+                        borderColor: "divider",
+                    }}
+                >
+                    <Stack direction={{ xs: "column", md: "row" }} spacing={1.2} alignItems={{ md: "center" }}>
+                        <Typography variant="body2" sx={{ flex: 1 }}>
+                            This app uses cookies for session and preference persistence. Accept to continue.
+                        </Typography>
+                        <AntBtn
+                            antType="primary"
+                            onClick={async () => {
+                                await updateAuthPreferences({ cookieConsentCompleted: true });
+                                document.cookie = "cookie-consent=completed; Max-Age=31536000; Path=/; SameSite=Lax";
+                                setCookieConsentCompleted(true);
+                            }}
+                        >
+                            Accept Cookies
+                        </AntBtn>
+                    </Stack>
+                </Paper>
+            ) : null}
         </Box>
     );
 }

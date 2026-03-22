@@ -158,6 +158,13 @@ export type AppSetupStatus = {
     registrationMode: "self" | "invitation" | string;
 };
 
+export type AuthUserPreferences = {
+    onboardingCompleted: boolean;
+    onboardingCompletedAt?: string | null;
+    cookieConsentCompleted: boolean;
+    cookieConsentCompletedAt?: string | null;
+};
+
 const API_BASE = appConfig.rendererApiBase;
 const USER_ID_KEY = "renderer:userId";
 const WORKSPACE_ID_KEY = "renderer:workspaceId";
@@ -729,6 +736,20 @@ export async function createInvitation(username: string): Promise<{ username: st
         throw new Error(text || `Invitation failed (${response.status})`);
     }
     return (await response.json()) as { username: string; invitationToken: string };
+}
+
+export async function getAuthPreferences(): Promise<AuthUserPreferences> {
+    return await apiFetch<AuthUserPreferences>("/auth/preferences");
+}
+
+export async function updateAuthPreferences(payload: {
+    onboardingCompleted?: boolean;
+    cookieConsentCompleted?: boolean;
+}): Promise<AuthUserPreferences> {
+    return await apiFetch<AuthUserPreferences>("/auth/preferences", {
+        method: "POST",
+        body: JSON.stringify(payload),
+    });
 }
 
 export async function createWorkspace(payload: { name: string }): Promise<WorkspaceSummary> {
