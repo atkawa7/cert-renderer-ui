@@ -26,6 +26,7 @@ import RegisterPage from "./pages/RegisterPage";
 import LogoutPage from "./pages/LogoutPage";
 import ProfilePage from "./pages/ProfilePage";
 import AppSetupPage from "./pages/AppSetupPage";
+import AuditLogsPage from "./pages/AuditLogsPage";
 import AntBtn from "./components/AntBtn";
 import { ensureActiveWorkspace, getAuthPreferences, getCurrentApiKey, getCurrentUserId, getCurrentWorkspaceId, listWorkspaces, setCurrentApiKey, subscribeSessionChange, updateAuthPreferences } from "./templateApi";
 
@@ -60,6 +61,7 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
     const profileMenuOpen = Boolean(profileMenuAnchor);
     const toolsMenuOpen = Boolean(toolsMenuAnchor);
     const avatarLabel = (activeUserId || "U").slice(0, 1).toUpperCase();
+    const isDevMode = import.meta.env.DEV;
     const isEditorRoute =
         location.pathname === "/templates/new"
         || (location.pathname.startsWith("/templates/") && location.pathname.endsWith("/edit"));
@@ -200,14 +202,28 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
     const navContent = (
         <>
             <Toolbar sx={{ minHeight: isCompactNav ? 52 : 64 }}>
-                <Typography variant="h6" sx={{ fontWeight: 700, flexGrow: 1 }}>
-                    Certificates
-                </Typography>
-                <Tooltip title={themeMode === "light" ? "Switch to dark mode" : "Switch to light mode"}>
-                    <IconButton onClick={onToggleTheme} aria-label="Toggle theme">
-                        {themeMode === "light" ? <DarkModeOutlinedIcon fontSize="small" /> : <LightModeOutlinedIcon fontSize="small" />}
-                    </IconButton>
-                </Tooltip>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ flexGrow: 1 }}>
+                    <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                        Certificates
+                    </Typography>
+                    {isDevMode ? (
+                        <Box
+                            component="span"
+                            sx={{
+                                px: 0.9,
+                                py: 0.25,
+                                borderRadius: 1,
+                                fontSize: "0.72rem",
+                                letterSpacing: 0.6,
+                                fontWeight: 700,
+                                bgcolor: "warning.main",
+                                color: "warning.contrastText",
+                            }}
+                        >
+                            DEV
+                        </Box>
+                    ) : null}
+                </Stack>
             </Toolbar>
             <Divider />
             <List>
@@ -315,6 +331,9 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                         <MenuItem component={RouterLink} to="/profile" onClick={() => setProfileMenuAnchor(null)}>
                             Profile
                         </MenuItem>
+                        <MenuItem component={RouterLink} to="/audits" onClick={() => setProfileMenuAnchor(null)}>
+                            Audit Logs
+                        </MenuItem>
                         <MenuItem component={RouterLink} to="/workspaces" onClick={() => setProfileMenuAnchor(null)}>
                             Workspaces
                         </MenuItem>
@@ -387,6 +406,7 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                     <Route path="/institutions" element={<InstitutionsPage />} />
                     <Route path="/workspaces" element={<WorkspacesPage />} />
                     <Route path="/profile" element={<ProfilePage />} />
+                    <Route path="/audits" element={<AuditLogsPage />} />
                     <Route path="/logout" element={<LogoutPage />} />
                     <Route path="/certificates/:id/view" element={<CertificateViewerPage />} />
                     <Route path="/base64-image" element={<Base64ImageViewerPage />} />

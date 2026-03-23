@@ -137,6 +137,21 @@ export type WorkspaceMembership = {
     updatedAt: string;
 };
 
+export type AuditEventSummary = {
+    id: string;
+    action: string;
+    entityType: string;
+    entityId?: string | null;
+    actorUserId?: string | null;
+    workspaceId?: string | null;
+    requestPath: string;
+    statusCode: number;
+    createdById?: string | null;
+    modifiedById?: string | null;
+    createdAt: string;
+    updatedAt: string;
+};
+
 export type AuthResponse = {
     userId: string;
     username: string;
@@ -269,12 +284,48 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     });
 
     if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(text || `Request failed (${res.status})`);
+        throw new Error(await parseErrorMessage(res, `Request failed (${res.status})`));
     }
 
     if (res.status === 204) return undefined as T;
     return (await res.json()) as T;
+}
+
+async function parseErrorMessage(response: Response, fallback: string): Promise<string> {
+    const raw = (await response.text().catch(() => "")).trim();
+    if (!raw) {
+        return fallback;
+    }
+
+    try {
+        const parsed = JSON.parse(raw) as unknown;
+        if (typeof parsed === "string") {
+            return parsed.trim() || fallback;
+        }
+        if (parsed && typeof parsed === "object") {
+            const payload = parsed as Record<string, unknown>;
+            const detail = typeof payload.detail === "string" ? payload.detail.trim() : "";
+            if (detail) {
+                return detail;
+            }
+            const message = typeof payload.message === "string" ? payload.message.trim() : "";
+            if (message) {
+                return message;
+            }
+            const title = typeof payload.title === "string" ? payload.title.trim() : "";
+            if (title) {
+                return title;
+            }
+            const error = typeof payload.error === "string" ? payload.error.trim() : "";
+            if (error) {
+                return error;
+            }
+        }
+    } catch {
+        // Fall through and return the raw text body.
+    }
+
+    return raw;
 }
 
 function parseDownloadFileName(headerValue: string | null, fallbackBaseName: string, extension: string): string {
@@ -353,6 +404,21 @@ export async function listCertificates(query = "", page = 0, size = 50): Promise
 
 export async function getCertificateById(id: string): Promise<CertificateDetail> {
     return await apiFetch<CertificateDetail>(`/certificates/${id}`);
+}
+
+export async function getCertificatePdfBytes(id: string): Promise<Uint8Array> {
+    const res = await fetch(`${API_BASE}/certificates/${encodeURIComponent(id)}/view`, {
+        method: "GET",
+        headers: workspaceHeaders(),
+    });
+    if (!res.ok) {
+        throw new Error(await parseErrorMessage(res, `PDF fetch failed (${res.status})`));
+    }
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    if (bytes.byteLength === 0) {
+        throw new Error("PDF is empty.");
+    }
+    return bytes;
 }
 
 export async function getCertificateCredential(id: string): Promise<CertificateCredential> {
@@ -437,8 +503,7 @@ export async function downloadTemplateById(id: string, fallbackName = "template"
     });
 
     if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(text || `Download failed (${res.status})`);
+        throw new Error(await parseErrorMessage(res, `Download failed (${res.status})`));
     }
 
     return {
@@ -458,8 +523,7 @@ export async function downloadTemplate(payload: {
     });
 
     if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(text || `Download failed (${res.status})`);
+        throw new Error(await parseErrorMessage(res, `Download failed (${res.status})`));
     }
 
     return {
@@ -485,8 +549,7 @@ export async function generateCertificatePdf(payload: {
     });
 
     if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(text || `Render failed (${res.status})`);
+        throw new Error(await parseErrorMessage(res, `Render failed (${res.status})`));
     }
     return await res.blob();
 }
@@ -517,8 +580,7 @@ export async function generateCertificateBatch(payload: {
     });
 
     if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(text || `Batch render failed (${res.status})`);
+        throw new Error(await parseErrorMessage(res, `Batch render failed (${res.status})`));
     }
 
     return {
@@ -585,8 +647,7 @@ export async function downloadCertificateById(id: string, fallbackName = "certif
     });
 
     if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(text || `Download failed (${res.status})`);
+        throw new Error(await parseErrorMessage(res, `Download failed (${res.status})`));
     }
 
     return {
@@ -608,8 +669,7 @@ export async function renderTemplateFo(payload: {
     });
 
     if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(text || `Render failed (${res.status})`);
+        throw new Error(await parseErrorMessage(res, `Render failed (${res.status})`));
     }
 
     return {
@@ -626,6 +686,33 @@ export async function listWorkspaces(): Promise<WorkspaceSummary[]> {
     return await apiFetch<WorkspaceSummary[]>("/workspaces");
 }
 
+export async function listAuditEvents(params?: {
+    action?: string;
+    entityType?: string;
+    entityId?: string;
+    actorUserId?: string;
+    workspaceId?: string;
+    page?: number;
+    size?: number;
+}): Promise<PagedResult<AuditEventSummary>> {
+    const query = new URLSearchParams();
+    if (params?.action?.trim()) query.set("action", params.action.trim());
+    if (params?.entityType?.trim()) query.set("entityType", params.entityType.trim());
+    if (params?.entityId?.trim()) query.set("entityId", params.entityId.trim());
+    if (params?.actorUserId?.trim()) query.set("actorUserId", params.actorUserId.trim());
+    if (params?.workspaceId?.trim()) query.set("workspaceId", params.workspaceId.trim());
+    query.set("page", String(params?.page ?? 0));
+    query.set("size", String(params?.size ?? 50));
+    const data = await apiFetch<PageResponse<AuditEventSummary>>(`/audits?${query.toString()}`);
+    return {
+        items: data.content ?? [],
+        page: data.number ?? 0,
+        size: data.size ?? 50,
+        totalElements: data.totalElements ?? 0,
+        totalPages: data.totalPages ?? 0,
+    };
+}
+
 export async function register(payload: { username: string; password: string; invitationToken?: string }): Promise<AuthResponse> {
     const response = await fetch(`${API_BASE}/auth/register`, {
         method: "POST",
@@ -633,8 +720,7 @@ export async function register(payload: { username: string; password: string; in
         body: JSON.stringify(payload),
     });
     if (!response.ok) {
-        const text = await response.text().catch(() => "");
-        throw new Error(text || `Register failed (${response.status})`);
+        throw new Error(await parseErrorMessage(response, `Register failed (${response.status})`));
     }
     const auth = (await response.json()) as AuthResponse;
     setCurrentApiKey(auth.apiKey);
@@ -649,8 +735,7 @@ export async function login(payload: { username: string; password: string }): Pr
         body: JSON.stringify(payload),
     });
     if (!response.ok) {
-        const text = await response.text().catch(() => "");
-        throw new Error(text || `Login failed (${response.status})`);
+        throw new Error(await parseErrorMessage(response, `Login failed (${response.status})`));
     }
     const auth = (await response.json()) as AuthResponse;
     setCurrentApiKey(auth.apiKey);
@@ -666,8 +751,7 @@ export async function logout(): Promise<void> {
         headers: { "X-API-Key": apiKey, Authorization: `Bearer ${apiKey}` },
     });
     if (!response.ok) {
-        const text = await response.text().catch(() => "");
-        throw new Error(text || `Logout failed (${response.status})`);
+        throw new Error(await parseErrorMessage(response, `Logout failed (${response.status})`));
     }
     setCurrentApiKey(null);
     setCurrentWorkspaceId(null);
@@ -696,8 +780,7 @@ export async function currentUser(): Promise<AuthUser> {
         headers: { "X-API-Key": apiKey, Authorization: `Bearer ${apiKey}` },
     });
     if (!response.ok) {
-        const text = await response.text().catch(() => "");
-        throw new Error(text || `Auth check failed (${response.status})`);
+        throw new Error(await parseErrorMessage(response, `Auth check failed (${response.status})`));
     }
     return (await response.json()) as AuthUser;
 }
@@ -708,8 +791,7 @@ export async function appSetupStatus(): Promise<AppSetupStatus> {
         headers: { "Content-Type": "application/json" },
     });
     if (!response.ok) {
-        const text = await response.text().catch(() => "");
-        throw new Error(text || `Setup status failed (${response.status})`);
+        throw new Error(await parseErrorMessage(response, `Setup status failed (${response.status})`));
     }
     return (await response.json()) as AppSetupStatus;
 }
@@ -725,8 +807,7 @@ export async function initializeAppSetup(payload: {
         body: JSON.stringify(payload),
     });
     if (!response.ok) {
-        const text = await response.text().catch(() => "");
-        throw new Error(text || `Setup initialization failed (${response.status})`);
+        throw new Error(await parseErrorMessage(response, `Setup initialization failed (${response.status})`));
     }
     const auth = (await response.json()) as AuthResponse;
     setCurrentApiKey(auth.apiKey);
@@ -747,8 +828,7 @@ export async function createInvitation(username: string): Promise<{ username: st
         body: JSON.stringify({ username }),
     });
     if (!response.ok) {
-        const text = await response.text().catch(() => "");
-        throw new Error(text || `Invitation failed (${response.status})`);
+        throw new Error(await parseErrorMessage(response, `Invitation failed (${response.status})`));
     }
     return (await response.json()) as { username: string; invitationToken: string };
 }

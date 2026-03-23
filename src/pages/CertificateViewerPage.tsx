@@ -4,7 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { GlobalWorkerOptions, getDocument, type PDFDocumentProxy } from "pdfjs-dist";
 import pdfWorkerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import AntBtn from "../components/AntBtn";
-import { certificateViewUrl } from "../templateApi";
+import { getCertificatePdfBytes } from "../templateApi";
 
 GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
 
@@ -21,8 +21,11 @@ export default function CertificateViewerPage() {
     const [loading, setLoading] = useState(false);
     const [rendering, setRendering] = useState(false);
     const [error, setError] = useState<string | null>(null);
-
-    const viewerUrl = useMemo(() => (id ? certificateViewUrl(id) : ""), [id]);
+    const [pdfBytes, setPdfBytes] = useState<Uint8Array | null>(null);
+    const viewerBlobUrl = useMemo(() => {
+        if (!pdfBytes) return null;
+        return URL.createObjectURL(new Blob([pdfBytes], { type: "application/pdf" }));
+    }, [pdfBytes]);
 
     useEffect(() => {
         const element = viewerRef.current;
@@ -43,15 +46,20 @@ export default function CertificateViewerPage() {
         if (!id) return;
 
         let cancelled = false;
-        const loadingTask = getDocument({ url: viewerUrl });
+        let loadingTask: ReturnType<typeof getDocument> | null = null;
 
         (async () => {
             setLoading(true);
             setError(null);
             setPdfDoc(null);
+            setPdfBytes(null);
             setPageNumber(1);
             setTotalPages(0);
             try {
+                const bytes = await getCertificatePdfBytes(id);
+                if (cancelled) return;
+                setPdfBytes(bytes);
+                loadingTask = getDocument({ data: bytes });
                 const nextDoc = await loadingTask.promise;
                 if (cancelled) {
                     nextDoc.destroy();
@@ -72,9 +80,11 @@ export default function CertificateViewerPage() {
 
         return () => {
             cancelled = true;
-            loadingTask.destroy();
+            if (loadingTask) {
+                loadingTask.destroy();
+            }
         };
-    }, [id, viewerUrl]);
+    }, [id]);
 
     useEffect(() => {
         return () => {
@@ -83,6 +93,14 @@ export default function CertificateViewerPage() {
             }
         };
     }, [pdfDoc]);
+
+    useEffect(() => {
+        return () => {
+            if (viewerBlobUrl) {
+                URL.revokeObjectURL(viewerBlobUrl);
+            }
+        };
+    }, [viewerBlobUrl]);
 
     useEffect(() => {
         if (!pdfDoc || !canvasRef.current || totalPages === 0) return;
@@ -157,7 +175,14 @@ export default function CertificateViewerPage() {
                     </Box>
                     <Stack direction="row" spacing={1}>
                         <AntBtn onClick={() => navigate("/certificates")}>Back</AntBtn>
-                        <AntBtn onClick={() => window.open(viewerUrl, "_blank", "noopener,noreferrer")}>
+                        <AntBtn
+                            onClick={() => {
+                                if (viewerBlobUrl) {
+                                    window.open(viewerBlobUrl, "_blank", "noopener,noreferrer");
+                                }
+                            }}
+                            disabled={!viewerBlobUrl}
+                        >
                             Open in tab
                         </AntBtn>
                     </Stack>

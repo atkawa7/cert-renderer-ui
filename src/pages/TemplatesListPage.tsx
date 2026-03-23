@@ -13,7 +13,6 @@ import {
 import DownloadIcon from "@mui/icons-material/Download";
 import AntBtn from "../components/AntBtn";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
-import { appConfig } from "../appConfig";
 import { deleteTemplateById, downloadTemplateById, listTemplates, type TemplateSummary } from "../templateApi";
 import { useConfirm } from "../components/ConfirmDialogProvider";
 import { useNotifications } from "../components/NotificationsProvider";
@@ -111,9 +110,6 @@ export default function TemplatesListPage() {
             <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
                 <Box>
                     <Typography variant="h5">Templates</Typography>
-                    <Typography variant="body2" color="text.secondary">
-                        Environment: {appConfig.env} | Backend: {appConfig.rendererApiBase}
-                    </Typography>
                 </Box>
                 <Stack direction="row" spacing={1}>
                     <AntBtn antType="primary" component={RouterLink} to="/designs">Create from design</AntBtn>
