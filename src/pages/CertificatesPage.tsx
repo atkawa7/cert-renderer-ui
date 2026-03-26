@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Box, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Stack, TextField, Typography, useTheme } from "@mui/material";
+import { Alert, Box, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Stack, TextField, Typography, useTheme } from "@mui/material";
 import AntBtn from "../components/AntBtn";
 import QRCode from "qrcode";
 import { appConfig } from "../appConfig";
-import { downloadCertificateById, getCertificateById, getCertificateCredential, listCertificates, type CertificateCredential, type CertificateDetail, type CertificateSummary } from "../templateApi";
+import { currentUser, downloadCertificateById, getCertificateById, getCertificateCredential, listCertificates, type CertificateCredential, type CertificateDetail, type CertificateSummary } from "../templateApi";
 import { useNotifications } from "../components/NotificationsProvider";
 import { useNavigate } from "react-router-dom";
 
@@ -27,6 +27,7 @@ export default function CertificatesPage() {
     const [credential, setCredential] = useState<CertificateCredential | null>(null);
     const [credentialLoading, setCredentialLoading] = useState(false);
     const [credentialQrDataUrl, setCredentialQrDataUrl] = useState<string | null>(null);
+    const [exportAllowed, setExportAllowed] = useState(false);
 
     async function loadCertificates() {
         setLoading(true);
@@ -110,6 +111,22 @@ export default function CertificatesPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    useEffect(() => {
+        let cancelled = false;
+        currentUser()
+            .then((user) => {
+                if (cancelled) return;
+                setExportAllowed(String(user.subscriptionTier || "FREE").toUpperCase() === "PRO");
+            })
+            .catch(() => {
+                if (cancelled) return;
+                setExportAllowed(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
     return (
         <Box sx={{ p: 3, maxWidth: 1180, mx: "auto" }}>
             <Stack spacing={2}>
@@ -119,6 +136,11 @@ export default function CertificatesPage() {
                         Stored certificate PDFs and their render arguments.
                     </Typography>
                 </Box>
+                {!exportAllowed ? (
+                    <Alert severity="info">
+                        Free plan: certificate view and download are disabled. Upgrade to Pro to access certificate PDFs.
+                    </Alert>
+                ) : null}
 
                 <Stack direction="row" spacing={1}>
                     <TextField
@@ -166,10 +188,10 @@ export default function CertificatesPage() {
                                         <AntBtn onClick={() => void openDetails(item)}>
                                             Details
                                         </AntBtn>
-                                        <AntBtn onClick={() => navigate(`/certificates/${item.id}/view`)}>
+                                        <AntBtn onClick={() => navigate(`/certificates/${item.id}/view`)} disabled={!exportAllowed}>
                                             View PDF
                                         </AntBtn>
-                                        <AntBtn onClick={() => void downloadCertificate(item)} disabled={downloadingId === item.id}>
+                                        <AntBtn onClick={() => void downloadCertificate(item)} disabled={!exportAllowed || downloadingId === item.id}>
                                             {downloadingId === item.id ? "Downloading..." : "Download"}
                                         </AntBtn>
                                     </Stack>
@@ -276,10 +298,10 @@ export default function CertificatesPage() {
                 <DialogActions>
                     {detail && (
                         <>
-                            <AntBtn onClick={() => navigate(`/certificates/${detail.id}/view`)}>
+                            <AntBtn onClick={() => navigate(`/certificates/${detail.id}/view`)} disabled={!exportAllowed}>
                                 View PDF
                             </AntBtn>
-                            <AntBtn onClick={() => void downloadCertificate(detail)}>
+                            <AntBtn onClick={() => void downloadCertificate(detail)} disabled={!exportAllowed}>
                                 Download
                             </AntBtn>
                         </>

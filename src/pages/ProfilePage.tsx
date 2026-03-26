@@ -10,6 +10,7 @@ export default function ProfilePage() {
     const [username, setUsername] = useState("");
     const [userId, setUserId] = useState("");
     const [admin, setAdmin] = useState(false);
+    const [subscriptionTier, setSubscriptionTier] = useState("");
     const [registrationMode, setRegistrationMode] = useState("");
     const [inviteUsername, setInviteUsername] = useState("");
     const [inviteToken, setInviteToken] = useState("");
@@ -25,6 +26,7 @@ export default function ProfilePage() {
             setUsername(profile.username);
             setUserId(profile.userId);
             setAdmin(profile.admin);
+            setSubscriptionTier(profile.subscriptionTier || "FREE");
             const setup = await appSetupStatus();
             setRegistrationMode(setup.registrationMode);
         } catch (err: any) {
@@ -70,6 +72,7 @@ export default function ProfilePage() {
                         <TextField fullWidth size="small" label="User ID" value={userId} InputProps={{ readOnly: true }} />
                         <TextField fullWidth size="small" label="Username" value={username} InputProps={{ readOnly: true }} />
                         <TextField fullWidth size="small" label="Admin" value={admin ? "Yes" : "No"} InputProps={{ readOnly: true }} />
+                        <TextField fullWidth size="small" label="Subscription Tier" value={subscriptionTier || "FREE"} InputProps={{ readOnly: true }} />
                         <TextField fullWidth size="small" label="Registration Mode" value={registrationMode} InputProps={{ readOnly: true }} />
                         <TextField fullWidth size="small" label="API Key" value={maskedApiKey} InputProps={{ readOnly: true }} />
                         <TextField fullWidth size="small" label="Active Workspace" value={workspaceId} InputProps={{ readOnly: true }} />

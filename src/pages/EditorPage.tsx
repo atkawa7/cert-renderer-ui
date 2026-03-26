@@ -6,6 +6,7 @@ import TemplateEditor, { type Template } from "../TemplateEditor";
 import {
     createDesign,
     createTemplate,
+    currentUser,
     deleteTemplateById,
     downloadTemplate,
     downloadTemplateById,
@@ -129,7 +130,24 @@ export default function EditorPage({
     const [downloading, setDownloading] = useState(false);
     const [deleting, setDeleting] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
+    const [exportAllowed, setExportAllowed] = useState(false);
     const persistInFlightRef = useRef(false);
+
+    useEffect(() => {
+        let cancelled = false;
+        currentUser()
+            .then((user) => {
+                if (cancelled) return;
+                setExportAllowed(String(user.subscriptionTier || "FREE").toUpperCase() === "PRO");
+            })
+            .catch(() => {
+                if (cancelled) return;
+                setExportAllowed(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     useEffect(() => {
         if (mode !== "new") return;
@@ -433,23 +451,28 @@ export default function EditorPage({
 
     return (
         <Box>
+            {!exportAllowed ? (
+                <Alert severity="info" sx={{ m: 2 }}>
+                    Free plan: export features are disabled. Upgrade to Pro to export templates, FO, PDFs, and ZIP batches.
+                </Alert>
+            ) : null}
             <TemplateEditor
                 key={editorKey}
                 initialTemplate={template}
                 assetBaseUrl={appConfig.assetBaseUrl}
                 onSaveTemplate={handleSaveTemplate}
                 saveButtonLabel={saving ? "Saving..." : "Save to backend"}
-                onRenderTemplate={handleRenderTemplate}
+                onRenderTemplate={exportAllowed ? handleRenderTemplate : undefined}
                 renderButtonLabel={rendering ? "Generating..." : "Generate certificate PDF"}
-                onBatchRenderCertificates={handleBatchRenderCertificates}
+                onBatchRenderCertificates={exportAllowed ? handleBatchRenderCertificates : undefined}
                 batchRenderButtonLabel={batchRendering ? "Generating batch..." : "Generate batch ZIP"}
                 onStoreCertificate={handleStoreCertificate}
                 storeCertificateLabel={storingCertificate ? "Storing..." : "Generate and store"}
                 onStoreCertificateBatch={handleStoreCertificateBatch}
                 storeCertificateBatchLabel={storingBatchCertificates ? "Storing batch..." : "Store batch"}
-                onDownloadRenderedFo={handleDownloadRenderedFo}
+                onDownloadRenderedFo={exportAllowed ? handleDownloadRenderedFo : undefined}
                 downloadRenderedFoLabel={downloadingRenderedFo ? "Downloading FO..." : "Download rendered FO"}
-                onDownloadTemplate={handleDownloadTemplate}
+                onDownloadTemplate={exportAllowed ? handleDownloadTemplate : undefined}
                 downloadButtonLabel={downloading ? "Downloading..." : "Download template"}
                 defaultRenderDataJson={`{\n  "recipient": {\n    "firstName": "Jane",\n    "lastName": "Doe"\n  },\n  "certificate": {\n    "uuid": "CERT-2026-0001",\n    "reference": "REF-2026-0001",\n    "issued_on": "2026-03-07"\n  },\n  "program": {\n    "name": "Advanced Document Rendering",\n    "code": "ADR-101"\n  },\n  "institution": {\n    "domain": "certificates.example.edu"\n  }\n}`}
                 onConvertToDesign={handleConvertTemplateToDesign}

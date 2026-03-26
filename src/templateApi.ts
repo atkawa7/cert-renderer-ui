@@ -156,6 +156,7 @@ export type AuthResponse = {
     userId: string;
     username: string;
     admin: boolean;
+    subscriptionTier: "FREE" | "PRO" | string;
     apiKey: string;
     tokenType: string;
 };
@@ -164,6 +165,7 @@ export type AuthUser = {
     userId: string;
     username: string;
     admin: boolean;
+    subscriptionTier: "FREE" | "PRO" | string;
     createdAt: string;
 };
 
