@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Box, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Stack, TextField, Typography, useTheme } from "@mui/material";
-import AntBtn from "../components/AntBtn";
+import { Box, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Stack, TextField, Typography, useTheme } from "@mui/material";
 import QRCode from "qrcode";
-import { appConfig } from "../appConfig";
-import { currentUser, downloadCertificateById, getCertificateById, getCertificateCredential, listCertificates, sendCertificateEmailById, type CertificateCredential, type CertificateDetail, type CertificateSummary } from "../templateApi";
-import { useNotifications } from "../components/NotificationsProvider";
 import { useNavigate } from "react-router-dom";
+import AntBtn from "../components/AntBtn";
+import { appConfig } from "../appConfig";
+import { downloadMyCertificateById, getMyCertificateById, getMyCertificateCredential, listMyCertificates, type CertificateCredential, type CertificateDetail, type CertificateSummary } from "../templateApi";
+import { useNotifications } from "../components/NotificationsProvider";
 
 function formatDate(value?: string): string {
     if (!value) return "-";
@@ -14,28 +14,26 @@ function formatDate(value?: string): string {
     return d.toLocaleString();
 }
 
-export default function CertificatesPage() {
+export default function CredentialHolderCertificatesPage() {
     const theme = useTheme();
     const navigate = useNavigate();
     const notifications = useNotifications();
     const [query, setQuery] = useState("");
     const [loading, setLoading] = useState(false);
     const [downloadingId, setDownloadingId] = useState<string | null>(null);
-    const [sendingId, setSendingId] = useState<string | null>(null);
     const [items, setItems] = useState<CertificateSummary[]>([]);
     const [detail, setDetail] = useState<CertificateDetail | null>(null);
     const [detailLoading, setDetailLoading] = useState(false);
     const [credential, setCredential] = useState<CertificateCredential | null>(null);
     const [credentialLoading, setCredentialLoading] = useState(false);
     const [credentialQrDataUrl, setCredentialQrDataUrl] = useState<string | null>(null);
-    const [exportAllowed, setExportAllowed] = useState<boolean | null>(null);
 
     async function loadCertificates() {
         setLoading(true);
         try {
-            setItems(await listCertificates(query));
+            setItems(await listMyCertificates(query));
         } catch (err: any) {
-            notifications.error(err?.message || "Failed to load certificates", { title: "Certificates" });
+            notifications.error(err?.message || "Failed to load certificates", { title: "My Certificates" });
         } finally {
             setLoading(false);
         }
@@ -44,7 +42,7 @@ export default function CertificatesPage() {
     async function downloadCertificate(item: CertificateSummary) {
         setDownloadingId(item.id);
         try {
-            const file = await downloadCertificateById(item.id, item.fileName || item.certificateReference || "certificate");
+            const file = await downloadMyCertificateById(item.id, item.fileName || item.certificateReference || "certificate");
             const blobUrl = URL.createObjectURL(file.blob);
             const a = document.createElement("a");
             a.href = blobUrl;
@@ -54,21 +52,9 @@ export default function CertificatesPage() {
             a.remove();
             URL.revokeObjectURL(blobUrl);
         } catch (err: any) {
-            notifications.error(err?.message || "Failed to download certificate", { title: "Certificates" });
+            notifications.error(err?.message || "Failed to download certificate", { title: "My Certificates" });
         } finally {
             setDownloadingId(null);
-        }
-    }
-
-    async function sendCertificateEmail(item: CertificateSummary) {
-        setSendingId(item.id);
-        try {
-            await sendCertificateEmailById(item.id);
-            notifications.success("Certificate email sent", { title: "Certificates" });
-        } catch (err: any) {
-            notifications.error(err?.message || "Failed to send certificate email", { title: "Certificates" });
-        } finally {
-            setSendingId(null);
         }
     }
 
@@ -79,13 +65,13 @@ export default function CertificatesPage() {
         setCredentialQrDataUrl(null);
         try {
             const [detailResult, credentialResult] = await Promise.all([
-                getCertificateById(item.id),
-                getCertificateCredential(item.id),
+                getMyCertificateById(item.id),
+                getMyCertificateCredential(item.id),
             ]);
             setDetail(detailResult);
             setCredential(credentialResult);
         } catch (err: any) {
-            notifications.error(err?.message || "Failed to load certificate details", { title: "Certificates" });
+            notifications.error(err?.message || "Failed to load certificate details", { title: "My Certificates" });
         } finally {
             setDetailLoading(false);
             setCredentialLoading(false);
@@ -94,7 +80,7 @@ export default function CertificatesPage() {
 
     const credentialApiUrl = useMemo(() => {
         if (!detail?.id) return "";
-        return `${appConfig.rendererApiBase}/certificates/${detail.id}/credential`;
+        return `${appConfig.rendererApiBase}/credential-holder/certificates/${detail.id}/credential`;
     }, [detail?.id]);
 
     useEffect(() => {
@@ -121,45 +107,23 @@ export default function CertificatesPage() {
 
     useEffect(() => {
         void loadCertificates();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    useEffect(() => {
-        let cancelled = false;
-        currentUser()
-            .then((user) => {
-                if (cancelled) return;
-                setExportAllowed(String(user.subscriptionTier || "FREE").toUpperCase() === "PRO");
-            })
-            .catch(() => {
-                if (cancelled) return;
-                setExportAllowed(false);
-            });
-        return () => {
-            cancelled = true;
-        };
     }, []);
 
     return (
         <Box sx={{ p: 3, maxWidth: 1180, mx: "auto" }}>
             <Stack spacing={2}>
                 <Box>
-                    <Typography variant="h5">Certificates</Typography>
+                    <Typography variant="h5">My Certificates</Typography>
                     <Typography variant="body2" color="text.secondary">
-                        Stored certificate PDFs and their render arguments.
+                        Certificates linked to your logged-in email address.
                     </Typography>
                 </Box>
-                {exportAllowed === false ? (
-                    <Alert severity="info">
-                        Free plan: certificate view and download are disabled. Upgrade to Pro to access certificate PDFs.
-                    </Alert>
-                ) : null}
 
                 <Stack direction="row" spacing={1}>
                     <TextField
                         fullWidth
                         size="small"
-                        label="Search certificates"
+                        label="Search my certificates"
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         onKeyDown={(e) => {
@@ -177,7 +141,7 @@ export default function CertificatesPage() {
                         <Typography>Loading certificates...</Typography>
                     </Stack>
                 ) : items.length === 0 ? (
-                    <Typography color="text.secondary">No certificates found.</Typography>
+                    <Typography color="text.secondary">No certificates found for your email.</Typography>
                 ) : (
                     <Stack spacing={1.5}>
                         {items.map((item) => (
@@ -191,7 +155,7 @@ export default function CertificatesPage() {
                                             Ref: {item.certificateReference || "-"} | Date: {item.certificateDate || "-"} | Program: {item.programName || "-"} ({item.programCode || "-"})
                                         </Typography>
                                         <Typography variant="body2" color="text.secondary">
-                                            Organization: {item.organizationName || "-"} | Template: {item.templateName}
+                                            Email: {item.recipientEmail || "-"} | Organization: {item.organizationName || "-"}
                                         </Typography>
                                         <Typography variant="caption" color="text.secondary">
                                             Created: {formatDate(item.createdAt)}
@@ -201,14 +165,11 @@ export default function CertificatesPage() {
                                         <AntBtn onClick={() => void openDetails(item)}>
                                             Details
                                         </AntBtn>
-                                        <AntBtn onClick={() => navigate(`/certificates/${item.id}/view`)} disabled={exportAllowed !== true}>
+                                        <AntBtn onClick={() => navigate(`/portal/certificates/${item.id}/view`)}>
                                             View PDF
                                         </AntBtn>
-                                        <AntBtn onClick={() => void downloadCertificate(item)} disabled={exportAllowed !== true || downloadingId === item.id}>
+                                        <AntBtn onClick={() => void downloadCertificate(item)} disabled={downloadingId === item.id}>
                                             {downloadingId === item.id ? "Downloading..." : "Download"}
-                                        </AntBtn>
-                                        <AntBtn onClick={() => void sendCertificateEmail(item)} disabled={exportAllowed !== true || sendingId === item.id}>
-                                            {sendingId === item.id ? "Sending..." : "Send certificate"}
                                         </AntBtn>
                                     </Stack>
                                 </Stack>
@@ -232,6 +193,9 @@ export default function CertificatesPage() {
                                 Recipient: {[detail.recipientFirstName, detail.recipientLastName].filter(Boolean).join(" ").trim() || "-"}
                             </Typography>
                             <Typography variant="body2">
+                                Email: {detail.recipientEmail || "-"}
+                            </Typography>
+                            <Typography variant="body2">
                                 Reference: {detail.certificateReference || "-"} | Date: {detail.certificateDate || "-"}
                             </Typography>
                             <Typography variant="body2">
@@ -253,7 +217,7 @@ export default function CertificatesPage() {
                             ) : credential ? (
                                 <Stack spacing={1.2}>
                                     <Typography variant="body2" color="text.secondary">
-                                        Scan this QR code to access the credential endpoint.
+                                        Scan this QR code to access your credential endpoint.
                                     </Typography>
                                     {credentialQrDataUrl ? (
                                         <Box
@@ -270,22 +234,6 @@ export default function CertificatesPage() {
                                     <Typography variant="caption" sx={{ wordBreak: "break-all" }}>
                                         {credentialApiUrl}
                                     </Typography>
-                                    <Box>
-                                        <AntBtn
-                                            antType="text"
-                                            onClick={() => {
-                                                const jwt = credential.proof?.jwt;
-                                                if (!jwt) {
-                                                    notifications.error("Credential JWT is missing", { title: "Certificates" });
-                                                    return;
-                                                }
-                                                void navigator.clipboard.writeText(jwt);
-                                                notifications.success("Credential JWT copied", { title: "Certificates" });
-                                            }}
-                                        >
-                                            Copy credential JWT
-                                        </AntBtn>
-                                    </Box>
                                 </Stack>
                             ) : (
                                 <Typography variant="body2" color="text.secondary">
@@ -314,14 +262,11 @@ export default function CertificatesPage() {
                 <DialogActions>
                     {detail && (
                         <>
-                            <AntBtn onClick={() => navigate(`/certificates/${detail.id}/view`)} disabled={exportAllowed !== true}>
+                            <AntBtn onClick={() => navigate(`/portal/certificates/${detail.id}/view`)}>
                                 View PDF
                             </AntBtn>
-                            <AntBtn onClick={() => void downloadCertificate(detail)} disabled={exportAllowed !== true}>
+                            <AntBtn onClick={() => void downloadCertificate(detail)}>
                                 Download
-                            </AntBtn>
-                            <AntBtn onClick={() => void sendCertificateEmail(detail)} disabled={exportAllowed !== true || sendingId === detail.id}>
-                                {sendingId === detail.id ? "Sending..." : "Send certificate"}
                             </AntBtn>
                         </>
                     )}

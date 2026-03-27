@@ -4,11 +4,11 @@ import { useNavigate, useParams } from "react-router-dom";
 import { GlobalWorkerOptions, getDocument, type PDFDocumentProxy } from "pdfjs-dist";
 import pdfWorkerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import AntBtn from "../components/AntBtn";
-import { getCertificatePdfBytes } from "../templateApi";
+import { getMyCertificatePdfBytes } from "../templateApi";
 
 GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
 
-export default function CertificateViewerPage() {
+export default function CredentialHolderCertificateViewerPage() {
     const navigate = useNavigate();
     const { id } = useParams<{ id: string }>();
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -58,7 +58,7 @@ export default function CertificateViewerPage() {
             setPageNumber(1);
             setTotalPages(0);
             try {
-                const bytes = await getCertificatePdfBytes(id);
+                const bytes = await getMyCertificatePdfBytes(id);
                 if (cancelled) return;
                 setPdfBytes(bytes);
                 loadingTask = getDocument({ data: bytes });
@@ -158,7 +158,7 @@ export default function CertificateViewerPage() {
                     <Typography variant="h5">Certificate Viewer</Typography>
                     <Typography color="text.secondary">Missing certificate id.</Typography>
                     <Box>
-                        <AntBtn onClick={() => navigate("/certificates")}>Back to certificates</AntBtn>
+                        <AntBtn onClick={() => navigate("/portal/certificates")}>Back to my certificates</AntBtn>
                     </Box>
                 </Stack>
             </Box>
@@ -172,11 +172,11 @@ export default function CertificateViewerPage() {
                     <Box>
                         <Typography variant="h5">Certificate Viewer</Typography>
                         <Typography variant="body2" color="text.secondary">
-                            Viewing the stored PDF with a custom in-app viewer.
+                            Viewing your certificate PDF.
                         </Typography>
                     </Box>
                     <Stack direction="row" spacing={1}>
-                        <AntBtn onClick={() => navigate("/certificates")}>Back</AntBtn>
+                        <AntBtn onClick={() => navigate("/portal/certificates")}>Back</AntBtn>
                         <AntBtn
                             onClick={() => {
                                 if (viewerBlobUrl) {

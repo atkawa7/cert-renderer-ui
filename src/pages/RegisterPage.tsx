@@ -1,16 +1,17 @@
 import { useState } from "react";
 import { Box, Link, Paper, Stack, TextField, Typography } from "@mui/material";
-import { Link as RouterLink, useNavigate } from "react-router-dom";
+import { Link as RouterLink, useNavigate, useSearchParams } from "react-router-dom";
 import AntBtn from "../components/AntBtn";
 import { ensureActiveWorkspace, register } from "../templateApi";
 import { useNotifications } from "../components/NotificationsProvider";
 
 export default function RegisterPage() {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const notifications = useNotifications();
-    const [username, setUsername] = useState("");
+    const [username, setUsername] = useState(searchParams.get("username") || "");
     const [password, setPassword] = useState("");
-    const [invitationToken, setInvitationToken] = useState("");
+    const [invitationToken, setInvitationToken] = useState(searchParams.get("invitationToken") || "");
     const [loading, setLoading] = useState(false);
 
     async function submit() {

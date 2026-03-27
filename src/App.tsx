@@ -19,10 +19,13 @@ import Base64ImageViewerPage from "./pages/Base64ImageViewerPage";
 import QrDecoderPage from "./pages/QrDecoderPage";
 import CertificatesPage from "./pages/CertificatesPage";
 import CertificateViewerPage from "./pages/CertificateViewerPage";
+import CredentialHolderCertificatesPage from "./pages/CredentialHolderCertificatesPage";
+import CredentialHolderCertificateViewerPage from "./pages/CredentialHolderCertificateViewerPage";
 import InstitutionsPage from "./pages/InstitutionsPage";
 import WorkspacesPage from "./pages/WorkspacesPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
+import VerifyEmailPage from "./pages/VerifyEmailPage";
 import LogoutPage from "./pages/LogoutPage";
 import ProfilePage from "./pages/ProfilePage";
 import AppSetupPage from "./pages/AppSetupPage";
@@ -183,6 +186,7 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                 <Routes>
                     <Route path="/login" element={<LoginPage />} />
                     <Route path="/register" element={<RegisterPage />} />
+                    <Route path="/verify-email" element={<VerifyEmailPage />} />
                     <Route path="/app/setup" element={<AppSetupPage />} />
                     <Route path="*" element={<Navigate to="/login" replace />} />
                 </Routes>
@@ -247,6 +251,13 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                     <WorkspacePremiumOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
                     <ListItemText
                         primary="Certificates"
+                        primaryTypographyProps={{ fontSize: isCompactNav ? "0.9rem" : "1rem" }}
+                    />
+                </ListItemButton>
+                <ListItemButton component={RouterLink} to="/portal/certificates" onClick={() => setMobileNavOpen(false)}>
+                    <WorkspacePremiumOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
+                    <ListItemText
+                        primary="My Certificates"
                         primaryTypographyProps={{ fontSize: isCompactNav ? "0.9rem" : "1rem" }}
                     />
                 </ListItemButton>
@@ -399,18 +410,21 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                     <Route path="/" element={<Navigate to="/templates" replace />} />
                     <Route path="/login" element={<Navigate to="/templates" replace />} />
                     <Route path="/register" element={<Navigate to="/templates" replace />} />
+                    <Route path="/verify-email" element={<VerifyEmailPage />} />
                     <Route path="/app/setup" element={<Navigate to="/templates" replace />} />
                     <Route path="/templates" element={<TemplatesListPage />} />
                     <Route path="/designs" element={<DesignsPage />} />
                     <Route path="/designs/:id" element={<DesignDetailsPage />} />
                     <Route path="/signature" element={<SignaturePage />} />
                     <Route path="/certificates" element={<CertificatesPage />} />
+                    <Route path="/portal/certificates" element={<CredentialHolderCertificatesPage />} />
                     <Route path="/institutions" element={<InstitutionsPage />} />
                     <Route path="/workspaces" element={<WorkspacesPage />} />
                     <Route path="/profile" element={<ProfilePage />} />
                     <Route path="/audits" element={<AuditLogsPage />} />
                     <Route path="/logout" element={<LogoutPage />} />
                     <Route path="/certificates/:id/view" element={<CertificateViewerPage />} />
+                    <Route path="/portal/certificates/:id/view" element={<CredentialHolderCertificateViewerPage />} />
                     <Route path="/base64-image" element={<Base64ImageViewerPage />} />
                     <Route path="/qr-decoder" element={<QrDecoderPage />} />
                     <Route

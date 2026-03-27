@@ -68,6 +68,7 @@ export type CertificateSummary = {
     templateName: string;
     recipientFirstName?: string | null;
     recipientLastName?: string | null;
+    recipientEmail?: string | null;
     certificateReference?: string | null;
     certificateDate?: string | null;
     programName?: string | null;
@@ -164,9 +165,22 @@ export type AuthResponse = {
 export type AuthUser = {
     userId: string;
     username: string;
+    email?: string | null;
+    verifiedEmail?: boolean;
     admin: boolean;
     subscriptionTier: "FREE" | "PRO" | string;
     createdAt: string;
+};
+
+export type AuthEmailStatus = {
+    email?: string | null;
+    verifiedEmail: boolean;
+};
+
+export type AuthInvitation = {
+    username: string;
+    invitationToken: string;
+    invitationLink?: string;
 };
 
 export type AppSetupStatus = {
@@ -405,6 +419,33 @@ export async function listCertificates(query = "", page = 0, size = 50): Promise
     return data.content ?? [];
 }
 
+export async function listMyCertificates(query = "", page = 0, size = 50): Promise<CertificateSummary[]> {
+    const params = new URLSearchParams();
+    if (query.trim()) params.set("query", query.trim());
+    params.set("page", String(page));
+    params.set("size", String(size));
+    const res = await fetch(`${API_BASE}/credential-holder/certificates?${params.toString()}`, {
+        method: "GET",
+        headers: workspaceHeaders(false),
+    });
+    if (!res.ok) {
+        throw new Error(await parseErrorMessage(res, `Request failed (${res.status})`));
+    }
+    const data = (await res.json()) as PageResponse<CertificateSummary>;
+    return data.content ?? [];
+}
+
+export async function getMyCertificateById(id: string): Promise<CertificateDetail> {
+    const res = await fetch(`${API_BASE}/credential-holder/certificates/${encodeURIComponent(id)}`, {
+        method: "GET",
+        headers: workspaceHeaders(false),
+    });
+    if (!res.ok) {
+        throw new Error(await parseErrorMessage(res, `Request failed (${res.status})`));
+    }
+    return (await res.json()) as CertificateDetail;
+}
+
 export async function getCertificateById(id: string): Promise<CertificateDetail> {
     return await apiFetch<CertificateDetail>(`/certificates/${id}`);
 }
@@ -424,8 +465,34 @@ export async function getCertificatePdfBytes(id: string): Promise<Uint8Array> {
     return bytes;
 }
 
+export async function getMyCertificatePdfBytes(id: string): Promise<Uint8Array> {
+    const res = await fetch(`${API_BASE}/credential-holder/certificates/${encodeURIComponent(id)}/view`, {
+        method: "GET",
+        headers: workspaceHeaders(false),
+    });
+    if (!res.ok) {
+        throw new Error(await parseErrorMessage(res, `PDF fetch failed (${res.status})`));
+    }
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    if (bytes.byteLength === 0) {
+        throw new Error("PDF is empty.");
+    }
+    return bytes;
+}
+
 export async function getCertificateCredential(id: string): Promise<CertificateCredential> {
     return await apiFetch<CertificateCredential>(`/certificates/${id}/credential`);
+}
+
+export async function getMyCertificateCredential(id: string): Promise<CertificateCredential> {
+    const res = await fetch(`${API_BASE}/credential-holder/certificates/${encodeURIComponent(id)}/credential`, {
+        method: "GET",
+        headers: workspaceHeaders(false),
+    });
+    if (!res.ok) {
+        throw new Error(await parseErrorMessage(res, `Request failed (${res.status})`));
+    }
+    return (await res.json()) as CertificateCredential;
 }
 
 export async function listInstitutions(query = "", page = 0, size = 50): Promise<InstitutionSummary[]> {
@@ -659,6 +726,28 @@ export async function downloadCertificateById(id: string, fallbackName = "certif
     };
 }
 
+export async function downloadMyCertificateById(id: string, fallbackName = "certificate"): Promise<DownloadedFile> {
+    const res = await fetch(`${API_BASE}/credential-holder/certificates/${encodeURIComponent(id)}/download`, {
+        method: "GET",
+        headers: workspaceHeaders(false),
+    });
+
+    if (!res.ok) {
+        throw new Error(await parseErrorMessage(res, `Download failed (${res.status})`));
+    }
+
+    return {
+        blob: await res.blob(),
+        fileName: parseDownloadFileName(res.headers.get("Content-Disposition"), fallbackName, "pdf"),
+    };
+}
+
+export async function sendCertificateEmailById(id: string): Promise<void> {
+    await apiFetch<void>(`/certificates/${id}/send-email`, {
+        method: "POST",
+    });
+}
+
 export async function renderTemplateFo(payload: {
     template: Template;
     data?: unknown;
@@ -788,6 +877,31 @@ export async function currentUser(): Promise<AuthUser> {
     return (await response.json()) as AuthUser;
 }
 
+export async function updateMyEmail(email: string): Promise<AuthEmailStatus> {
+    return await apiFetch<AuthEmailStatus>("/auth/email", {
+        method: "POST",
+        body: JSON.stringify({ email }),
+    });
+}
+
+export async function verifyMyEmail(code: string): Promise<AuthEmailStatus> {
+    return await apiFetch<AuthEmailStatus>("/auth/email/verify", {
+        method: "POST",
+        body: JSON.stringify({ code }),
+    });
+}
+
+export async function verifyEmailByLink(token: string): Promise<AuthEmailStatus> {
+    const res = await fetch(`${API_BASE}/auth/email/verify-link?token=${encodeURIComponent(token)}`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+    });
+    if (!res.ok) {
+        throw new Error(await parseErrorMessage(res, `Verification failed (${res.status})`));
+    }
+    return (await res.json()) as AuthEmailStatus;
+}
+
 export async function appSetupStatus(): Promise<AppSetupStatus> {
     const response = await fetch(`${API_BASE}/app/setup/status`, {
         method: "GET",
@@ -818,7 +932,7 @@ export async function initializeAppSetup(payload: {
     return auth;
 }
 
-export async function createInvitation(username: string): Promise<{ username: string; invitationToken: string }> {
+export async function createInvitation(username: string): Promise<AuthInvitation> {
     const apiKey = getCurrentApiKey();
     if (!apiKey) throw new Error("No API key set");
     const response = await fetch(`${API_BASE}/auth/invitations`, {
@@ -833,7 +947,7 @@ export async function createInvitation(username: string): Promise<{ username: st
     if (!response.ok) {
         throw new Error(await parseErrorMessage(response, `Invitation failed (${response.status})`));
     }
-    return (await response.json()) as { username: string; invitationToken: string };
+    return (await response.json()) as AuthInvitation;
 }
 
 export async function getAuthPreferences(): Promise<AuthUserPreferences> {

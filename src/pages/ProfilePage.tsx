@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Alert, Box, CircularProgress, Stack, TextField, Typography } from "@mui/material";
 import AntBtn from "../components/AntBtn";
-import { appSetupStatus, createInvitation, currentUser, getCurrentApiKey, getCurrentWorkspaceId } from "../templateApi";
+import { appSetupStatus, createInvitation, currentUser, getCurrentApiKey, getCurrentWorkspaceId, updateMyEmail, verifyMyEmail } from "../templateApi";
 import { useNotifications } from "../components/NotificationsProvider";
 
 export default function ProfilePage() {
@@ -11,9 +11,13 @@ export default function ProfilePage() {
     const [userId, setUserId] = useState("");
     const [admin, setAdmin] = useState(false);
     const [subscriptionTier, setSubscriptionTier] = useState("");
+    const [email, setEmail] = useState("");
+    const [verifiedEmail, setVerifiedEmail] = useState(false);
+    const [verificationCode, setVerificationCode] = useState("");
+    const [emailBusy, setEmailBusy] = useState(false);
     const [registrationMode, setRegistrationMode] = useState("");
     const [inviteUsername, setInviteUsername] = useState("");
-    const [inviteToken, setInviteToken] = useState("");
+    const [inviteLink, setInviteLink] = useState("");
 
     const apiKey = getCurrentApiKey() || "";
     const workspaceId = getCurrentWorkspaceId() || "";
@@ -27,6 +31,8 @@ export default function ProfilePage() {
             setUserId(profile.userId);
             setAdmin(profile.admin);
             setSubscriptionTier(profile.subscriptionTier || "FREE");
+            setEmail(profile.email || "");
+            setVerifiedEmail(Boolean(profile.verifiedEmail));
             const setup = await appSetupStatus();
             setRegistrationMode(setup.registrationMode);
         } catch (err: any) {
@@ -40,10 +46,45 @@ export default function ProfilePage() {
         if (!inviteUsername.trim()) return;
         try {
             const response = await createInvitation(inviteUsername.trim());
-            setInviteToken(response.invitationToken);
+            setInviteLink(response.invitationLink || "");
             notifications.success("Invitation created", { title: "Profile" });
         } catch (err: any) {
             notifications.error(err?.message || "Failed to create invitation", { title: "Profile" });
+        }
+    }
+
+    async function saveEmail() {
+        if (!email.trim()) return;
+        setEmailBusy(true);
+        try {
+            const status = await updateMyEmail(email.trim());
+            setEmail(status.email || "");
+            setVerifiedEmail(Boolean(status.verifiedEmail));
+            notifications.success("Verification link sent to email", { title: "Profile" });
+        } catch (err: any) {
+            notifications.error(err?.message || "Failed to set email", { title: "Profile" });
+        } finally {
+            setEmailBusy(false);
+        }
+    }
+
+    async function verifyEmailCode() {
+        if (!verificationCode.trim()) return;
+        setEmailBusy(true);
+        try {
+            const status = await verifyMyEmail(verificationCode.trim());
+            setEmail(status.email || "");
+            setVerifiedEmail(Boolean(status.verifiedEmail));
+            if (status.verifiedEmail) {
+                notifications.success("Email verified", { title: "Profile" });
+                setVerificationCode("");
+            } else {
+                notifications.warning("Email is not verified yet", { title: "Profile" });
+            }
+        } catch (err: any) {
+            notifications.error(err?.message || "Failed to verify email", { title: "Profile" });
+        } finally {
+            setEmailBusy(false);
         }
     }
 
@@ -73,6 +114,39 @@ export default function ProfilePage() {
                         <TextField fullWidth size="small" label="Username" value={username} InputProps={{ readOnly: true }} />
                         <TextField fullWidth size="small" label="Admin" value={admin ? "Yes" : "No"} InputProps={{ readOnly: true }} />
                         <TextField fullWidth size="small" label="Subscription Tier" value={subscriptionTier || "FREE"} InputProps={{ readOnly: true }} />
+                        <TextField
+                            fullWidth
+                            size="small"
+                            label="Email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                        />
+                        <TextField
+                            fullWidth
+                            size="small"
+                            label="Email Verification"
+                            value={verifiedEmail ? "Verified" : "Not verified"}
+                            InputProps={{ readOnly: true }}
+                        />
+                        <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                            <AntBtn onClick={() => void saveEmail()} disabled={emailBusy || !email.trim()}>
+                                Save Email
+                            </AntBtn>
+                            {!verifiedEmail && email.trim() ? (
+                                <>
+                                    <TextField
+                                        fullWidth
+                                        size="small"
+                                        label="Verification Code"
+                                        value={verificationCode}
+                                        onChange={(e) => setVerificationCode(e.target.value)}
+                                    />
+                                    <AntBtn onClick={() => void verifyEmailCode()} disabled={emailBusy || !verificationCode.trim()}>
+                                        Verify Email
+                                    </AntBtn>
+                                </>
+                            ) : null}
+                        </Stack>
                         <TextField fullWidth size="small" label="Registration Mode" value={registrationMode} InputProps={{ readOnly: true }} />
                         <TextField fullWidth size="small" label="API Key" value={maskedApiKey} InputProps={{ readOnly: true }} />
                         <TextField fullWidth size="small" label="Active Workspace" value={workspaceId} InputProps={{ readOnly: true }} />
@@ -97,8 +171,8 @@ export default function ProfilePage() {
                                 <Box>
                                     <AntBtn onClick={() => void invite()}>Generate Invite</AntBtn>
                                 </Box>
-                                {inviteToken ? (
-                                    <TextField fullWidth size="small" label="Invitation Token" value={inviteToken} InputProps={{ readOnly: true }} />
+                                {inviteLink ? (
+                                    <TextField fullWidth size="small" label="Invitation Link" value={inviteLink} InputProps={{ readOnly: true }} />
                                 ) : null}
                             </Stack>
                         )}
