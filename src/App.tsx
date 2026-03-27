@@ -28,7 +28,7 @@ import ProfilePage from "./pages/ProfilePage";
 import AppSetupPage from "./pages/AppSetupPage";
 import AuditLogsPage from "./pages/AuditLogsPage";
 import AntBtn from "./components/AntBtn";
-import { ensureActiveWorkspace, getAuthPreferences, getCurrentApiKey, getCurrentUserId, getCurrentWorkspaceId, listWorkspaces, setCurrentApiKey, subscribeSessionChange, updateAuthPreferences } from "./templateApi";
+import { currentUser, ensureActiveWorkspace, getAuthPreferences, getCurrentApiKey, getCurrentUserId, getCurrentWorkspaceId, listWorkspaces, setCurrentApiKey, setCurrentUserId, subscribeSessionChange, updateAuthPreferences } from "./templateApi";
 
 const SIDEBAR_WIDTH = 260;
 const SIDEBAR_WIDTH_COMPACT = 196;
@@ -96,6 +96,8 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
             }
             setWorkspaceReady(false);
             try {
+                const profile = await currentUser();
+                setCurrentUserId(profile.userId);
                 await ensureActiveWorkspace();
                 if (!cancelled) {
                     setWorkspaceReady(true);

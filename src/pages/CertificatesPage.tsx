@@ -27,7 +27,7 @@ export default function CertificatesPage() {
     const [credential, setCredential] = useState<CertificateCredential | null>(null);
     const [credentialLoading, setCredentialLoading] = useState(false);
     const [credentialQrDataUrl, setCredentialQrDataUrl] = useState<string | null>(null);
-    const [exportAllowed, setExportAllowed] = useState(false);
+    const [exportAllowed, setExportAllowed] = useState<boolean | null>(null);
 
     async function loadCertificates() {
         setLoading(true);
@@ -136,7 +136,7 @@ export default function CertificatesPage() {
                         Stored certificate PDFs and their render arguments.
                     </Typography>
                 </Box>
-                {!exportAllowed ? (
+                {exportAllowed === false ? (
                     <Alert severity="info">
                         Free plan: certificate view and download are disabled. Upgrade to Pro to access certificate PDFs.
                     </Alert>
@@ -188,10 +188,10 @@ export default function CertificatesPage() {
                                         <AntBtn onClick={() => void openDetails(item)}>
                                             Details
                                         </AntBtn>
-                                        <AntBtn onClick={() => navigate(`/certificates/${item.id}/view`)} disabled={!exportAllowed}>
+                                        <AntBtn onClick={() => navigate(`/certificates/${item.id}/view`)} disabled={exportAllowed !== true}>
                                             View PDF
                                         </AntBtn>
-                                        <AntBtn onClick={() => void downloadCertificate(item)} disabled={!exportAllowed || downloadingId === item.id}>
+                                        <AntBtn onClick={() => void downloadCertificate(item)} disabled={exportAllowed !== true || downloadingId === item.id}>
                                             {downloadingId === item.id ? "Downloading..." : "Download"}
                                         </AntBtn>
                                     </Stack>
@@ -298,10 +298,10 @@ export default function CertificatesPage() {
                 <DialogActions>
                     {detail && (
                         <>
-                            <AntBtn onClick={() => navigate(`/certificates/${detail.id}/view`)} disabled={!exportAllowed}>
+                            <AntBtn onClick={() => navigate(`/certificates/${detail.id}/view`)} disabled={exportAllowed !== true}>
                                 View PDF
                             </AntBtn>
-                            <AntBtn onClick={() => void downloadCertificate(detail)} disabled={!exportAllowed}>
+                            <AntBtn onClick={() => void downloadCertificate(detail)} disabled={exportAllowed !== true}>
                                 Download
                             </AntBtn>
                         </>

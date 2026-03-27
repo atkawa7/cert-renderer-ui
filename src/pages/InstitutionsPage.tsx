@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Alert, Box, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Stack, TextField, Typography, useTheme } from "@mui/material";
 import AntBtn from "../components/AntBtn";
-import { createInstitution, listInstitutions, updateInstitutionById, verifyInstitutionById, type InstitutionDetail, type InstitutionSummary } from "../templateApi";
+import { createInstitution, currentUser, listInstitutions, updateInstitutionById, verifyInstitutionById, type InstitutionDetail, type InstitutionSummary } from "../templateApi";
 import { useNotifications } from "../components/NotificationsProvider";
 
 type FormState = {
@@ -35,6 +35,7 @@ export default function InstitutionsPage() {
     const [editTarget, setEditTarget] = useState<InstitutionSummary | null>(null);
     const [editForm, setEditForm] = useState<FormState>(EMPTY_FORM);
     const [selectedInstitution, setSelectedInstitution] = useState<InstitutionDetail | null>(null);
+    const [manageAllowed, setManageAllowed] = useState<boolean | null>(null);
 
     async function loadInstitutions() {
         setLoading(true);
@@ -97,15 +98,36 @@ export default function InstitutionsPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    useEffect(() => {
+        let cancelled = false;
+        currentUser()
+            .then((user) => {
+                if (cancelled) return;
+                setManageAllowed(String(user.subscriptionTier || "FREE").toUpperCase() !== "FREE");
+            })
+            .catch(() => {
+                if (cancelled) return;
+                setManageAllowed(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
     return (
         <Box sx={{ p: 3, maxWidth: 1180, mx: "auto" }}>
             <Stack spacing={2.5}>
                 <Box>
                     <Typography variant="h5">Institutions</Typography>
                     <Typography variant="body2" color="text.secondary">
-                        Add, update, and verify institution domains using DNS TXT records.
+                        Every workspace includes a verified Demo Institution for testing. Add, update, and verify additional institutions with a paid plan.
                     </Typography>
                 </Box>
+                {manageAllowed === false ? (
+                    <Alert severity="info">
+                        Free plan: you can use the default Demo Institution for testing. Upgrade to Pro to add, edit, and verify more institutions.
+                    </Alert>
+                ) : null}
 
                 <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
                     <TextField
@@ -151,7 +173,7 @@ export default function InstitutionsPage() {
                             value={createForm.issuePath}
                             onChange={(e) => setCreateForm((v) => ({ ...v, issuePath: e.target.value }))}
                         />
-                        <AntBtn antType="primary" onClick={() => void handleCreate()} disabled={saving}>
+                        <AntBtn antType="primary" onClick={() => void handleCreate()} disabled={manageAllowed !== true || saving}>
                             {saving ? "Saving..." : "Create"}
                         </AntBtn>
                     </Stack>
@@ -203,6 +225,7 @@ export default function InstitutionsPage() {
                                     </Box>
                                     <Stack direction="row" spacing={1} alignItems="center">
                                         <AntBtn
+                                            disabled={manageAllowed !== true}
                                             onClick={() => {
                                                 setEditTarget(item);
                                                 setEditForm({
@@ -217,7 +240,7 @@ export default function InstitutionsPage() {
                                         <AntBtn
                                             antType="primary"
                                             onClick={() => void handleVerify(item)}
-                                            disabled={verifyingId === item.id || item.verified}
+                                            disabled={manageAllowed !== true || verifyingId === item.id || item.verified}
                                         >
                                             {item.verified ? "Verified" : verifyingId === item.id ? "Verifying..." : "Verify"}
                                         </AntBtn>
@@ -263,7 +286,7 @@ export default function InstitutionsPage() {
                     <AntBtn onClick={() => setEditTarget(null)} disabled={saving}>
                         Cancel
                     </AntBtn>
-                    <AntBtn antType="primary" onClick={() => void handleUpdate()} disabled={saving}>
+                    <AntBtn antType="primary" onClick={() => void handleUpdate()} disabled={manageAllowed !== true || saving}>
                         {saving ? "Saving..." : "Update"}
                     </AntBtn>
                 </DialogActions>

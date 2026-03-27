@@ -228,6 +228,7 @@ export function setCurrentApiKey(apiKey: string | null): void {
         window.localStorage.setItem(API_KEY_KEY, nextValue);
     } else {
         window.localStorage.removeItem(API_KEY_KEY);
+        window.localStorage.removeItem(USER_ID_KEY);
     }
     emitSessionChanged();
 }

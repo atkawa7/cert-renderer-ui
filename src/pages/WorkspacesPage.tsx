@@ -4,13 +4,12 @@ import AntBtn from "../components/AntBtn";
 import {
     addWorkspaceMember,
     createWorkspace,
-    getCurrentUserId,
     getCurrentWorkspaceId,
     listWorkspaceMembers,
     listWorkspaces,
     removeWorkspaceMember,
-    setCurrentUserId,
     setCurrentWorkspaceId,
+    currentUser,
     type WorkspaceMembership,
     type WorkspaceSummary,
 } from "../templateApi";
@@ -21,7 +20,7 @@ export default function WorkspacesPage() {
     const notifications = useNotifications();
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
-    const [userId, setUserIdInput] = useState(getCurrentUserId());
+    const [activeUserId, setActiveUserId] = useState("");
     const [workspaceName, setWorkspaceName] = useState("");
     const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
     const [workspaceId, setWorkspaceId] = useState(getCurrentWorkspaceId() ?? "");
@@ -34,6 +33,8 @@ export default function WorkspacesPage() {
     async function refreshWorkspaces() {
         setLoading(true);
         try {
+            const profile = await currentUser();
+            setActiveUserId(profile.userId);
             const items = await listWorkspaces();
             setWorkspaces(items);
             if (!workspaceId && items.length > 0) {
@@ -77,12 +78,6 @@ export default function WorkspacesPage() {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [workspaceId]);
-
-    function applyUserIdentity() {
-        setCurrentUserId(userId);
-        notifications.success("User identity updated", { title: "Workspaces" });
-        void refreshWorkspaces();
-    }
 
     async function createNewWorkspace() {
         if (!workspaceName.trim()) return;
@@ -135,21 +130,20 @@ export default function WorkspacesPage() {
                 <Box>
                     <Typography variant="h5">Org Workspaces</Typography>
                     <Typography variant="body2" color="text.secondary">
-                        Set your user identity, select active workspace, and manage workspace members.
+                        Select active workspace and manage workspace members.
                     </Typography>
                 </Box>
 
                 <Box sx={{ p: 2, border: "1px solid", borderColor: "divider", borderRadius: 2, bgcolor: "background.paper" }}>
-                    <Stack direction={{ xs: "column", md: "row" }} spacing={1.2} alignItems={{ md: "center" }}>
+                    <Stack direction={{ xs: "column", md: "row" }} spacing={1.2}>
                         <TextField
-                            label="User ID"
+                            label="Current user"
                             size="small"
                             fullWidth
-                            value={userId}
-                            onChange={(e) => setUserIdInput(e.target.value)}
-                            helperText="Sent as X-User-Id on all API calls."
+                            value={activeUserId || "-"}
+                            InputProps={{ readOnly: true }}
+                            helperText="Derived from the authenticated session."
                         />
-                        <AntBtn onClick={applyUserIdentity}>Apply User</AntBtn>
                     </Stack>
                 </Box>
 
@@ -264,4 +258,3 @@ export default function WorkspacesPage() {
         </Box>
     );
 }
-
