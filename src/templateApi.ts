@@ -369,9 +369,17 @@ export async function listTemplates(query = "", page = 0, size = 50): Promise<Te
     return data.content ?? [];
 }
 
-export async function listDesigns(query = "", page = 0, size = 12): Promise<PagedResult<DesignSummary>> {
+export async function listDesigns(
+    query = "",
+    page = 0,
+    size = 12,
+    options?: {
+        workspaceOnly?: boolean;
+    }
+): Promise<PagedResult<DesignSummary>> {
     const params = new URLSearchParams();
     if (query.trim()) params.set("query", query.trim());
+    if (options?.workspaceOnly) params.set("workspaceOnly", "true");
     params.set("page", String(page));
     params.set("size", String(size));
     const data = await apiFetch<PageResponse<DesignSummary>>(`/designs?${params.toString()}`);

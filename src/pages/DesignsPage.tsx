@@ -154,6 +154,7 @@ export default function DesignsPage() {
     const navigate = useNavigate();
     const confirm = useConfirm();
     const [designs, setDesigns] = useState<DesignSummary[]>([]);
+    const [scope, setScope] = useState<"workspace" | "all">("workspace");
     const [query, setQuery] = useState("");
     const [page, setPage] = useState(0);
     const [size, setSize] = useState(16);
@@ -174,11 +175,13 @@ export default function DesignsPage() {
         templateJson: JSON.stringify({}),
     });
 
-    async function loadDesignPage(targetPage = page, targetQuery = query, targetSize = size) {
+    async function loadDesignPage(targetPage = page, targetQuery = query, targetSize = size, targetScope = scope) {
         setLoading(true);
         setErrorMsg(null);
         try {
-            const result = await listDesigns(targetQuery, targetPage, targetSize);
+            const result = await listDesigns(targetQuery, targetPage, targetSize, {
+                workspaceOnly: targetScope === "workspace",
+            });
             setDesigns(result.items);
             setTotalPages(result.totalPages);
             setPage(result.page);
@@ -212,7 +215,7 @@ export default function DesignsPage() {
             if (next !== sizeRef.current) {
                 sizeRef.current = next;
                 setSize(next);
-                void loadDesignPage(0, query, next);
+                void loadDesignPage(0, query, next, scope);
             }
         }
 
@@ -220,6 +223,12 @@ export default function DesignsPage() {
         return () => window.removeEventListener("resize", onResize);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    useEffect(() => {
+        if (!mountedRef.current) return;
+        void loadDesignPage(0, query, sizeRef.current, scope);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [scope]);
 
     async function handleCreateDesign() {
         setCreating(true);
@@ -281,6 +290,21 @@ export default function DesignsPage() {
             </Stack>
 
             <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
+                <Chip
+                    label="My Designs"
+                    color={scope === "workspace" ? "primary" : "default"}
+                    variant={scope === "workspace" ? "filled" : "outlined"}
+                    onClick={() => setScope("workspace")}
+                />
+                <Chip
+                    label="All Designs"
+                    color={scope === "all" ? "primary" : "default"}
+                    variant={scope === "all" ? "filled" : "outlined"}
+                    onClick={() => setScope("all")}
+                />
+            </Stack>
+
+            <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
                 <TextField
                     fullWidth
                     size="small"
@@ -288,10 +312,10 @@ export default function DesignsPage() {
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     onKeyDown={(e) => {
-                        if (e.key === "Enter") void loadDesignPage(0, query);
+                        if (e.key === "Enter") void loadDesignPage(0, query, size, scope);
                     }}
                 />
-                <AntBtn onClick={() => void loadDesignPage(0, query)} disabled={loading}>Search</AntBtn>
+                <AntBtn onClick={() => void loadDesignPage(0, query, size, scope)} disabled={loading}>Search</AntBtn>
             </Stack>
 
             {errorMsg && <Alert severity="error" sx={{ mb: 2 }}>{errorMsg}</Alert>}
@@ -299,7 +323,7 @@ export default function DesignsPage() {
             {loading ? (
                 <Stack direction="row" alignItems="center" spacing={1} sx={{ py: 2 }}>
                     <CircularProgress size={18} />
-                    <Typography>Loading designs...</Typography>
+                    <Typography>{scope === "workspace" ? "Loading my designs..." : "Loading designs..."}</Typography>
                 </Stack>
             ) : (
                 <Stack direction="row" flexWrap="wrap" gap={2}>
@@ -323,7 +347,7 @@ export default function DesignsPage() {
                 <Pagination
                     count={Math.max(totalPages, 1)}
                     page={page + 1}
-                    onChange={(_, next) => void loadDesignPage(next - 1, query)}
+                    onChange={(_, next) => void loadDesignPage(next - 1, query, size, scope)}
                     color="primary"
                     shape="rounded"
                 />
