@@ -38,6 +38,10 @@ import { currentUser, ensureActiveWorkspace, getAuthPreferences, getCurrentApiKe
 
 const SIDEBAR_WIDTH = 260;
 const SIDEBAR_WIDTH_COMPACT = 196;
+const SQL_PANEL_POS_KEY = "renderer:sql-panel-pos";
+const SQL_PANEL_SIZE_KEY = "renderer:sql-panel-size";
+const SQL_PANEL_MINIMIZED_KEY = "renderer:sql-panel-minimized";
+const SQL_PANEL_CLOSED_KEY = "renderer:sql-panel-closed";
 type AppProps = {
     themeMode: PaletteMode;
     onToggleTheme: () => void;
@@ -79,8 +83,34 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
     const [sqlStatsFeed, setSqlStatsFeed] = useState<SqlStats[]>([]);
     const [selectedSqlIndex, setSelectedSqlIndex] = useState(0);
     const [sqlDetailTab, setSqlDetailTab] = useState(0);
-    const [sqlPanelPos, setSqlPanelPos] = useState<{ x: number; y: number } | null>(null);
-    const [sqlPanelSize, setSqlPanelSize] = useState<{ width: number; height: number }>({ width: 440, height: 420 });
+    const [sqlPanelPos, setSqlPanelPos] = useState<{ x: number; y: number } | null>(() => {
+        const raw = window.localStorage.getItem(SQL_PANEL_POS_KEY);
+        if (!raw) return null;
+        try {
+            const parsed = JSON.parse(raw) as { x?: number; y?: number };
+            if (typeof parsed.x === "number" && typeof parsed.y === "number") {
+                return { x: parsed.x, y: parsed.y };
+            }
+        } catch {
+            // Ignore bad local storage value.
+        }
+        return null;
+    });
+    const [sqlPanelSize, setSqlPanelSize] = useState<{ width: number; height: number }>(() => {
+        const raw = window.localStorage.getItem(SQL_PANEL_SIZE_KEY);
+        if (!raw) return { width: 440, height: 420 };
+        try {
+            const parsed = JSON.parse(raw) as { width?: number; height?: number };
+            if (typeof parsed.width === "number" && typeof parsed.height === "number") {
+                return { width: parsed.width, height: parsed.height };
+            }
+        } catch {
+            // Ignore bad local storage value.
+        }
+        return { width: 440, height: 420 };
+    });
+    const [sqlPanelMinimized, setSqlPanelMinimized] = useState(() => window.localStorage.getItem(SQL_PANEL_MINIMIZED_KEY) === "true");
+    const [sqlPanelClosed, setSqlPanelClosed] = useState(() => window.localStorage.getItem(SQL_PANEL_CLOSED_KEY) === "true");
     const [activeWorkspaceLabel, setActiveWorkspaceLabel] = useState<string>("none");
     const effectiveSidebarWidth = sidebarHidden ? 0 : sidebarWidth;
     const activeUserId = getCurrentUserId();
@@ -131,6 +161,23 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
         const y = Math.max(16, window.innerHeight - panelHeightEstimate - (cookieConsentCompleted ? 16 : 96));
         setSqlPanelPos({ x, y });
     }, [isDevMode, sqlPanelPos, cookieConsentCompleted]);
+
+    useEffect(() => {
+        if (!sqlPanelPos) return;
+        window.localStorage.setItem(SQL_PANEL_POS_KEY, JSON.stringify(sqlPanelPos));
+    }, [sqlPanelPos]);
+
+    useEffect(() => {
+        window.localStorage.setItem(SQL_PANEL_SIZE_KEY, JSON.stringify(sqlPanelSize));
+    }, [sqlPanelSize]);
+
+    useEffect(() => {
+        window.localStorage.setItem(SQL_PANEL_MINIMIZED_KEY, String(sqlPanelMinimized));
+    }, [sqlPanelMinimized]);
+
+    useEffect(() => {
+        window.localStorage.setItem(SQL_PANEL_CLOSED_KEY, String(sqlPanelClosed));
+    }, [sqlPanelClosed]);
 
     useEffect(() => {
         let cancelled = false;
@@ -362,6 +409,17 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                             {themeMode === "light" ? <DarkModeOutlinedIcon fontSize="small" /> : <LightModeOutlinedIcon fontSize="small" />}
                         </IconButton>
                     </Tooltip>
+                    {isDevMode && sqlPanelClosed ? (
+                        <AntBtn
+                            antType="text"
+                            onClick={() => {
+                                setSqlPanelClosed(false);
+                                setSqlPanelMinimized(false);
+                            }}
+                        >
+                            Open SQL
+                        </AntBtn>
+                    ) : null}
                     <IconButton
                         aria-label="Open profile menu"
                         onClick={(event) => setProfileMenuAnchor(event.currentTarget)}
@@ -578,7 +636,7 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                     </Stack>
                 </Paper>
             ) : null}
-            {isDevMode && sqlPanelPos ? (
+            {isDevMode && sqlPanelPos && !sqlPanelMinimized && !sqlPanelClosed ? (
                 <Rnd
                     size={sqlPanelSize}
                     position={sqlPanelPos}
@@ -624,16 +682,24 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                         <Typography variant="caption" sx={{ fontWeight: 700 }}>
                             SQL Stats (dev)
                         </Typography>
-                        <AntBtn
-                            antType="text"
-                            onClick={() => {
-                                setSqlStatsFeed([]);
-                                setSelectedSqlIndex(0);
-                            }}
-                            disabled={sqlStatsFeed.length === 0}
-                        >
-                            Clear
-                        </AntBtn>
+                        <Stack direction="row" spacing={0.5}>
+                            <AntBtn antType="text" onClick={() => setSqlPanelMinimized(true)}>
+                                Minimize
+                            </AntBtn>
+                            <AntBtn antType="text" onClick={() => setSqlPanelClosed(true)}>
+                                Close
+                            </AntBtn>
+                            <AntBtn
+                                antType="text"
+                                onClick={() => {
+                                    setSqlStatsFeed([]);
+                                    setSelectedSqlIndex(0);
+                                }}
+                                disabled={sqlStatsFeed.length === 0}
+                            >
+                                Clear
+                            </AntBtn>
+                        </Stack>
                     </Stack>
                     <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
                         Requests captured: {sqlStatsFeed.length}
@@ -725,6 +791,37 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                             </Box>
                         </Box>
                     ) : null}
+                    </Paper>
+                </Rnd>
+            ) : null}
+            {isDevMode && sqlPanelPos && sqlPanelMinimized && !sqlPanelClosed ? (
+                <Rnd
+                    size={{ width: 190, height: 48 }}
+                    position={sqlPanelPos}
+                    onDragStop={(_, data) => setSqlPanelPos({ x: data.x, y: data.y })}
+                    enableResizing={false}
+                    bounds="window"
+                    dragHandleClassName="sql-stats-minimized-drag-handle"
+                    style={{ zIndex: theme.zIndex.modal + 1, position: "fixed" }}
+                >
+                    <Paper
+                        elevation={3}
+                        className="sql-stats-minimized-drag-handle"
+                        sx={{
+                            px: 1,
+                            py: 0.6,
+                            height: "100%",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            border: "1px solid",
+                            borderColor: "divider",
+                            cursor: "move",
+                        }}
+                    >
+                        <AntBtn antType="text" onClick={() => setSqlPanelMinimized(false)}>
+                            SQL Stats ({sqlStatsFeed.length})
+                        </AntBtn>
                     </Paper>
                 </Rnd>
             ) : null}
