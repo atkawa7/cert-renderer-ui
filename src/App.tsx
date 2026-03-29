@@ -49,9 +49,10 @@ type AppProps = {
 
 type SqlSeverity = "normal" | "warn" | "critical";
 
-function getRequestSeverity(elapsedMs: number, statements: number): SqlSeverity {
-    if (elapsedMs >= 3000 || statements >= 20) return "critical";
-    if (elapsedMs >= 1000 || statements >= 10) return "warn";
+function getRequestSeverity(otherElapsedMs: number, statements: number): SqlSeverity {
+    const nonDbMs = Math.max(0, otherElapsedMs);
+    if (nonDbMs >= 1500 || statements >= 20) return "critical";
+    if (nonDbMs >= 500 || statements >= 10) return "warn";
     return "normal";
 }
 
@@ -745,7 +746,9 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                             <Stack spacing={0}>
                                 {sqlStatsFeed.map((stats, reqIdx) => (
                                     (() => {
-                                        const severity = getRequestSeverity(stats.elapsedMs, stats.statements);
+                                        const dbElapsedMs = stats.sqlElapsedMs;
+                                        const nonDbMs = stats.otherElapsedMs;
+                                        const severity = getRequestSeverity(nonDbMs, stats.statements);
                                         return (
                                     <Box
                                         key={`${stats.capturedAt}-${reqIdx}`}
@@ -769,6 +772,9 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                                             {stats.status} | {stats.statements} stmts | {stats.elapsedMs} ms
                                             {severity === "warn" ? " | Warning" : severity === "critical" ? " | Critical" : ""}
                                         </Typography>
+                                        <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                                            DB {dbElapsedMs} ms | Non-DB {nonDbMs} ms
+                                        </Typography>
                                     </Box>
                                         );
                                     })()
@@ -786,11 +792,25 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                                 {sqlDetailTab === 0 ? (
                                     <Stack spacing={0.5}>
                                         {(() => {
-                                            const severity = getRequestSeverity(selectedSqlStats.elapsedMs, selectedSqlStats.statements);
+                                            const dbElapsedMs = selectedSqlStats.sqlElapsedMs;
+                                            const serializationMs = selectedSqlStats.serializationElapsedMs;
+                                            const nonDbMs = selectedSqlStats.otherElapsedMs;
+                                            const severity = getRequestSeverity(nonDbMs, selectedSqlStats.statements);
                                             return (
-                                                <Typography variant="caption" color={severityColor(severity)}>
-                                                    <strong>Health:</strong> {severity === "normal" ? "Normal" : severity === "warn" ? "Warning" : "Critical"}
-                                                </Typography>
+                                                <>
+                                                    <Typography variant="caption" color={severityColor(severity)}>
+                                                        <strong>Health:</strong> {severity === "normal" ? "Normal" : severity === "warn" ? "Warning" : "Critical"}
+                                                    </Typography>
+                                                    <Typography variant="caption">
+                                                        <strong>DB time:</strong> {dbElapsedMs} ms
+                                                    </Typography>
+                                                    <Typography variant="caption">
+                                                        <strong>Serialization time:</strong> {serializationMs} ms
+                                                    </Typography>
+                                                    <Typography variant="caption" color={severityColor(nonDbMs >= 1500 ? "critical" : nonDbMs >= 500 ? "warn" : "normal")}>
+                                                        <strong>Other time:</strong> {nonDbMs} ms
+                                                    </Typography>
+                                                </>
                                             );
                                         })()}
                                         <Typography variant="caption"><strong>Request:</strong> {selectedSqlStats.method} {shortPath(selectedSqlStats.url)}</Typography>

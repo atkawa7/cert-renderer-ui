@@ -221,6 +221,9 @@ const SQL_STATS_EVENT = "renderer:sql-stats";
 export type SqlStats = {
     statements: number;
     elapsedMs: number;
+    sqlElapsedMs: number;
+    serializationElapsedMs: number;
+    otherElapsedMs: number;
     status: number;
     method: string;
     url: string;
@@ -321,12 +324,27 @@ function emitSqlStats(response: Response, method: string) {
     const statements = Number.parseInt(statementsRaw, 10);
     const elapsedMs = Number.parseInt(elapsedRaw, 10);
     if (!Number.isFinite(statements) || !Number.isFinite(elapsedMs)) return;
+    const sqlElapsedRaw = response.headers.get("X-SQL-Elapsed-Ms");
+    const serializationElapsedRaw = response.headers.get("X-Serialization-Elapsed-Ms");
+    const otherElapsedRaw = response.headers.get("X-Other-Elapsed-Ms");
+    const sqlElapsedMs = Number.parseInt(sqlElapsedRaw ?? "", 10);
+    const serializationElapsedMs = Number.parseInt(serializationElapsedRaw ?? "", 10);
+    const otherElapsedMs = Number.parseInt(otherElapsedRaw ?? "", 10);
     const detailRaw = response.headers.get("X-SQL-Statements-Detail");
 
     const sqlDetails = decodeSqlStatements(detailRaw);
+    const fallbackSqlElapsedMs = sqlDetails.reduce((sum, entry) => sum + (entry.elapsedMs ?? 0), 0);
+    const safeSqlElapsedMs = Number.isFinite(sqlElapsedMs) ? Math.max(0, sqlElapsedMs) : fallbackSqlElapsedMs;
+    const safeSerializationElapsedMs = Number.isFinite(serializationElapsedMs) ? Math.max(0, serializationElapsedMs) : 0;
+    const safeOtherElapsedMs = Number.isFinite(otherElapsedMs)
+        ? Math.max(0, otherElapsedMs)
+        : Math.max(0, Math.max(0, elapsedMs) - safeSqlElapsedMs - safeSerializationElapsedMs);
     const stats: SqlStats = {
         statements: Math.max(0, statements),
         elapsedMs: Math.max(0, elapsedMs),
+        sqlElapsedMs: safeSqlElapsedMs,
+        serializationElapsedMs: safeSerializationElapsedMs,
+        otherElapsedMs: safeOtherElapsedMs,
         status: response.status,
         method: method.toUpperCase(),
         url: response.url,
