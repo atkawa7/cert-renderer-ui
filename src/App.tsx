@@ -47,6 +47,27 @@ type AppProps = {
     onToggleTheme: () => void;
 };
 
+type SqlSeverity = "normal" | "warn" | "critical";
+
+function getRequestSeverity(elapsedMs: number, statements: number): SqlSeverity {
+    if (elapsedMs >= 3000 || statements >= 20) return "critical";
+    if (elapsedMs >= 1000 || statements >= 10) return "warn";
+    return "normal";
+}
+
+function getStatementSeverity(elapsedMs: number | null): SqlSeverity {
+    if (elapsedMs == null) return "normal";
+    if (elapsedMs >= 500) return "critical";
+    if (elapsedMs >= 150) return "warn";
+    return "normal";
+}
+
+function severityColor(severity: SqlSeverity): "text.secondary" | "warning.main" | "error.main" {
+    if (severity === "critical") return "error.main";
+    if (severity === "warn") return "warning.main";
+    return "text.secondary";
+}
+
 function formatSqlForCard(sql: string): string {
     return sql
         .replace(/\s+/g, " ")
@@ -723,6 +744,9 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                         ) : (
                             <Stack spacing={0}>
                                 {sqlStatsFeed.map((stats, reqIdx) => (
+                                    (() => {
+                                        const severity = getRequestSeverity(stats.elapsedMs, stats.statements);
+                                        return (
                                     <Box
                                         key={`${stats.capturedAt}-${reqIdx}`}
                                         onClick={() => setSelectedSqlIndex(reqIdx)}
@@ -732,6 +756,8 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                                             py: 0.6,
                                             borderBottom: reqIdx === sqlStatsFeed.length - 1 ? "none" : "1px solid",
                                             borderColor: "divider",
+                                            borderLeft: "4px solid",
+                                            borderLeftColor: severity === "critical" ? "error.main" : severity === "warn" ? "warning.main" : "transparent",
                                             bgcolor: reqIdx === selectedSqlIndex ? "action.selected" : "transparent",
                                             "&:hover": { bgcolor: reqIdx === selectedSqlIndex ? "action.selected" : "action.hover" },
                                         }}
@@ -739,10 +765,13 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                                         <Typography variant="caption" sx={{ display: "block", fontFamily: "monospace" }}>
                                             {stats.method} {shortPath(stats.url)}
                                         </Typography>
-                                        <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                                        <Typography variant="caption" color={severityColor(severity)} sx={{ display: "block" }}>
                                             {stats.status} | {stats.statements} stmts | {stats.elapsedMs} ms
+                                            {severity === "warn" ? " | Warning" : severity === "critical" ? " | Critical" : ""}
                                         </Typography>
                                     </Box>
+                                        );
+                                    })()
                                 ))}
                             </Stack>
                         )}
@@ -756,6 +785,14 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                             <Box sx={{ p: 0.8, maxHeight: 220, overflowY: "auto" }}>
                                 {sqlDetailTab === 0 ? (
                                     <Stack spacing={0.5}>
+                                        {(() => {
+                                            const severity = getRequestSeverity(selectedSqlStats.elapsedMs, selectedSqlStats.statements);
+                                            return (
+                                                <Typography variant="caption" color={severityColor(severity)}>
+                                                    <strong>Health:</strong> {severity === "normal" ? "Normal" : severity === "warn" ? "Warning" : "Critical"}
+                                                </Typography>
+                                            );
+                                        })()}
                                         <Typography variant="caption"><strong>Request:</strong> {selectedSqlStats.method} {shortPath(selectedSqlStats.url)}</Typography>
                                         <Typography variant="caption"><strong>Status:</strong> {selectedSqlStats.status}</Typography>
                                         <Typography variant="caption"><strong>Statements:</strong> {selectedSqlStats.statements}</Typography>
@@ -765,9 +802,14 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                                     <Stack spacing={0.6}>
                                         {selectedSqlStats.sqlDetails.map((entry, idx) => (
                                             <Box key={`${idx}-${entry.sql.slice(0, 24)}`}>
-                                                <Typography variant="caption" color="text.secondary" sx={{ display: "block", fontFamily: "monospace" }}>
-                                                    {`${idx + 1}. ${entry.elapsedMs != null ? `${entry.elapsedMs} ms` : "n/a"}`}
-                                                </Typography>
+                                                {(() => {
+                                                    const severity = getStatementSeverity(entry.elapsedMs);
+                                                    return (
+                                                        <Typography variant="caption" color={severityColor(severity)} sx={{ display: "block", fontFamily: "monospace" }}>
+                                                            {`${idx + 1}. ${entry.elapsedMs != null ? `${entry.elapsedMs} ms` : "n/a"}${severity === "warn" ? " | Warning" : severity === "critical" ? " | Critical" : ""}`}
+                                                        </Typography>
+                                                    );
+                                                })()}
                                                 <Typography
                                                     variant="caption"
                                                     sx={{
