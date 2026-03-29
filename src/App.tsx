@@ -775,11 +775,11 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                                             {stats.method} {shortPath(stats.url)}
                                         </Typography>
                                         <Typography variant="caption" color={severityColor(severity)} sx={{ display: "block" }}>
-                                            {stats.status} | {stats.statements} stmts | {stats.elapsedMs} ms
+                                            HTTP {stats.status} | {stats.statements} SQL stmts | {stats.elapsedMs} ms total
                                             {severity === "warn" ? " | Warning" : severity === "critical" ? " | Critical" : ""}
                                         </Typography>
                                         <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
-                                            DB {dbElapsedMs} ms | Non-DB {nonDbMs} ms
+                                            SQL {dbElapsedMs} ms | App {nonDbMs} ms
                                         </Typography>
                                     </Box>
                                         );
@@ -798,34 +798,34 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                             </Tabs>
                             <Box sx={{ p: 0.8, maxHeight: 220, overflowY: "auto" }}>
                                 {sqlDetailTab === 0 ? (
-                                    <Stack spacing={0.5}>
-                                        {(() => {
-                                            const dbElapsedMs = selectedSqlStats.sqlElapsedMs;
-                                            const serializationMs = selectedSqlStats.serializationElapsedMs;
-                                            const nonDbMs = selectedSqlStats.otherElapsedMs;
-                                            const severity = getRequestSeverity(nonDbMs, selectedSqlStats.statements);
-                                            return (
-                                                <>
-                                                    <Typography variant="caption" color={severityColor(severity)}>
-                                                        <strong>Health:</strong> {severity === "normal" ? "Normal" : severity === "warn" ? "Warning" : "Critical"}
-                                                    </Typography>
-                                                    <Typography variant="caption">
-                                                        <strong>DB time:</strong> {dbElapsedMs} ms
-                                                    </Typography>
-                                                    <Typography variant="caption">
-                                                        <strong>Serialization time:</strong> {serializationMs} ms
-                                                    </Typography>
-                                                    <Typography variant="caption" color={severityColor(nonDbMs >= 1500 ? "critical" : nonDbMs >= 500 ? "warn" : "normal")}>
-                                                        <strong>Other time:</strong> {nonDbMs} ms
-                                                    </Typography>
-                                                </>
-                                            );
-                                        })()}
-                                        <Typography variant="caption"><strong>Request:</strong> {selectedSqlStats.method} {shortPath(selectedSqlStats.url)}</Typography>
-                                        <Typography variant="caption"><strong>Status:</strong> {selectedSqlStats.status}</Typography>
-                                        <Typography variant="caption"><strong>Statements:</strong> {selectedSqlStats.statements}</Typography>
-                                        <Typography variant="caption"><strong>Elapsed:</strong> {selectedSqlStats.elapsedMs} ms</Typography>
-                                    </Stack>
+                                    (() => {
+                                        const dbElapsedMs = selectedSqlStats.sqlElapsedMs;
+                                        const serializationMs = selectedSqlStats.serializationElapsedMs;
+                                        const nonDbMs = selectedSqlStats.otherElapsedMs;
+                                        const severity = getRequestSeverity(nonDbMs, selectedSqlStats.statements);
+                                        const rows: [string, string, string?][] = [
+                                            ["Health", severity === "normal" ? "Normal" : severity === "warn" ? "Warning" : "Critical", severityColor(severity)],
+                                            ["SQL time", `${dbElapsedMs} ms`],
+                                            ["Serialize time", `${serializationMs} ms`],
+                                            ["App time", `${nonDbMs} ms`, severityColor(nonDbMs >= 1500 ? "critical" : nonDbMs >= 500 ? "warn" : "normal")],
+                                            ["Endpoint", `${selectedSqlStats.method} ${shortPath(selectedSqlStats.url)}`],
+                                            ["HTTP status", String(selectedSqlStats.status)],
+                                            ["SQL count", String(selectedSqlStats.statements)],
+                                            ["Total time", `${selectedSqlStats.elapsedMs} ms`],
+                                        ];
+                                        return (
+                                            <table style={{ borderCollapse: "collapse", width: "100%", fontSize: "0.75rem" }}>
+                                                <tbody>
+                                                    {rows.map(([label, value, color]) => (
+                                                        <tr key={label}>
+                                                            <td style={{ paddingRight: "1em", whiteSpace: "nowrap", color: "inherit", opacity: 0.6 }}>{label}</td>
+                                                            <td style={{ color: color ?? "inherit" }}>{value}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        );
+                                    })()
                                 ) : sqlDetailTab === 1 && selectedSqlStats.sqlDetails.length > 0 ? (
                                     <Stack spacing={0.6}>
                                         {selectedSqlStats.sqlDetails.map((entry, idx) => (
@@ -834,7 +834,7 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                                                     const severity = getStatementSeverity(entry.elapsedMs);
                                                     return (
                                                         <Typography variant="caption" color={severityColor(severity)} sx={{ display: "block", fontFamily: "monospace" }}>
-                                                            {`${idx + 1}. ${entry.elapsedMs != null ? `${entry.elapsedMs} ms` : "n/a"}${severity === "warn" ? " | Warning" : severity === "critical" ? " | Critical" : ""}`}
+                                                            {`Query ${idx + 1}: ${entry.elapsedMs != null ? `${entry.elapsedMs} ms` : "n/a"}${severity === "warn" ? " | Warning" : severity === "critical" ? " | Critical" : ""}`}
                                                         </Typography>
                                                     );
                                                 })()}
@@ -855,9 +855,9 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                                     </Stack>
                                 ) : sqlDetailTab === 2 ? (
                                     <Stack spacing={0.6}>
-                                        <Typography variant="caption"><strong>Method:</strong> {selectedSqlStats.request.method}</Typography>
-                                        <Typography variant="caption"><strong>URL:</strong> {selectedSqlStats.request.url}</Typography>
-                                        <Typography variant="caption" sx={{ fontWeight: 700 }}>Headers</Typography>
+                                        <Typography variant="caption"><strong>HTTP method:</strong> {selectedSqlStats.request.method}</Typography>
+                                        <Typography variant="caption"><strong>Request URL:</strong> {selectedSqlStats.request.url}</Typography>
+                                        <Typography variant="caption" sx={{ fontWeight: 700 }}>Request headers</Typography>
                                         <Typography
                                             variant="caption"
                                             sx={{
@@ -870,7 +870,7 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                                         >
                                             {formatHeaders(selectedSqlStats.request.headers)}
                                         </Typography>
-                                        <Typography variant="caption" sx={{ fontWeight: 700 }}>Body</Typography>
+                                        <Typography variant="caption" sx={{ fontWeight: 700 }}>Request body</Typography>
                                         <Typography
                                             variant="caption"
                                             sx={{
@@ -886,8 +886,8 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                                     </Stack>
                                 ) : sqlDetailTab === 3 ? (
                                     <Stack spacing={0.6}>
-                                        <Typography variant="caption"><strong>Status:</strong> {selectedSqlStats.response.status}</Typography>
-                                        <Typography variant="caption" sx={{ fontWeight: 700 }}>Headers</Typography>
+                                        <Typography variant="caption"><strong>HTTP status:</strong> {selectedSqlStats.response.status}</Typography>
+                                        <Typography variant="caption" sx={{ fontWeight: 700 }}>Response headers</Typography>
                                         <Typography
                                             variant="caption"
                                             sx={{
@@ -900,7 +900,7 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                                         >
                                             {formatHeaders(selectedSqlStats.response.headers)}
                                         </Typography>
-                                        <Typography variant="caption" sx={{ fontWeight: 700 }}>Body</Typography>
+                                        <Typography variant="caption" sx={{ fontWeight: 700 }}>Response body</Typography>
                                         <Typography
                                             variant="caption"
                                             sx={{

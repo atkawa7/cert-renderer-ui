@@ -217,6 +217,7 @@ const WORKSPACE_ID_KEY = "renderer:workspaceId";
 const API_KEY_KEY = "renderer:apiKey";
 const SESSION_EVENT = "renderer:session-changed";
 const SQL_STATS_EVENT = "renderer:sql-stats";
+const MY_CERTIFICATES_DEDUPE_MS = 1500;
 
 export type SqlStats = {
     statements: number;
@@ -247,6 +248,15 @@ export type DownloadedFile = {
     blob: Blob;
     fileName: string;
 };
+
+type MyCertificatesCache = {
+    key: string;
+    at: number;
+    data?: CertificateSummary[];
+    promise?: Promise<CertificateSummary[]>;
+};
+
+let myCertificatesCache: MyCertificatesCache | null = null;
 
 export function getCurrentUserId(): string {
     const raw = window.localStorage.getItem(USER_ID_KEY)?.trim();
@@ -645,15 +655,39 @@ export async function listMyCertificates(query = "", page = 0, size = 50): Promi
     if (query.trim()) params.set("query", query.trim());
     params.set("page", String(page));
     params.set("size", String(size));
-    const res = await trackedFetch(`${API_BASE}/credential-holder/certificates?${params.toString()}`, {
-        method: "GET",
-        headers: workspaceHeaders(false),
-    });
-    if (!res.ok) {
-        throw new Error(await parseErrorMessage(res, `Request failed (${res.status})`));
+    const key = params.toString();
+    const now = Date.now();
+    if (myCertificatesCache && myCertificatesCache.key === key) {
+        if (myCertificatesCache.promise) {
+            return await myCertificatesCache.promise;
+        }
+        if (myCertificatesCache.data && now - myCertificatesCache.at <= MY_CERTIFICATES_DEDUPE_MS) {
+            return myCertificatesCache.data;
+        }
     }
-    const data = (await res.json()) as PageResponse<CertificateSummary>;
-    return data.content ?? [];
+
+    const requestPromise = (async () => {
+        const res = await trackedFetch(`${API_BASE}/credential-holder/certificates?${params.toString()}`, {
+            method: "GET",
+            headers: workspaceHeaders(false),
+        });
+        if (!res.ok) {
+            throw new Error(await parseErrorMessage(res, `Request failed (${res.status})`));
+        }
+        const data = (await res.json()) as PageResponse<CertificateSummary>;
+        const content = data.content ?? [];
+        myCertificatesCache = { key, at: Date.now(), data: content };
+        return content;
+    })();
+
+    myCertificatesCache = { key, at: now, promise: requestPromise };
+    try {
+        return await requestPromise;
+    } finally {
+        if (myCertificatesCache?.key === key && myCertificatesCache.promise) {
+            myCertificatesCache.promise = undefined;
+        }
+    }
 }
 
 export async function getMyCertificateById(id: string): Promise<CertificateDetail> {
