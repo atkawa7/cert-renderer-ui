@@ -4,6 +4,33 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { verifyEmailByLink } from "../templateApi";
 import AntBtn from "../components/AntBtn";
 
+type VerificationResult = {
+    success: boolean;
+    message: string;
+};
+
+const verificationRequestByToken = new Map<string, Promise<VerificationResult>>();
+
+function verifyEmailTokenOnce(token: string): Promise<VerificationResult> {
+    const cached = verificationRequestByToken.get(token);
+    if (cached) {
+        return cached;
+    }
+    const request = (async () => {
+        try {
+            const result = await verifyEmailByLink(token);
+            if (result.verifiedEmail) {
+                return { success: true, message: "Email verified successfully." };
+            }
+            return { success: false, message: "Email is not verified." };
+        } catch (err: any) {
+            return { success: false, message: err?.message || "Email verification failed." };
+        }
+    })();
+    verificationRequestByToken.set(token, request);
+    return request;
+}
+
 export default function VerifyEmailPage() {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
@@ -22,19 +49,10 @@ export default function VerifyEmailPage() {
         (async () => {
             setLoading(true);
             try {
-                const result = await verifyEmailByLink(token);
+                const verification = await verifyEmailTokenOnce(token);
                 if (cancelled) return;
-                if (result.verifiedEmail) {
-                    setSuccess(true);
-                    setMessage("Email verified successfully.");
-                } else {
-                    setSuccess(false);
-                    setMessage("Email is not verified.");
-                }
-            } catch (err: any) {
-                if (cancelled) return;
-                setSuccess(false);
-                setMessage(err?.message || "Email verification failed.");
+                setSuccess(verification.success);
+                setMessage(verification.message);
             } finally {
                 if (!cancelled) {
                     setLoading(false);

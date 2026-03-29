@@ -259,6 +259,7 @@ export type TemplateEditorProps = {
 
 type Size = { w: number; h: number };
 type AlignMode = "left" | "h-center" | "right" | "top" | "v-center" | "bottom";
+type RenderFormField = { id: string; path: string; value: string };
 
 // ---------------- Helpers ----------------
 function clamp(n: number, min: number, max: number) {
@@ -427,6 +428,72 @@ function ensurePath(root: Record<string, unknown>, path: string, value: unknown)
     const leaf = parts[parts.length - 1];
     if (shouldHydrate(cur[leaf])) {
         cur[leaf] = value;
+    }
+}
+function setPathValue(root: Record<string, unknown>, path: string, value: unknown) {
+    const parts = path.split(".").map((p) => p.trim()).filter(Boolean);
+    if (!parts.length) return;
+    let cur: Record<string, unknown> = root;
+    for (let i = 0; i < parts.length - 1; i++) {
+        const key = parts[i];
+        const next = cur[key];
+        if (!isPlainObject(next)) {
+            cur[key] = {};
+        }
+        cur = cur[key] as Record<string, unknown>;
+    }
+    cur[parts[parts.length - 1]] = value;
+}
+function flattenRenderDataToFields(
+    value: unknown,
+    prefix = "",
+    out: RenderFormField[] = []
+): RenderFormField[] {
+    if (isPlainObject(value)) {
+        for (const [key, child] of Object.entries(value)) {
+            const nextPrefix = prefix ? `${prefix}.${key}` : key;
+            flattenRenderDataToFields(child, nextPrefix, out);
+        }
+        return out;
+    }
+    if (!prefix) {
+        return out;
+    }
+    out.push({
+        id: makeId(),
+        path: prefix,
+        value: typeof value === "string" ? value : JSON.stringify(value),
+    });
+    return out;
+}
+function parseRenderFormValue(raw: string): unknown {
+    const trimmed = raw.trim();
+    if (!trimmed) return "";
+    try {
+        return JSON.parse(trimmed);
+    } catch {
+        return raw;
+    }
+}
+function buildRenderDataFromFields(fields: RenderFormField[]): Record<string, unknown> {
+    const root: Record<string, unknown> = {};
+    for (const field of fields) {
+        const path = field.path.trim();
+        if (!path) continue;
+        setPathValue(root, path, parseRenderFormValue(field.value));
+    }
+    return root;
+}
+function parseRenderFieldsFromJson(rawJson: string): RenderFormField[] {
+    try {
+        const parsed = JSON.parse(rawJson || "{}");
+        if (!isPlainObject(parsed)) {
+            return [{ id: makeId(), path: "", value: "" }];
+        }
+        const fields = flattenRenderDataToFields(parsed);
+        return fields.length ? fields : [{ id: makeId(), path: "", value: "" }];
+    } catch {
+        return [{ id: makeId(), path: "", value: "" }];
     }
 }
 function injectVarDefaultsIntoRenderDataJson(rawJson: string, template: Template): string {
@@ -660,6 +727,8 @@ export default function TemplateEditor({
     const [downloadingExternal, setDownloadingExternal] = useState<boolean>(false);
     const [convertingDesign, setConvertingDesign] = useState<boolean>(false);
     const [renderDataJson, setRenderDataJson] = useState<string>(defaultRenderDataJson);
+    const [renderDataMode, setRenderDataMode] = useState<"form" | "json">("form");
+    const [renderDataFields, setRenderDataFields] = useState<RenderFormField[]>(() => parseRenderFieldsFromJson(defaultRenderDataJson));
     const [renderDialogOpen, setRenderDialogOpen] = useState<boolean>(false);
     const [renderDialogError, setRenderDialogError] = useState<string | null>(null);
     const [inspectorOpen, setInspectorOpen] = useState<boolean>(false);
@@ -736,11 +805,14 @@ export default function TemplateEditor({
     const [canvasSize, setCanvasSize] = useState<Size>({ w: 900, h: 900 / aspectRatio });
     const renderDataForPreview = useMemo(() => {
         try {
+            if (renderDataMode === "form") {
+                return buildRenderDataFromFields(renderDataFields);
+            }
             return JSON.parse(renderDataJson || "{}");
         } catch {
             return null;
         }
-    }, [renderDataJson]);
+    }, [renderDataFields, renderDataJson, renderDataMode]);
     const centerGridOffsetX = useMemo(() => {
         const mod = (canvasSize.w / 2) % gridSizePx;
         return Number.isFinite(mod) ? mod : 0;
@@ -1135,7 +1207,47 @@ export default function TemplateEditor({
         }
     }
 
+    function updateRenderDataField(id: string, patch: Partial<Omit<RenderFormField, "id">>) {
+        setRenderDataFields((prev) =>
+            prev.map((field) => (field.id === id ? { ...field, ...patch } : field))
+        );
+    }
+
+    function removeRenderDataField(id: string) {
+        setRenderDataFields((prev) => {
+            const next = prev.filter((field) => field.id !== id);
+            return next.length ? next : [{ id: makeId(), path: "", value: "" }];
+        });
+    }
+
+    function addRenderDataField() {
+        setRenderDataFields((prev) => [...prev, { id: makeId(), path: "", value: "" }]);
+    }
+
+    function switchRenderDataMode(nextMode: "form" | "json") {
+        if (nextMode === renderDataMode) return;
+        if (nextMode === "json") {
+            setRenderDataJson(JSON.stringify(buildRenderDataFromFields(renderDataFields), null, 2));
+            setRenderDataMode("json");
+            setRenderDialogError(null);
+            return;
+        }
+        const fields = parseRenderFieldsFromJson(renderDataJson);
+        setRenderDataFields(fields);
+        setRenderDataMode("form");
+        setRenderDialogError(null);
+    }
+
     function parseRenderDialogData(): unknown | undefined {
+        if (renderDataMode === "form") {
+            const hasPath = renderDataFields.some((field) => field.path.trim().length > 0);
+            if (!hasPath) {
+                setRenderDialogError("Add at least one field path (for example: recipient.name).");
+                notifications.warning("Add at least one certificate data field", { title: "Render" });
+                return undefined;
+            }
+            return buildRenderDataFromFields(renderDataFields);
+        }
         try {
             return JSON.parse(renderDataJson || "{}");
         } catch {
@@ -1863,7 +1975,9 @@ export default function TemplateEditor({
                                         color="primary"
                                         onClick={() => {
                                             setRenderDialogError(null);
-                                            setRenderDataJson((prev) => injectVarDefaultsIntoRenderDataJson(prev, template));
+                                            const hydratedJson = injectVarDefaultsIntoRenderDataJson(renderDataJson, template);
+                                            setRenderDataJson(hydratedJson);
+                                            setRenderDataFields(parseRenderFieldsFromJson(hydratedJson));
                                             setRenderDialogOpen(true);
                                         }}
                                         disabled={renderingExternal}
@@ -2603,17 +2717,64 @@ export default function TemplateEditor({
             >
                 <DialogTitle>Generate Certificates</DialogTitle>
                 <DialogContent>
-                    <TextField
-                        fullWidth
-                        multiline
-                        minRows={8}
-                        maxRows={12}
-                        label="Certificate Data (JSON)"
-                        value={renderDataJson}
-                        onChange={(e) => setRenderDataJson(e.target.value)}
-                        sx={{ mt: 1 }}
-                        helperText="Use a JSON object for one certificate or a JSON array for batch generation."
-                    />
+                    <Stack spacing={1.25} sx={{ mt: 1 }}>
+                        <ToggleButtonGroup
+                            exclusive
+                            size="small"
+                            value={renderDataMode}
+                            onChange={(_, next) => {
+                                if (!next) return;
+                                switchRenderDataMode(next);
+                            }}
+                        >
+                            <ToggleButton value="form">Form</ToggleButton>
+                            <ToggleButton value="json">JSON</ToggleButton>
+                        </ToggleButtonGroup>
+                        {renderDataMode === "form" ? (
+                            <Stack spacing={1}>
+                                {renderDataFields.map((field) => (
+                                    <Stack key={field.id} direction="row" spacing={1} alignItems="center">
+                                        <TextField
+                                            size="small"
+                                            label="Path"
+                                            placeholder="recipient.name"
+                                            value={field.path}
+                                            onChange={(e) => updateRenderDataField(field.id, { path: e.target.value })}
+                                            sx={{ flex: 1 }}
+                                        />
+                                        <TextField
+                                            size="small"
+                                            label="Value"
+                                            placeholder="Jane Doe"
+                                            value={field.value}
+                                            onChange={(e) => updateRenderDataField(field.id, { value: e.target.value })}
+                                            sx={{ flex: 1 }}
+                                        />
+                                        <AntBtn antType="text" danger onClick={() => removeRenderDataField(field.id)}>
+                                            Remove
+                                        </AntBtn>
+                                    </Stack>
+                                ))}
+                                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                                    <Typography variant="caption" color="text.secondary">
+                                        {"Dot paths are converted to nested JSON, for example recipient.name -> { \"recipient\": { \"name\": \"...\" } }."}
+                                    </Typography>
+                                    <AntBtn antType="text" onClick={addRenderDataField}>Add field</AntBtn>
+                                </Stack>
+                            </Stack>
+                        ) : (
+                            <TextField
+                                fullWidth
+                                multiline
+                                minRows={8}
+                                maxRows={12}
+                                label="Certificate Data (JSON)"
+                                value={renderDataJson}
+                                onChange={(e) => setRenderDataJson(e.target.value)}
+                                helperText="Use a JSON object for one certificate or a JSON array for batch generation."
+                            />
+                        )}
+                    </Stack>
                     {renderDialogError && (
                         <Typography color="error" variant="body2" sx={{ mt: 1 }}>
                             {renderDialogError}

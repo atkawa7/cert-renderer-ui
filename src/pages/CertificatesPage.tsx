@@ -129,7 +129,7 @@ export default function CertificatesPage() {
         currentUser()
             .then((user) => {
                 if (cancelled) return;
-                setExportAllowed(String(user.subscriptionTier || "FREE").toUpperCase() === "PRO");
+                setExportAllowed(String(user.subscriptionTier || "FREE").toUpperCase() !== "FREE");
             })
             .catch(() => {
                 if (cancelled) return;
@@ -151,7 +151,7 @@ export default function CertificatesPage() {
                 </Box>
                 {exportAllowed === false ? (
                     <Alert severity="info">
-                        Free plan: certificate view and download are disabled. Upgrade to Pro to access certificate PDFs.
+                        Free plan: certificate view, download, and email send are disabled. Upgrade to a paid plan to access these features.
                     </Alert>
                 ) : null}
 
