@@ -230,6 +230,17 @@ export type SqlStats = {
     capturedAt: string;
     sqlTexts: string[];
     sqlDetails: Array<{ sql: string; elapsedMs: number | null }>;
+    request: {
+        method: string;
+        url: string;
+        headers: Record<string, string>;
+        body: string | null;
+    };
+    response: {
+        status: number;
+        headers: Record<string, string>;
+        body: string | null;
+    };
 };
 
 export type DownloadedFile = {
@@ -316,7 +327,13 @@ export function subscribeSqlStats(listener: (stats: SqlStats) => void): () => vo
     return () => window.removeEventListener(SQL_STATS_EVENT, handler as EventListener);
 }
 
-function emitSqlStats(response: Response, method: string) {
+const TRACE_BODY_LIMIT = 8000;
+
+async function emitSqlStats(
+    response: Response,
+    method: string,
+    requestTrace: { url: string; headers: Record<string, string>; body: string | null }
+) {
     const statementsRaw = response.headers.get("X-SQL-Statements");
     const elapsedRaw = response.headers.get("X-Request-Elapsed-Ms");
     if (!statementsRaw || !elapsedRaw) return;
@@ -339,6 +356,8 @@ function emitSqlStats(response: Response, method: string) {
     const safeOtherElapsedMs = Number.isFinite(otherElapsedMs)
         ? Math.max(0, otherElapsedMs)
         : Math.max(0, Math.max(0, elapsedMs) - safeSqlElapsedMs - safeSerializationElapsedMs);
+    const responseHeaders = headersToRecord(response.headers);
+    const responseBody = await readResponseBodyForTrace(response);
     const stats: SqlStats = {
         statements: Math.max(0, statements),
         elapsedMs: Math.max(0, elapsedMs),
@@ -351,6 +370,17 @@ function emitSqlStats(response: Response, method: string) {
         capturedAt: new Date().toISOString(),
         sqlDetails,
         sqlTexts: sqlDetails.map((item) => item.sql),
+        request: {
+            method: method.toUpperCase(),
+            url: requestTrace.url,
+            headers: requestTrace.headers,
+            body: requestTrace.body,
+        },
+        response: {
+            status: response.status,
+            headers: responseHeaders,
+            body: responseBody,
+        },
     };
     window.dispatchEvent(new CustomEvent<SqlStats>(SQL_STATS_EVENT, { detail: stats }));
 }
@@ -388,9 +418,73 @@ function decodeSqlStatements(raw: string | null): Array<{ sql: string; elapsedMs
 
 async function trackedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
     const method = init?.method || "GET";
+    const requestTrace = {
+        url: resolveRequestUrl(input),
+        headers: headersToRecord(init?.headers),
+        body: bodyToTraceString(init?.body),
+    };
     const response = await fetch(input, init);
-    emitSqlStats(response, method);
+    await emitSqlStats(response, method, requestTrace);
     return response;
+}
+
+function resolveRequestUrl(input: RequestInfo | URL): string {
+    if (typeof input === "string") return input;
+    if (input instanceof URL) return input.toString();
+    return input.url;
+}
+
+function headersToRecord(headers: HeadersInit | null | undefined): Record<string, string> {
+    if (!headers) return {};
+    if (headers instanceof Headers) {
+        return Object.fromEntries(headers.entries());
+    }
+    if (Array.isArray(headers)) {
+        return Object.fromEntries(headers);
+    }
+    return { ...headers };
+}
+
+function bodyToTraceString(body: BodyInit | null | undefined): string | null {
+    if (body == null) return null;
+    if (typeof body === "string") return truncateTraceBody(body);
+    if (body instanceof URLSearchParams) return truncateTraceBody(body.toString());
+    if (body instanceof FormData) {
+        const pairs: string[] = [];
+        body.forEach((value, key) => {
+            pairs.push(`${key}=${typeof value === "string" ? value : "[file]"}`);
+        });
+        return truncateTraceBody(pairs.join("&"));
+    }
+    return `[${Object.prototype.toString.call(body)}]`;
+}
+
+async function readResponseBodyForTrace(response: Response): Promise<string | null> {
+    const contentType = response.headers.get("Content-Type") || "";
+    if (!isTextLikeContentType(contentType)) {
+        return `[non-text response: ${contentType || "unknown"}]`;
+    }
+    try {
+        const bodyText = await response.clone().text();
+        return truncateTraceBody(bodyText);
+    } catch {
+        return null;
+    }
+}
+
+function isTextLikeContentType(contentType: string): boolean {
+    const value = contentType.toLowerCase();
+    return value.includes("application/json")
+        || value.includes("text/")
+        || value.includes("application/problem+json")
+        || value.includes("application/xml")
+        || value.includes("application/javascript")
+        || value.includes("application/x-www-form-urlencoded");
+}
+
+function truncateTraceBody(value: string): string {
+    if (value.length <= TRACE_BODY_LIMIT) return value;
+    return `${value.slice(0, TRACE_BODY_LIMIT)}\n...[truncated ${value.length - TRACE_BODY_LIMIT} chars]`;
 }
 
 function workspaceHeaders(requireWorkspace = true): Record<string, string> {

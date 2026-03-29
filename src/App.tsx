@@ -86,6 +86,12 @@ function shortPath(url: string): string {
     }
 }
 
+function formatHeaders(headers: Record<string, string>): string {
+    const entries = Object.entries(headers);
+    if (entries.length === 0) return "(none)";
+    return entries.map(([key, value]) => `${key}: ${value}`).join("\n");
+}
+
 export default function App({ themeMode, onToggleTheme }: AppProps) {
     const location = useLocation();
     const theme = useTheme();
@@ -787,6 +793,8 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                             <Tabs value={sqlDetailTab} onChange={(_, value) => setSqlDetailTab(value)} variant="fullWidth">
                                 <Tab label="Overview" />
                                 <Tab label="SQL" />
+                                <Tab label="Request" />
+                                <Tab label="Response" />
                             </Tabs>
                             <Box sx={{ p: 0.8, maxHeight: 220, overflowY: "auto" }}>
                                 {sqlDetailTab === 0 ? (
@@ -818,7 +826,7 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                                         <Typography variant="caption"><strong>Statements:</strong> {selectedSqlStats.statements}</Typography>
                                         <Typography variant="caption"><strong>Elapsed:</strong> {selectedSqlStats.elapsedMs} ms</Typography>
                                     </Stack>
-                                ) : selectedSqlStats.sqlDetails.length > 0 ? (
+                                ) : sqlDetailTab === 1 && selectedSqlStats.sqlDetails.length > 0 ? (
                                     <Stack spacing={0.6}>
                                         {selectedSqlStats.sqlDetails.map((entry, idx) => (
                                             <Box key={`${idx}-${entry.sql.slice(0, 24)}`}>
@@ -845,9 +853,70 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                                             </Box>
                                         ))}
                                     </Stack>
+                                ) : sqlDetailTab === 2 ? (
+                                    <Stack spacing={0.6}>
+                                        <Typography variant="caption"><strong>Method:</strong> {selectedSqlStats.request.method}</Typography>
+                                        <Typography variant="caption"><strong>URL:</strong> {selectedSqlStats.request.url}</Typography>
+                                        <Typography variant="caption" sx={{ fontWeight: 700 }}>Headers</Typography>
+                                        <Typography
+                                            variant="caption"
+                                            sx={{
+                                                display: "block",
+                                                fontFamily: "monospace",
+                                                whiteSpace: "pre-wrap",
+                                                overflowWrap: "anywhere",
+                                                wordBreak: "break-word",
+                                            }}
+                                        >
+                                            {formatHeaders(selectedSqlStats.request.headers)}
+                                        </Typography>
+                                        <Typography variant="caption" sx={{ fontWeight: 700 }}>Body</Typography>
+                                        <Typography
+                                            variant="caption"
+                                            sx={{
+                                                display: "block",
+                                                fontFamily: "monospace",
+                                                whiteSpace: "pre-wrap",
+                                                overflowWrap: "anywhere",
+                                                wordBreak: "break-word",
+                                            }}
+                                        >
+                                            {selectedSqlStats.request.body ?? "(empty)"}
+                                        </Typography>
+                                    </Stack>
+                                ) : sqlDetailTab === 3 ? (
+                                    <Stack spacing={0.6}>
+                                        <Typography variant="caption"><strong>Status:</strong> {selectedSqlStats.response.status}</Typography>
+                                        <Typography variant="caption" sx={{ fontWeight: 700 }}>Headers</Typography>
+                                        <Typography
+                                            variant="caption"
+                                            sx={{
+                                                display: "block",
+                                                fontFamily: "monospace",
+                                                whiteSpace: "pre-wrap",
+                                                overflowWrap: "anywhere",
+                                                wordBreak: "break-word",
+                                            }}
+                                        >
+                                            {formatHeaders(selectedSqlStats.response.headers)}
+                                        </Typography>
+                                        <Typography variant="caption" sx={{ fontWeight: 700 }}>Body</Typography>
+                                        <Typography
+                                            variant="caption"
+                                            sx={{
+                                                display: "block",
+                                                fontFamily: "monospace",
+                                                whiteSpace: "pre-wrap",
+                                                overflowWrap: "anywhere",
+                                                wordBreak: "break-word",
+                                            }}
+                                        >
+                                            {selectedSqlStats.response.body ?? "(empty)"}
+                                        </Typography>
+                                    </Stack>
                                 ) : (
                                     <Typography variant="caption" color="text.secondary">
-                                        No SQL detail captured.
+                                        No detail captured.
                                     </Typography>
                                 )}
                             </Box>
