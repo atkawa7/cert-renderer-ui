@@ -183,6 +183,12 @@ export type AuthInvitation = {
     invitationLink?: string;
 };
 
+export type CreateInvitationPayload = {
+    username: string;
+    inviteeEmail?: string;
+    sendEmail?: boolean;
+};
+
 export type AppSetupStatus = {
     setupEnabled: boolean;
     setupCompleted: boolean;
@@ -940,9 +946,11 @@ export async function initializeAppSetup(payload: {
     return auth;
 }
 
-export async function createInvitation(username: string): Promise<AuthInvitation> {
+export async function createInvitation(payload: CreateInvitationPayload): Promise<AuthInvitation> {
     const apiKey = getCurrentApiKey();
     if (!apiKey) throw new Error("No API key set");
+    const username = payload.username.trim();
+    const inviteeEmail = payload.inviteeEmail?.trim();
     const response = await fetch(`${API_BASE}/auth/invitations`, {
         method: "POST",
         headers: {
@@ -950,7 +958,11 @@ export async function createInvitation(username: string): Promise<AuthInvitation
             "X-API-Key": apiKey,
             Authorization: `Bearer ${apiKey}`,
         },
-        body: JSON.stringify({ username }),
+        body: JSON.stringify({
+            username,
+            inviteeEmail: inviteeEmail || undefined,
+            sendEmail: Boolean(payload.sendEmail),
+        }),
     });
     if (!response.ok) {
         throw new Error(await parseErrorMessage(response, `Invitation failed (${response.status})`));

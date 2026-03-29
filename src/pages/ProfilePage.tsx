@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Alert, Box, CircularProgress, Stack, TextField, Typography } from "@mui/material";
+import { Alert, Box, Checkbox, CircularProgress, FormControlLabel, Stack, TextField, Typography } from "@mui/material";
 import AntBtn from "../components/AntBtn";
 import { appSetupStatus, createInvitation, currentUser, getCurrentApiKey, getCurrentWorkspaceId, updateMyEmail, verifyMyEmail } from "../templateApi";
 import { useNotifications } from "../components/NotificationsProvider";
@@ -17,6 +17,8 @@ export default function ProfilePage() {
     const [emailBusy, setEmailBusy] = useState(false);
     const [registrationMode, setRegistrationMode] = useState("");
     const [inviteUsername, setInviteUsername] = useState("");
+    const [sendInviteEmail, setSendInviteEmail] = useState(false);
+    const [inviteeEmail, setInviteeEmail] = useState("");
     const [inviteLink, setInviteLink] = useState("");
 
     const apiKey = getCurrentApiKey() || "";
@@ -45,9 +47,13 @@ export default function ProfilePage() {
     async function invite() {
         if (!inviteUsername.trim()) return;
         try {
-            const response = await createInvitation(inviteUsername.trim());
+            const response = await createInvitation({
+                username: inviteUsername.trim(),
+                inviteeEmail: sendInviteEmail ? inviteeEmail.trim() : undefined,
+                sendEmail: sendInviteEmail,
+            });
             setInviteLink(response.invitationLink || "");
-            notifications.success("Invitation created", { title: "Profile" });
+            notifications.success(sendInviteEmail ? "Invitation created and emailed" : "Invitation created", { title: "Profile" });
         } catch (err: any) {
             notifications.error(err?.message || "Failed to create invitation", { title: "Profile" });
         }
@@ -168,8 +174,29 @@ export default function ProfilePage() {
                                     value={inviteUsername}
                                     onChange={(e) => setInviteUsername(e.target.value)}
                                 />
+                                <FormControlLabel
+                                    control={
+                                        <Checkbox
+                                            checked={sendInviteEmail}
+                                            onChange={(e) => setSendInviteEmail(e.target.checked)}
+                                        />
+                                    }
+                                    label="Send via email"
+                                />
+                                {sendInviteEmail ? (
+                                    <TextField
+                                        fullWidth
+                                        size="small"
+                                        label="Invitee email"
+                                        type="email"
+                                        value={inviteeEmail}
+                                        onChange={(e) => setInviteeEmail(e.target.value)}
+                                    />
+                                ) : null}
                                 <Box>
-                                    <AntBtn onClick={() => void invite()}>Generate Invite</AntBtn>
+                                    <AntBtn onClick={() => void invite()} disabled={!inviteUsername.trim() || (sendInviteEmail && !inviteeEmail.trim())}>
+                                        Generate Invite
+                                    </AntBtn>
                                 </Box>
                                 {inviteLink ? (
                                     <TextField fullWidth size="small" label="Invitation Link" value={inviteLink} InputProps={{ readOnly: true }} />
