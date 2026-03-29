@@ -34,6 +34,7 @@ export type PagedResult<T> = {
     size: number;
     totalElements: number;
     totalPages: number;
+    hasNext: boolean;
 };
 
 export type DesignSummary = {
@@ -138,6 +139,14 @@ export type WorkspaceMembership = {
     updatedAt: string;
 };
 
+export type WorkspaceMemberCandidate = {
+    userId: string;
+    username: string;
+    email?: string | null;
+    alreadyMember: boolean;
+    role?: "OWNER" | "MEMBER" | null;
+};
+
 export type AuditEventSummary = {
     id: string;
     action: string;
@@ -207,6 +216,18 @@ const USER_ID_KEY = "renderer:userId";
 const WORKSPACE_ID_KEY = "renderer:workspaceId";
 const API_KEY_KEY = "renderer:apiKey";
 const SESSION_EVENT = "renderer:session-changed";
+const SQL_STATS_EVENT = "renderer:sql-stats";
+
+export type SqlStats = {
+    statements: number;
+    elapsedMs: number;
+    status: number;
+    method: string;
+    url: string;
+    capturedAt: string;
+    sqlTexts: string[];
+    sqlDetails: Array<{ sql: string; elapsedMs: number | null }>;
+};
 
 export type DownloadedFile = {
     blob: Blob;
@@ -281,6 +302,79 @@ export function subscribeSessionChange(listener: () => void): () => void {
     };
 }
 
+export function subscribeSqlStats(listener: (stats: SqlStats) => void): () => void {
+    const handler = (event: Event) => {
+        const custom = event as CustomEvent<SqlStats>;
+        if (custom.detail) {
+            listener(custom.detail);
+        }
+    };
+    window.addEventListener(SQL_STATS_EVENT, handler as EventListener);
+    return () => window.removeEventListener(SQL_STATS_EVENT, handler as EventListener);
+}
+
+function emitSqlStats(response: Response, method: string) {
+    const statementsRaw = response.headers.get("X-SQL-Statements");
+    const elapsedRaw = response.headers.get("X-Request-Elapsed-Ms");
+    if (!statementsRaw || !elapsedRaw) return;
+
+    const statements = Number.parseInt(statementsRaw, 10);
+    const elapsedMs = Number.parseInt(elapsedRaw, 10);
+    if (!Number.isFinite(statements) || !Number.isFinite(elapsedMs)) return;
+    const detailRaw = response.headers.get("X-SQL-Statements-Detail");
+
+    const sqlDetails = decodeSqlStatements(detailRaw);
+    const stats: SqlStats = {
+        statements: Math.max(0, statements),
+        elapsedMs: Math.max(0, elapsedMs),
+        status: response.status,
+        method: method.toUpperCase(),
+        url: response.url,
+        capturedAt: new Date().toISOString(),
+        sqlDetails,
+        sqlTexts: sqlDetails.map((item) => item.sql),
+    };
+    window.dispatchEvent(new CustomEvent<SqlStats>(SQL_STATS_EVENT, { detail: stats }));
+}
+
+function decodeSqlStatements(raw: string | null): Array<{ sql: string; elapsedMs: number | null }> {
+    if (!raw) return [];
+    try {
+        const normalized = raw.replace(/-/g, "+").replace(/_/g, "/");
+        const padded = normalized + "===".slice((normalized.length + 3) % 4);
+        const decoded = window.atob(padded);
+        const text = decodeURIComponent(
+            Array.from(decoded)
+                .map((char) => `%${char.charCodeAt(0).toString(16).padStart(2, "0")}`)
+                .join("")
+        );
+        return text
+            .split(/\n{2,}/)
+            .map((item) => item.trim())
+            .filter(Boolean)
+            .map((item) => {
+                const timingMatch = item.match(/^\/\*\s*elapsedMs=(\d+)\s*\*\/\s*([\s\S]+)$/);
+                if (!timingMatch) {
+                    return { sql: item, elapsedMs: null };
+                }
+                const elapsed = Number.parseInt(timingMatch[1], 10);
+                return {
+                    sql: timingMatch[2].trim(),
+                    elapsedMs: Number.isFinite(elapsed) ? elapsed : null,
+                };
+            });
+    } catch {
+        return [];
+    }
+}
+
+async function trackedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const method = init?.method || "GET";
+    const response = await fetch(input, init);
+    emitSqlStats(response, method);
+    return response;
+}
+
 function workspaceHeaders(requireWorkspace = true): Record<string, string> {
     const headers: Record<string, string> = {
         "X-User-Id": getCurrentUserId(),
@@ -301,7 +395,7 @@ function workspaceHeaders(requireWorkspace = true): Record<string, string> {
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     const requireWorkspace = !path.startsWith("/workspaces");
-    const res = await fetch(`${API_BASE}${path}`, {
+    const res = await trackedFetch(`${API_BASE}${path}`, {
         headers: { "Content-Type": "application/json", ...workspaceHeaders(requireWorkspace), ...(init?.headers ?? {}) },
         ...init,
     });
@@ -395,6 +489,7 @@ export async function listDesigns(
         size: data.size ?? size,
         totalElements: data.totalElements ?? 0,
         totalPages: data.totalPages ?? 0,
+        hasNext: (data.number ?? page) + 1 < (data.totalPages ?? 0),
     };
 }
 
@@ -438,7 +533,7 @@ export async function listMyCertificates(query = "", page = 0, size = 50): Promi
     if (query.trim()) params.set("query", query.trim());
     params.set("page", String(page));
     params.set("size", String(size));
-    const res = await fetch(`${API_BASE}/credential-holder/certificates?${params.toString()}`, {
+    const res = await trackedFetch(`${API_BASE}/credential-holder/certificates?${params.toString()}`, {
         method: "GET",
         headers: workspaceHeaders(false),
     });
@@ -450,7 +545,7 @@ export async function listMyCertificates(query = "", page = 0, size = 50): Promi
 }
 
 export async function getMyCertificateById(id: string): Promise<CertificateDetail> {
-    const res = await fetch(`${API_BASE}/credential-holder/certificates/${encodeURIComponent(id)}`, {
+    const res = await trackedFetch(`${API_BASE}/credential-holder/certificates/${encodeURIComponent(id)}`, {
         method: "GET",
         headers: workspaceHeaders(false),
     });
@@ -465,7 +560,7 @@ export async function getCertificateById(id: string): Promise<CertificateDetail>
 }
 
 export async function getCertificatePdfBytes(id: string): Promise<Uint8Array> {
-    const res = await fetch(`${API_BASE}/certificates/${encodeURIComponent(id)}/view`, {
+    const res = await trackedFetch(`${API_BASE}/certificates/${encodeURIComponent(id)}/view`, {
         method: "GET",
         headers: workspaceHeaders(),
     });
@@ -480,7 +575,7 @@ export async function getCertificatePdfBytes(id: string): Promise<Uint8Array> {
 }
 
 export async function getMyCertificatePdfBytes(id: string): Promise<Uint8Array> {
-    const res = await fetch(`${API_BASE}/credential-holder/certificates/${encodeURIComponent(id)}/view`, {
+    const res = await trackedFetch(`${API_BASE}/credential-holder/certificates/${encodeURIComponent(id)}/view`, {
         method: "GET",
         headers: workspaceHeaders(false),
     });
@@ -499,7 +594,7 @@ export async function getCertificateCredential(id: string): Promise<CertificateC
 }
 
 export async function getMyCertificateCredential(id: string): Promise<CertificateCredential> {
-    const res = await fetch(`${API_BASE}/credential-holder/certificates/${encodeURIComponent(id)}/credential`, {
+    const res = await trackedFetch(`${API_BASE}/credential-holder/certificates/${encodeURIComponent(id)}/credential`, {
         method: "GET",
         headers: workspaceHeaders(false),
     });
@@ -581,7 +676,7 @@ export async function deleteTemplateById(id: string): Promise<void> {
 }
 
 export async function downloadTemplateById(id: string, fallbackName = "template"): Promise<DownloadedFile> {
-    const res = await fetch(`${API_BASE}/templates/${id}/download`, {
+    const res = await trackedFetch(`${API_BASE}/templates/${id}/download`, {
         method: "GET",
         headers: workspaceHeaders(),
     });
@@ -600,7 +695,7 @@ export async function downloadTemplate(payload: {
     template: Template;
     fileName?: string;
 }): Promise<DownloadedFile> {
-    const res = await fetch(`${API_BASE}/templates/download`, {
+    const res = await trackedFetch(`${API_BASE}/templates/download`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...workspaceHeaders() },
         body: JSON.stringify(payload),
@@ -626,7 +721,7 @@ export async function generateCertificatePdf(payload: {
     assetBaseUrl?: string;
     fileName?: string;
 }): Promise<Blob> {
-    const res = await fetch(`${API_BASE}/templates/certificates`, {
+    const res = await trackedFetch(`${API_BASE}/templates/certificates`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...workspaceHeaders() },
         body: JSON.stringify(payload),
@@ -652,7 +747,7 @@ export async function generateCertificateBatch(payload: {
         return { data: item ?? {} };
     });
 
-    const res = await fetch(`${API_BASE}/templates/certificates/batch`, {
+    const res = await trackedFetch(`${API_BASE}/templates/certificates/batch`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...workspaceHeaders() },
         body: JSON.stringify({
@@ -725,7 +820,7 @@ export function certificateViewUrl(id: string): string {
 }
 
 export async function downloadCertificateById(id: string, fallbackName = "certificate"): Promise<DownloadedFile> {
-    const res = await fetch(`${API_BASE}/certificates/${id}/download`, {
+    const res = await trackedFetch(`${API_BASE}/certificates/${id}/download`, {
         method: "GET",
         headers: workspaceHeaders(),
     });
@@ -741,7 +836,7 @@ export async function downloadCertificateById(id: string, fallbackName = "certif
 }
 
 export async function downloadMyCertificateById(id: string, fallbackName = "certificate"): Promise<DownloadedFile> {
-    const res = await fetch(`${API_BASE}/credential-holder/certificates/${encodeURIComponent(id)}/download`, {
+    const res = await trackedFetch(`${API_BASE}/credential-holder/certificates/${encodeURIComponent(id)}/download`, {
         method: "GET",
         headers: workspaceHeaders(false),
     });
@@ -768,7 +863,7 @@ export async function renderTemplateFo(payload: {
     assetBaseUrl?: string;
     fileName?: string;
 }): Promise<DownloadedFile> {
-    const res = await fetch(`${API_BASE}/templates/render/fo`, {
+    const res = await trackedFetch(`${API_BASE}/templates/render/fo`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...workspaceHeaders() },
         body: JSON.stringify(payload),
@@ -816,11 +911,12 @@ export async function listAuditEvents(params?: {
         size: data.size ?? 50,
         totalElements: data.totalElements ?? 0,
         totalPages: data.totalPages ?? 0,
+        hasNext: (data.number ?? 0) + 1 < (data.totalPages ?? 0),
     };
 }
 
 export async function register(payload: { username: string; password: string; invitationToken?: string }): Promise<AuthResponse> {
-    const response = await fetch(`${API_BASE}/auth/register`, {
+    const response = await trackedFetch(`${API_BASE}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -835,7 +931,7 @@ export async function register(payload: { username: string; password: string; in
 }
 
 export async function login(payload: { username: string; password: string }): Promise<AuthResponse> {
-    const response = await fetch(`${API_BASE}/auth/login`, {
+    const response = await trackedFetch(`${API_BASE}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -852,7 +948,7 @@ export async function login(payload: { username: string; password: string }): Pr
 export async function logout(): Promise<void> {
     const apiKey = getCurrentApiKey();
     if (!apiKey) return;
-    const response = await fetch(`${API_BASE}/auth/logout`, {
+    const response = await trackedFetch(`${API_BASE}/auth/logout`, {
         method: "POST",
         headers: { "X-API-Key": apiKey, Authorization: `Bearer ${apiKey}` },
     });
@@ -881,7 +977,7 @@ export async function ensureActiveWorkspace(): Promise<string> {
 export async function currentUser(): Promise<AuthUser> {
     const apiKey = getCurrentApiKey();
     if (!apiKey) throw new Error("No API key set");
-    const response = await fetch(`${API_BASE}/auth/me`, {
+    const response = await trackedFetch(`${API_BASE}/auth/me`, {
         method: "GET",
         headers: { "X-API-Key": apiKey, Authorization: `Bearer ${apiKey}` },
     });
@@ -906,7 +1002,7 @@ export async function verifyMyEmail(code: string): Promise<AuthEmailStatus> {
 }
 
 export async function verifyEmailByLink(token: string): Promise<AuthEmailStatus> {
-    const res = await fetch(`${API_BASE}/auth/email/verify-link?token=${encodeURIComponent(token)}`, {
+    const res = await trackedFetch(`${API_BASE}/auth/email/verify-link?token=${encodeURIComponent(token)}`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
     });
@@ -917,7 +1013,7 @@ export async function verifyEmailByLink(token: string): Promise<AuthEmailStatus>
 }
 
 export async function appSetupStatus(): Promise<AppSetupStatus> {
-    const response = await fetch(`${API_BASE}/app/setup/status`, {
+    const response = await trackedFetch(`${API_BASE}/app/setup/status`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
     });
@@ -932,7 +1028,7 @@ export async function initializeAppSetup(payload: {
     password: string;
     registrationMode: "self" | "invitation";
 }): Promise<AuthResponse> {
-    const response = await fetch(`${API_BASE}/app/setup`, {
+    const response = await trackedFetch(`${API_BASE}/app/setup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -951,7 +1047,7 @@ export async function createInvitation(payload: CreateInvitationPayload): Promis
     if (!apiKey) throw new Error("No API key set");
     const username = payload.username.trim();
     const inviteeEmail = payload.inviteeEmail?.trim();
-    const response = await fetch(`${API_BASE}/auth/invitations`, {
+    const response = await trackedFetch(`${API_BASE}/auth/invitations`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
@@ -1003,6 +1099,15 @@ export async function addWorkspaceMember(
         method: "POST",
         body: JSON.stringify(payload),
     });
+}
+
+export async function searchWorkspaceMemberCandidates(
+    workspaceId: string,
+    query: string
+): Promise<WorkspaceMemberCandidate[]> {
+    const params = new URLSearchParams();
+    params.set("query", query.trim());
+    return await apiFetch<WorkspaceMemberCandidate[]>(`/workspaces/${workspaceId}/members/search?${params.toString()}`);
 }
 
 export async function removeWorkspaceMember(workspaceId: string, userId: string): Promise<void> {

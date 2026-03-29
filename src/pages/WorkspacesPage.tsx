@@ -8,8 +8,10 @@ import {
     listWorkspaceMembers,
     listWorkspaces,
     removeWorkspaceMember,
+    searchWorkspaceMemberCandidates,
     setCurrentWorkspaceId,
     currentUser,
+    type WorkspaceMemberCandidate,
     type WorkspaceMembership,
     type WorkspaceSummary,
 } from "../templateApi";
@@ -25,7 +27,9 @@ export default function WorkspacesPage() {
     const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
     const [workspaceId, setWorkspaceId] = useState(getCurrentWorkspaceId() ?? "");
     const [members, setMembers] = useState<WorkspaceMembership[]>([]);
-    const [memberUserId, setMemberUserId] = useState("");
+    const [memberSearchQuery, setMemberSearchQuery] = useState("");
+    const [memberCandidates, setMemberCandidates] = useState<WorkspaceMemberCandidate[]>([]);
+    const [searchingMembers, setSearchingMembers] = useState(false);
     const [memberRole, setMemberRole] = useState<"OWNER" | "MEMBER">("MEMBER");
 
     const selectedWorkspace = useMemo(() => workspaces.find((w) => w.id === workspaceId) ?? null, [workspaces, workspaceId]);
@@ -95,18 +99,38 @@ export default function WorkspacesPage() {
         }
     }
 
-    async function addMember() {
-        if (!workspaceId || !memberUserId.trim()) return;
+    async function addMemberFromCandidate(candidate: WorkspaceMemberCandidate) {
+        if (!workspaceId || !candidate?.userId) return;
         setSaving(true);
         try {
-            await addWorkspaceMember(workspaceId, { userId: memberUserId.trim(), role: memberRole });
-            setMemberUserId("");
+            await addWorkspaceMember(workspaceId, { userId: candidate.userId, role: memberRole });
             await refreshMembers(workspaceId);
+            setMemberCandidates((items) =>
+                items.map((item) =>
+                    item.userId === candidate.userId ? { ...item, alreadyMember: true, role: memberRole } : item
+                )
+            );
             notifications.success("Member added", { title: "Workspaces" });
         } catch (err: any) {
             notifications.error(err?.message || "Failed to add member", { title: "Workspaces" });
         } finally {
             setSaving(false);
+        }
+    }
+
+    async function searchMembers() {
+        if (!workspaceId || memberSearchQuery.trim().length < 2) {
+            setMemberCandidates([]);
+            return;
+        }
+        setSearchingMembers(true);
+        try {
+            const results = await searchWorkspaceMemberCandidates(workspaceId, memberSearchQuery.trim());
+            setMemberCandidates(results);
+        } catch (err: any) {
+            notifications.error(err?.message || "Failed to search users", { title: "Workspaces" });
+        } finally {
+            setSearchingMembers(false);
         }
     }
 
@@ -201,13 +225,14 @@ export default function WorkspacesPage() {
                         </Typography>
 
                         <Box sx={{ p: 2, border: "1px solid", borderColor: "divider", borderRadius: 2, bgcolor: "background.paper" }}>
-                            <Stack direction={{ xs: "column", md: "row" }} spacing={1.2}>
+                            <Stack direction={{ xs: "column", md: "row" }} spacing={1.2} sx={{ mb: 1.2 }}>
                                 <TextField
                                     fullWidth
                                     size="small"
-                                    label="Member user ID"
-                                    value={memberUserId}
-                                    onChange={(e) => setMemberUserId(e.target.value)}
+                                    label="Search user (username or email)"
+                                    value={memberSearchQuery}
+                                    onChange={(e) => setMemberSearchQuery(e.target.value)}
+                                    helperText="Enter at least 2 characters."
                                 />
                                 <TextField
                                     select
@@ -220,10 +245,41 @@ export default function WorkspacesPage() {
                                     <MenuItem value="MEMBER">MEMBER</MenuItem>
                                     <MenuItem value="OWNER">OWNER</MenuItem>
                                 </TextField>
-                                <AntBtn antType="primary" onClick={() => void addMember()} disabled={saving}>
-                                    Add member
+                                <AntBtn antType="primary" onClick={() => void searchMembers()} disabled={saving || searchingMembers || memberSearchQuery.trim().length < 2}>
+                                    {searchingMembers ? "Searching..." : "Search"}
                                 </AntBtn>
                             </Stack>
+
+                            {memberCandidates.length > 0 ? (
+                                <Stack spacing={1}>
+                                    {memberCandidates.map((candidate) => (
+                                        <Box key={candidate.userId} sx={{ p: 1.2, border: "1px solid", borderColor: "divider", borderRadius: 1.5 }}>
+                                            <Stack direction={{ xs: "column", md: "row" }} spacing={1} justifyContent="space-between" alignItems={{ md: "center" }}>
+                                                <Box>
+                                                    <Typography variant="subtitle2">{candidate.username}</Typography>
+                                                    <Typography variant="body2" color="text.secondary">
+                                                        {candidate.email || "-"} | {candidate.userId}
+                                                    </Typography>
+                                                    {candidate.alreadyMember ? (
+                                                        <Typography variant="body2" color="text.secondary">
+                                                            Already member{candidate.role ? ` (${candidate.role})` : ""}
+                                                        </Typography>
+                                                    ) : null}
+                                                </Box>
+                                                <AntBtn
+                                                    antType="primary"
+                                                    onClick={() => void addMemberFromCandidate(candidate)}
+                                                    disabled={saving || candidate.alreadyMember}
+                                                >
+                                                    {candidate.alreadyMember ? "Added" : "Add member"}
+                                                </AntBtn>
+                                            </Stack>
+                                        </Box>
+                                    ))}
+                                </Stack>
+                            ) : memberSearchQuery.trim().length >= 2 && !searchingMembers ? (
+                                <Typography color="text.secondary">No users found.</Typography>
+                            ) : null}
                         </Box>
 
                         {loading ? (

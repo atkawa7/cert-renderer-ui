@@ -183,8 +183,8 @@ export default function DesignsPage() {
                 workspaceOnly: targetScope === "workspace",
             });
             setDesigns(result.items);
-            setTotalPages(result.totalPages);
             setPage(result.page);
+            setTotalPages(result.totalPages);
         } catch (err: any) {
             setErrorMsg(err?.message || "Failed to load designs");
         } finally {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AppBar, Avatar, Box, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Drawer, IconButton, List, ListItemButton, ListItemText, Menu, MenuItem, Paper, Stack, Toolbar, Tooltip, Typography, useMediaQuery, useTheme, type PaletteMode } from "@mui/material";
+import { AppBar, Avatar, Box, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Drawer, IconButton, List, ListItemButton, ListItemText, Menu, MenuItem, Paper, Stack, Tab, Tabs, Toolbar, Tooltip, Typography, useMediaQuery, useTheme, type PaletteMode } from "@mui/material";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import CollectionsOutlinedIcon from "@mui/icons-material/CollectionsOutlined";
 import WorkspacePremiumOutlinedIcon from "@mui/icons-material/WorkspacePremiumOutlined";
@@ -9,6 +9,7 @@ import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeOutlinedIcon from "@mui/icons-material/LightModeOutlined";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import { Link as RouterLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Rnd } from "react-rnd";
 import BrowserTabTitle from "./components/BrowserTabTitle";
 import DesignsPage from "./pages/DesignsPage";
 import DesignDetailsPage from "./pages/DesignDetailsPage";
@@ -17,6 +18,8 @@ import TemplatesListPage from "./pages/TemplatesListPage";
 import SignaturePage from "./pages/SignaturePage";
 import Base64ImageViewerPage from "./pages/Base64ImageViewerPage";
 import QrDecoderPage from "./pages/QrDecoderPage";
+import SvgToPngPage from "./pages/SvgToPngPage";
+import PasswordGeneratorPage from "./pages/PasswordGeneratorPage";
 import CertificatesPage from "./pages/CertificatesPage";
 import CertificateViewerPage from "./pages/CertificateViewerPage";
 import CredentialHolderCertificatesPage from "./pages/CredentialHolderCertificatesPage";
@@ -31,7 +34,7 @@ import ProfilePage from "./pages/ProfilePage";
 import AppSetupPage from "./pages/AppSetupPage";
 import AuditLogsPage from "./pages/AuditLogsPage";
 import AntBtn from "./components/AntBtn";
-import { currentUser, ensureActiveWorkspace, getAuthPreferences, getCurrentApiKey, getCurrentUserId, getCurrentWorkspaceId, listWorkspaces, setCurrentApiKey, setCurrentUserId, subscribeSessionChange, updateAuthPreferences } from "./templateApi";
+import { currentUser, ensureActiveWorkspace, getAuthPreferences, getCurrentApiKey, getCurrentUserId, getCurrentWorkspaceId, listWorkspaces, setCurrentApiKey, setCurrentUserId, subscribeSessionChange, subscribeSqlStats, updateAuthPreferences, type SqlStats } from "./templateApi";
 
 const SIDEBAR_WIDTH = 260;
 const SIDEBAR_WIDTH_COMPACT = 196;
@@ -39,6 +42,23 @@ type AppProps = {
     themeMode: PaletteMode;
     onToggleTheme: () => void;
 };
+
+function formatSqlForCard(sql: string): string {
+    return sql
+        .replace(/\s+/g, " ")
+        .replace(/\b(FROM|WHERE|GROUP BY|ORDER BY|HAVING|LIMIT|OFFSET|JOIN|LEFT JOIN|RIGHT JOIN|INNER JOIN|OUTER JOIN|VALUES|SET)\b/gi, "\n$1")
+        .replace(/\b(AND|OR)\b/gi, "\n  $1")
+        .trim();
+}
+
+function shortPath(url: string): string {
+    try {
+        const parsed = new URL(url);
+        return `${parsed.pathname}${parsed.search}`;
+    } catch {
+        return url;
+    }
+}
 
 export default function App({ themeMode, onToggleTheme }: AppProps) {
     const location = useLocation();
@@ -56,6 +76,11 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
     const [onboardingStep, setOnboardingStep] = useState(0);
     const [profileMenuAnchor, setProfileMenuAnchor] = useState<null | HTMLElement>(null);
     const [toolsMenuAnchor, setToolsMenuAnchor] = useState<null | HTMLElement>(null);
+    const [sqlStatsFeed, setSqlStatsFeed] = useState<SqlStats[]>([]);
+    const [selectedSqlIndex, setSelectedSqlIndex] = useState(0);
+    const [sqlDetailTab, setSqlDetailTab] = useState(0);
+    const [sqlPanelPos, setSqlPanelPos] = useState<{ x: number; y: number } | null>(null);
+    const [sqlPanelSize, setSqlPanelSize] = useState<{ width: number; height: number }>({ width: 440, height: 420 });
     const [activeWorkspaceLabel, setActiveWorkspaceLabel] = useState<string>("none");
     const effectiveSidebarWidth = sidebarHidden ? 0 : sidebarWidth;
     const activeUserId = getCurrentUserId();
@@ -89,6 +114,23 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
             setSessionVersion((value) => value + 1);
         });
     }, []);
+
+    useEffect(() => {
+        if (!isDevMode) return;
+        return subscribeSqlStats((stats) => {
+            setSqlStatsFeed((prev) => [stats, ...prev].slice(0, 60));
+            setSelectedSqlIndex(0);
+        });
+    }, [isDevMode]);
+
+    useEffect(() => {
+        if (!isDevMode || sqlPanelPos) return;
+        const panelWidth = 440;
+        const panelHeightEstimate = 360;
+        const x = Math.max(16, window.innerWidth - panelWidth - 16);
+        const y = Math.max(16, window.innerHeight - panelHeightEstimate - (cookieConsentCompleted ? 16 : 96));
+        setSqlPanelPos({ x, y });
+    }, [isDevMode, sqlPanelPos, cookieConsentCompleted]);
 
     useEffect(() => {
         let cancelled = false;
@@ -271,6 +313,7 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
             </List>
         </>
     );
+    const selectedSqlStats = sqlStatsFeed[selectedSqlIndex] ?? null;
 
     return (
         <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "background.default" }}>
@@ -373,6 +416,16 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                         </MenuItem>
                         <MenuItem
                             component={RouterLink}
+                            to="/password-generator"
+                            onClick={() => {
+                                setToolsMenuAnchor(null);
+                                setProfileMenuAnchor(null);
+                            }}
+                        >
+                            Password Generator
+                        </MenuItem>
+                        <MenuItem
+                            component={RouterLink}
                             to="/base64-image"
                             onClick={() => {
                                 setToolsMenuAnchor(null);
@@ -380,6 +433,16 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                             }}
                         >
                             Bas64 Image
+                        </MenuItem>
+                        <MenuItem
+                            component={RouterLink}
+                            to="/svg-to-png"
+                            onClick={() => {
+                                setToolsMenuAnchor(null);
+                                setProfileMenuAnchor(null);
+                            }}
+                        >
+                            SVG to PNG
                         </MenuItem>
                         <MenuItem
                             component={RouterLink}
@@ -427,6 +490,8 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                     <Route path="/portal/certificates/:id/view" element={<CredentialHolderCertificateViewerPage />} />
                     <Route path="/base64-image" element={<Base64ImageViewerPage />} />
                     <Route path="/qr-decoder" element={<QrDecoderPage />} />
+                    <Route path="/password-generator" element={<PasswordGeneratorPage />} />
+                    <Route path="/svg-to-png" element={<SvgToPngPage />} />
                     <Route
                         path="/templates/new"
                         element={
@@ -512,6 +577,156 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                         </AntBtn>
                     </Stack>
                 </Paper>
+            ) : null}
+            {isDevMode && sqlPanelPos ? (
+                <Rnd
+                    size={sqlPanelSize}
+                    position={sqlPanelPos}
+                    onDragStop={(_, data) => setSqlPanelPos({ x: data.x, y: data.y })}
+                    onResizeStop={(_, __, ref, ___, position) => {
+                        setSqlPanelSize({
+                            width: Math.max(320, Math.min(window.innerWidth - 16, ref.offsetWidth)),
+                            height: Math.max(240, Math.min(window.innerHeight - 16, ref.offsetHeight)),
+                        });
+                        setSqlPanelPos(position);
+                    }}
+                    minWidth={320}
+                    minHeight={240}
+                    maxWidth={Math.max(320, window.innerWidth - 16)}
+                    maxHeight={Math.max(240, window.innerHeight - 16)}
+                    enableResizing={{
+                        bottom: true,
+                        bottomLeft: true,
+                        bottomRight: true,
+                        left: true,
+                        right: true,
+                        top: true,
+                        topLeft: true,
+                        topRight: true,
+                    }}
+                    bounds="window"
+                    dragHandleClassName="sql-stats-drag-handle"
+                    style={{ zIndex: theme.zIndex.modal + 1, position: "fixed" }}
+                >
+                    <Paper
+                        elevation={3}
+                        sx={{
+                            px: 1.5,
+                            py: 1,
+                            height: "100%",
+                            overflow: "auto",
+                            border: "1px solid",
+                            borderColor: "divider",
+                            cursor: "default",
+                        }}
+                    >
+                    <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1} className="sql-stats-drag-handle" sx={{ cursor: "move" }}>
+                        <Typography variant="caption" sx={{ fontWeight: 700 }}>
+                            SQL Stats (dev)
+                        </Typography>
+                        <AntBtn
+                            antType="text"
+                            onClick={() => {
+                                setSqlStatsFeed([]);
+                                setSelectedSqlIndex(0);
+                            }}
+                            disabled={sqlStatsFeed.length === 0}
+                        >
+                            Clear
+                        </AntBtn>
+                    </Stack>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                        Requests captured: {sqlStatsFeed.length}
+                    </Typography>
+                    <Box
+                        sx={{
+                            mt: 0.8,
+                            maxHeight: 180,
+                            overflowY: "auto",
+                            border: "1px solid",
+                            borderColor: "divider",
+                            borderRadius: 1,
+                            p: 0.2,
+                            bgcolor: "background.default",
+                        }}
+                    >
+                        {sqlStatsFeed.length === 0 ? (
+                            <Typography variant="caption" color="text.secondary" sx={{ p: 0.8, display: "block" }}>
+                                No requests captured yet.
+                            </Typography>
+                        ) : (
+                            <Stack spacing={0}>
+                                {sqlStatsFeed.map((stats, reqIdx) => (
+                                    <Box
+                                        key={`${stats.capturedAt}-${reqIdx}`}
+                                        onClick={() => setSelectedSqlIndex(reqIdx)}
+                                        sx={{
+                                            cursor: "pointer",
+                                            px: 0.8,
+                                            py: 0.6,
+                                            borderBottom: reqIdx === sqlStatsFeed.length - 1 ? "none" : "1px solid",
+                                            borderColor: "divider",
+                                            bgcolor: reqIdx === selectedSqlIndex ? "action.selected" : "transparent",
+                                            "&:hover": { bgcolor: reqIdx === selectedSqlIndex ? "action.selected" : "action.hover" },
+                                        }}
+                                    >
+                                        <Typography variant="caption" sx={{ display: "block", fontFamily: "monospace" }}>
+                                            {stats.method} {shortPath(stats.url)}
+                                        </Typography>
+                                        <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                                            {stats.status} | {stats.statements} stmts | {stats.elapsedMs} ms
+                                        </Typography>
+                                    </Box>
+                                ))}
+                            </Stack>
+                        )}
+                    </Box>
+                    {selectedSqlStats ? (
+                        <Box sx={{ mt: 0.8, border: "1px solid", borderColor: "divider", borderRadius: 1, bgcolor: "background.default" }}>
+                            <Tabs value={sqlDetailTab} onChange={(_, value) => setSqlDetailTab(value)} variant="fullWidth">
+                                <Tab label="Overview" />
+                                <Tab label="SQL" />
+                            </Tabs>
+                            <Box sx={{ p: 0.8, maxHeight: 220, overflowY: "auto" }}>
+                                {sqlDetailTab === 0 ? (
+                                    <Stack spacing={0.5}>
+                                        <Typography variant="caption"><strong>Request:</strong> {selectedSqlStats.method} {shortPath(selectedSqlStats.url)}</Typography>
+                                        <Typography variant="caption"><strong>Status:</strong> {selectedSqlStats.status}</Typography>
+                                        <Typography variant="caption"><strong>Statements:</strong> {selectedSqlStats.statements}</Typography>
+                                        <Typography variant="caption"><strong>Elapsed:</strong> {selectedSqlStats.elapsedMs} ms</Typography>
+                                    </Stack>
+                                ) : selectedSqlStats.sqlDetails.length > 0 ? (
+                                    <Stack spacing={0.6}>
+                                        {selectedSqlStats.sqlDetails.map((entry, idx) => (
+                                            <Box key={`${idx}-${entry.sql.slice(0, 24)}`}>
+                                                <Typography variant="caption" color="text.secondary" sx={{ display: "block", fontFamily: "monospace" }}>
+                                                    {`${idx + 1}. ${entry.elapsedMs != null ? `${entry.elapsedMs} ms` : "n/a"}`}
+                                                </Typography>
+                                                <Typography
+                                                    variant="caption"
+                                                    sx={{
+                                                        display: "block",
+                                                        fontFamily: "monospace",
+                                                        whiteSpace: "pre-wrap",
+                                                        overflowWrap: "anywhere",
+                                                        wordBreak: "break-word",
+                                                    }}
+                                                >
+                                                    {formatSqlForCard(entry.sql)}
+                                                </Typography>
+                                            </Box>
+                                        ))}
+                                    </Stack>
+                                ) : (
+                                    <Typography variant="caption" color="text.secondary">
+                                        No SQL detail captured.
+                                    </Typography>
+                                )}
+                            </Box>
+                        </Box>
+                    ) : null}
+                    </Paper>
+                </Rnd>
             ) : null}
         </Box>
     );
