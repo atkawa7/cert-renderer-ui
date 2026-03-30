@@ -65,6 +65,7 @@ import { useConfirm } from "./components/ConfirmDialogProvider";
 import { useNotifications } from "./components/NotificationsProvider";
 import { convertTemplateToDesignDraft, type DesignCreateDraft } from "./designCatalog";
 import { BlockRenderer, Inspector, resolveImageSrc } from "./components/template-editor/TemplateEditorBlocks";
+import * as XLSX from "xlsx";
 
 type Orientation = "portrait" | "landscape" | string;
 type PaperKey =
@@ -466,6 +467,36 @@ function flattenRenderDataToFields(
     });
     return out;
 }
+
+const DEFAULT_BULK_CERTIFICATE_COLUMNS = [
+    "recipient.firstName",
+    "recipient.lastName",
+    "recipient.email",
+    "certificate.uuid",
+    "certificate.reference",
+    "certificate.issued_on",
+    "program.name",
+    "program.code",
+    "institution.domain",
+];
+
+function toSpreadsheetCellValue(value: unknown): string | number | boolean {
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+        return value;
+    }
+    if (value === null || value === undefined) {
+        return "";
+    }
+    try {
+        return JSON.stringify(value);
+    } catch {
+        return String(value);
+    }
+}
+
+function sanitizeDownloadBaseName(name: string): string {
+    return (name.trim() || "bulk_certificates").replace(/[^a-zA-Z0-9._-]+/g, "_");
+}
 function parseRenderFormValue(raw: string): unknown {
     const trimmed = raw.trim();
     if (!trimmed) return "";
@@ -725,6 +756,7 @@ export default function TemplateEditor({
     const [storingCertificateBatchExternal, setStoringCertificateBatchExternal] = useState<boolean>(false);
     const [downloadingRenderedFoExternal, setDownloadingRenderedFoExternal] = useState<boolean>(false);
     const [downloadingExternal, setDownloadingExternal] = useState<boolean>(false);
+    const [downloadingBulkTemplateExternal, setDownloadingBulkTemplateExternal] = useState<boolean>(false);
     const [convertingDesign, setConvertingDesign] = useState<boolean>(false);
     const [renderDataJson, setRenderDataJson] = useState<string>(defaultRenderDataJson);
     const [renderDataMode, setRenderDataMode] = useState<"form" | "json">("form");
@@ -1268,6 +1300,63 @@ export default function TemplateEditor({
             return;
         }
         saveTemplateJson();
+    }
+
+    function handleDownloadBulkExcelTemplate() {
+        try {
+            setDownloadingBulkTemplateExternal(true);
+            const varSpecs = collectVarSpecs(template);
+            const defaultsByPath = new Map<string, unknown>();
+            for (const spec of varSpecs) {
+                const path = spec.path.trim();
+                if (path && !defaultsByPath.has(path)) {
+                    defaultsByPath.set(path, spec.defaultValue);
+                }
+            }
+
+            const columns = Array.from(
+                new Set<string>([
+                    ...DEFAULT_BULK_CERTIFICATE_COLUMNS,
+                    ...Array.from(defaultsByPath.keys()),
+                ])
+            );
+
+            const sampleRow: Record<string, string | number | boolean> = {};
+            const blankRow: Record<string, string> = {};
+            for (const column of columns) {
+                const defaultValue = defaultsByPath.get(column);
+                sampleRow[column] = defaultValue === undefined ? "" : toSpreadsheetCellValue(defaultValue);
+                blankRow[column] = "";
+            }
+
+            const sheet = XLSX.utils.json_to_sheet([sampleRow, blankRow], {
+                header: columns,
+                skipHeader: false,
+            });
+            sheet["!cols"] = columns.map((column) => ({
+                wch: Math.max(18, Math.min(42, column.length + 4)),
+            }));
+
+            const instructions = XLSX.utils.aoa_to_sheet([
+                ["Bulk Certificate Generator - Excel Template"],
+                ["Fill one row per certificate and keep the header names unchanged."],
+                ["Nested JSON fields use dot notation, for example: recipient.firstName"],
+                ["Arrays/objects can be entered as JSON text when needed."],
+            ]);
+            instructions["!cols"] = [{ wch: 90 }];
+
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, instructions, "Instructions");
+            XLSX.utils.book_append_sheet(workbook, sheet, "Certificates");
+
+            const base = sanitizeDownloadBaseName(template.name ?? "");
+            XLSX.writeFile(workbook, `${base}_bulk_certificate_template.xlsx`);
+            notifications.success("Bulk certificate Excel template downloaded");
+        } catch (err: any) {
+            notifications.error(err?.message || "Failed to generate bulk Excel template", { title: "Certificates" });
+        } finally {
+            setDownloadingBulkTemplateExternal(false);
+        }
     }
 
     async function handleConvertToDesignAction() {
@@ -2730,6 +2819,16 @@ export default function TemplateEditor({
                             <ToggleButton value="form">Form</ToggleButton>
                             <ToggleButton value="json">JSON</ToggleButton>
                         </ToggleButtonGroup>
+                        <Stack direction="row" justifyContent="flex-end">
+                            <AntBtn
+                                antType="default"
+                                startIcon={<DownloadIcon />}
+                                onClick={handleDownloadBulkExcelTemplate}
+                                disabled={downloadingBulkTemplateExternal}
+                            >
+                                {downloadingBulkTemplateExternal ? "Preparing template..." : "Download Excel Template"}
+                            </AntBtn>
+                        </Stack>
                         {renderDataMode === "form" ? (
                             <Stack spacing={1}>
                                 {renderDataFields.map((field) => (
