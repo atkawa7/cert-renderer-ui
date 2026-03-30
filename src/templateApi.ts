@@ -66,6 +66,7 @@ export type CertificateSummary = {
     id: string;
     workspaceId?: string | null;
     templateId?: string | null;
+    batchId?: string | null;
     templateName: string;
     recipientFirstName?: string | null;
     recipientLastName?: string | null;
@@ -85,6 +86,33 @@ export type CertificateSummary = {
 
 export type CertificateDetail = CertificateSummary & {
     data: unknown;
+};
+
+export type CertificateBatchFailure = {
+    rowIndex: number;
+    fileName?: string | null;
+    message: string;
+};
+
+export type CertificateBatchSummary = {
+    id: string;
+    workspaceId: string;
+    requestedByUserId?: string | null;
+    templateId?: string | null;
+    templateName: string;
+    requestedFileName: string;
+    status: "QUEUED" | "RUNNING" | "COMPLETED" | "COMPLETED_WITH_ERRORS" | "FAILED";
+    requestedCount: number;
+    processedCount: number;
+    successCount: number;
+    failureCount: number;
+    startedAt?: string | null;
+    completedAt?: string | null;
+    errorMessage?: string | null;
+    zipFileName?: string | null;
+    failures: CertificateBatchFailure[];
+    createdAt: string;
+    updatedAt: string;
 };
 
 export type CertificateCredential = {
@@ -953,6 +981,69 @@ export async function storeCertificateBatch(payload: {
             fileName: payload.fileName,
         }),
     });
+}
+
+export async function queueCertificateBatchJob(payload: {
+    template: Template;
+    certificates: Array<unknown | { data?: unknown; fileName?: string }>;
+    assetBaseUrl?: string;
+    fileName?: string;
+}): Promise<CertificateBatchSummary> {
+    const certificates = payload.certificates.map((item) => {
+        if (item && typeof item === "object" && ("data" in item || "fileName" in item)) {
+            const typed = item as { data?: unknown; fileName?: string };
+            return { data: typed.data ?? {}, fileName: typed.fileName };
+        }
+        return { data: item ?? {} };
+    });
+
+    return await apiFetch<CertificateBatchSummary>("/certificate-batches", {
+        method: "POST",
+        body: JSON.stringify({
+            template: payload.template,
+            certificates,
+            assetBaseUrl: payload.assetBaseUrl,
+            fileName: payload.fileName,
+        }),
+    });
+}
+
+export async function listCertificateBatches(params?: {
+    page?: number;
+    size?: number;
+}): Promise<PagedResult<CertificateBatchSummary>> {
+    const query = new URLSearchParams();
+    query.set("page", String(params?.page ?? 0));
+    query.set("size", String(params?.size ?? 50));
+    const data = await apiFetch<PageResponse<CertificateBatchSummary>>(`/certificate-batches?${query.toString()}`);
+    return {
+        items: data.content ?? [],
+        page: data.number ?? 0,
+        size: data.size ?? 50,
+        totalElements: data.totalElements ?? 0,
+        totalPages: data.totalPages ?? 0,
+        hasNext: (data.number ?? 0) + 1 < (data.totalPages ?? 0),
+    };
+}
+
+export async function getCertificateBatchById(id: string): Promise<CertificateBatchSummary> {
+    return await apiFetch<CertificateBatchSummary>(`/certificate-batches/${id}`);
+}
+
+export async function downloadCertificateBatchZipById(id: string, fallbackName = "certificates"): Promise<DownloadedFile> {
+    const res = await trackedFetch(`${API_BASE}/certificate-batches/${encodeURIComponent(id)}/download`, {
+        method: "GET",
+        headers: workspaceHeaders(),
+    });
+
+    if (!res.ok) {
+        throw new Error(await parseErrorMessage(res, `Download failed (${res.status})`));
+    }
+
+    return {
+        blob: await res.blob(),
+        fileName: parseDownloadFileName(res.headers.get("Content-Disposition"), fallbackName, "zip"),
+    };
 }
 
 export function certificateViewUrl(id: string): string {

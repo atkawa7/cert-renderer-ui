@@ -237,10 +237,16 @@ export type TemplateEditorProps = {
     storeCertificateLabel?: string;
     onStoreCertificateBatch?: (template: Template, data: unknown[]) => void | Promise<void>;
     storeCertificateBatchLabel?: string;
+    onQueueCertificateBatchJob?: (template: Template, data: unknown[]) => Promise<CertificateBatchJobSummary>;
+    queueCertificateBatchJobLabel?: string;
+    onListCertificateBatchJobs?: () => Promise<CertificateBatchJobSummary[]>;
+    onDownloadCertificateBatchZip?: (batchId: string, fallbackName?: string) => Promise<void>;
     onDownloadRenderedFo?: (template: Template, data: unknown) => void | Promise<void>;
     downloadRenderedFoLabel?: string;
     onDownloadTemplate?: (template: Template) => void | Promise<void>;
     downloadButtonLabel?: string;
+    onOpenBatchCreator?: () => void;
+    openBatchCreatorLabel?: string;
     defaultRenderDataJson?: string;
     onConvertToDesign?: (design: DesignCreateDraft) => void | Promise<void>;
     convertToDesignLabel?: string;
@@ -261,6 +267,22 @@ export type TemplateEditorProps = {
 type Size = { w: number; h: number };
 type AlignMode = "left" | "h-center" | "right" | "top" | "v-center" | "bottom";
 type RenderFormField = { id: string; path: string; value: string };
+type CertificateBatchJobFailure = { rowIndex: number; fileName?: string | null; message: string };
+type CertificateBatchJobSummary = {
+    id: string;
+    templateName: string;
+    requestedFileName: string;
+    status: "QUEUED" | "RUNNING" | "COMPLETED" | "COMPLETED_WITH_ERRORS" | "FAILED";
+    requestedCount: number;
+    processedCount: number;
+    successCount: number;
+    failureCount: number;
+    zipFileName?: string | null;
+    errorMessage?: string | null;
+    createdAt: string;
+    completedAt?: string | null;
+    failures?: CertificateBatchJobFailure[];
+};
 
 // ---------------- Helpers ----------------
 function clamp(n: number, min: number, max: number) {
@@ -497,6 +519,13 @@ function toSpreadsheetCellValue(value: unknown): string | number | boolean {
 function sanitizeDownloadBaseName(name: string): string {
     return (name.trim() || "bulk_certificates").replace(/[^a-zA-Z0-9._-]+/g, "_");
 }
+
+function formatTimestamp(value?: string | null): string {
+    if (!value) return "-";
+    const dt = new Date(value);
+    if (Number.isNaN(dt.getTime())) return value;
+    return dt.toLocaleString();
+}
 function parseRenderFormValue(raw: string): unknown {
     const trimmed = raw.trim();
     if (!trimmed) return "";
@@ -600,22 +629,6 @@ function normalizeBlock(block: Block): Block {
 
     return b;
 }
-function isTextBlock(b: Block): b is TextBlock {
-    return b.type === "text";
-}
-function isImageBlock(b: Block): b is ImageBlock {
-    return b.type === "image";
-}
-function isLineBlock(b: Block): b is HorizontalLineBlock {
-    return b.type === "horizontal-line";
-}
-function blockTypeLabel(b: Block): string {
-    if (b.type === "text") return "Text";
-    if (b.type === "image") return "Image";
-    if (b.type === "list") return "List";
-    if (b.type === "table") return "Table";
-    return "Line";
-}
 function normalizeTemplate(input: Template): Template {
     const t = deepClone(input);
     const normalizedPages = (t.pages ?? []).map((raw, idx) => normalizePage(raw as TemplatePage, idx));
@@ -697,10 +710,16 @@ export default function TemplateEditor({
                                            storeCertificateLabel = "Generate and Store",
                                            onStoreCertificateBatch,
                                            storeCertificateBatchLabel = "Store Batch",
+                                           onQueueCertificateBatchJob,
+                                           queueCertificateBatchJobLabel = "Queue Batch Job",
+                                           onListCertificateBatchJobs,
+                                           onDownloadCertificateBatchZip,
                                            onDownloadRenderedFo,
                                            downloadRenderedFoLabel = "Download Rendered FO",
                                            onDownloadTemplate,
                                            downloadButtonLabel = "Download Template",
+                                           onOpenBatchCreator,
+                                           openBatchCreatorLabel = "Batch Creator",
                                            defaultRenderDataJson = "{}",
                                            onConvertToDesign,
                                            convertToDesignLabel = "Convert to Design",
@@ -754,9 +773,13 @@ export default function TemplateEditor({
     const [batchRenderingExternal, setBatchRenderingExternal] = useState<boolean>(false);
     const [storingCertificateExternal, setStoringCertificateExternal] = useState<boolean>(false);
     const [storingCertificateBatchExternal, setStoringCertificateBatchExternal] = useState<boolean>(false);
+    const [queueingBatchJobExternal, setQueueingBatchJobExternal] = useState<boolean>(false);
     const [downloadingRenderedFoExternal, setDownloadingRenderedFoExternal] = useState<boolean>(false);
     const [downloadingExternal, setDownloadingExternal] = useState<boolean>(false);
     const [downloadingBulkTemplateExternal, setDownloadingBulkTemplateExternal] = useState<boolean>(false);
+    const [batchJobs, setBatchJobs] = useState<CertificateBatchJobSummary[]>([]);
+    const [loadingBatchJobs, setLoadingBatchJobs] = useState<boolean>(false);
+    const [downloadingBatchJobId, setDownloadingBatchJobId] = useState<string | null>(null);
     const [convertingDesign, setConvertingDesign] = useState<boolean>(false);
     const [renderDataJson, setRenderDataJson] = useState<string>(defaultRenderDataJson);
     const [renderDataMode, setRenderDataMode] = useState<"form" | "json">("form");
@@ -765,6 +788,7 @@ export default function TemplateEditor({
     const [renderDialogError, setRenderDialogError] = useState<string | null>(null);
     const [inspectorOpen, setInspectorOpen] = useState<boolean>(false);
     const importInputRef = useRef<HTMLInputElement | null>(null);
+    const batchExcelInputRef = useRef<HTMLInputElement | null>(null);
     const [contextMenu, setContextMenu] = useState<{
         mouseX: number;
         mouseY: number;
@@ -807,6 +831,15 @@ export default function TemplateEditor({
         if (!isCompactLayout) return;
         setZoomPct((prev) => (prev > 90 ? 90 : prev));
     }, [isCompactLayout]);
+
+    useEffect(() => {
+        if (!renderDialogOpen || !onListCertificateBatchJobs) return;
+        void refreshCertificateBatchJobs(false);
+        const timer = window.setInterval(() => {
+            void refreshCertificateBatchJobs(true);
+        }, 5000);
+        return () => window.clearInterval(timer);
+    }, [renderDialogOpen, onListCertificateBatchJobs]);
 
     function updateActivePage(mutator: (page: TemplatePage) => void) {
         setTemplate((prev) => {
@@ -1236,6 +1269,118 @@ export default function TemplateEditor({
             notifications.error(err?.message || "Failed to store certificate batch", { title: "Certificates" });
         } finally {
             setStoringCertificateBatchExternal(false);
+        }
+    }
+
+    async function refreshCertificateBatchJobs(silent = false) {
+        if (!onListCertificateBatchJobs) return;
+        try {
+            if (!silent) setLoadingBatchJobs(true);
+            const jobs = await onListCertificateBatchJobs();
+            setBatchJobs(jobs);
+        } catch (err: any) {
+            if (!silent) {
+                notifications.error(err?.message || "Failed to load certificate batches", { title: "Certificates" });
+            }
+        } finally {
+            if (!silent) setLoadingBatchJobs(false);
+        }
+    }
+
+    async function handleQueueCertificateBatchJobAction(payload: unknown[]) {
+        if (!onQueueCertificateBatchJob) return;
+        if (!Array.isArray(payload)) {
+            setRenderDialogError("Queued batch jobs require a JSON array of certificate data.");
+            notifications.warning("Batch jobs require a JSON array", { title: "Certificates" });
+            return;
+        }
+        if (!payload.length) {
+            setRenderDialogError("Batch job requires at least one certificate row.");
+            notifications.warning("Batch job requires at least one row", { title: "Certificates" });
+            return;
+        }
+        try {
+            setRenderDialogError(null);
+            setQueueingBatchJobExternal(true);
+            const created = await onQueueCertificateBatchJob(deepClone(template), payload);
+            notifications.success(`Batch queued: ${created.id.slice(0, 8)} (${created.requestedCount} rows)`);
+            await refreshCertificateBatchJobs(true);
+        } catch (err: any) {
+            notifications.error(err?.message || "Failed to queue certificate batch job", { title: "Certificates" });
+        } finally {
+            setQueueingBatchJobExternal(false);
+        }
+    }
+
+    function parseExcelCellValue(raw: unknown): unknown {
+        if (raw === null || raw === undefined) return "";
+        if (typeof raw === "number" || typeof raw === "boolean") return raw;
+        const text = String(raw);
+        const trimmed = text.trim();
+        if (!trimmed) return "";
+        if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
+            try {
+                return JSON.parse(trimmed);
+            } catch {
+                return text;
+            }
+        }
+        return text;
+    }
+
+    function flattenExcelRowsToCertificates(rows: Array<Record<string, unknown>>): unknown[] {
+        const out: Array<Record<string, unknown>> = [];
+        for (const row of rows) {
+            const certificate: Record<string, unknown> = {};
+            for (const [column, rawValue] of Object.entries(row ?? {})) {
+                const path = String(column ?? "").trim();
+                if (!path) continue;
+                const value = parseExcelCellValue(rawValue);
+                if (value === "") continue;
+                setPathValue(certificate, path, value);
+            }
+            if (Object.keys(certificate).length > 0) {
+                out.push(certificate);
+            }
+        }
+        return out;
+    }
+
+    async function handleBatchExcelUpload(e: React.ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+            const bytes = await file.arrayBuffer();
+            const workbook = XLSX.read(bytes, { type: "array" });
+            const preferredSheet = workbook.Sheets["Certificates"] ?? workbook.Sheets[workbook.SheetNames[0]];
+            if (!preferredSheet) {
+                throw new Error("Workbook has no worksheet data");
+            }
+            const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(preferredSheet, {
+                defval: "",
+                raw: false,
+            });
+            const certificates = flattenExcelRowsToCertificates(rows);
+            if (!certificates.length) {
+                throw new Error("No certificate rows found in the uploaded Excel file");
+            }
+            await handleQueueCertificateBatchJobAction(certificates);
+        } catch (err: any) {
+            notifications.error(err?.message || "Failed to parse Excel upload", { title: "Certificates" });
+        } finally {
+            e.target.value = "";
+        }
+    }
+
+    async function handleDownloadBatchJobZip(batch: CertificateBatchJobSummary) {
+        if (!onDownloadCertificateBatchZip) return;
+        try {
+            setDownloadingBatchJobId(batch.id);
+            await onDownloadCertificateBatchZip(batch.id, batch.zipFileName ?? batch.requestedFileName ?? "certificates");
+        } catch (err: any) {
+            notifications.error(err?.message || "Failed to download batch ZIP", { title: "Certificates" });
+        } finally {
+            setDownloadingBatchJobId(null);
         }
     }
 
@@ -2076,6 +2221,13 @@ export default function TemplateEditor({
                                 </span>
                             </Tooltip>
                         )}
+                        {onOpenBatchCreator && (
+                            <Tooltip title={openBatchCreatorLabel}>
+                                <IconButton size="small" color="primary" onClick={onOpenBatchCreator}>
+                                    <NoteAddIcon fontSize="small" />
+                                </IconButton>
+                            </Tooltip>
+                        )}
                         <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
                         {onBackToDesign && (
                             <Tooltip title={backToDesignLabel}>
@@ -2372,7 +2524,7 @@ export default function TemplateEditor({
                                                     setSelectedIds([b.id]); // normal click = single select
                                                 }
                                             }}
-                                            onContextMenu={(e) => {
+                                            onContextMenu={(e: React.MouseEvent<HTMLElement>) => {
                                                 if (previewMode) return;
                                                 e.preventDefault();
                                                 e.stopPropagation();
@@ -2382,7 +2534,7 @@ export default function TemplateEditor({
                                                 }
                                                 openContextMenu(e, b.id);
                                             }}
-                                            onDoubleClick={(e) => {
+                                            onDoubleClick={(e: React.MouseEvent<HTMLElement>) => {
                                                 if (!allowEdit) return;
                                                 e.stopPropagation();
                                                 if (b.type === "text") setEditingId(b.id);
@@ -2679,6 +2831,14 @@ export default function TemplateEditor({
                     onChange={handleImportFile}
                     sx={{ display: "none" }}
                 />
+                <Box
+                    component="input"
+                    ref={batchExcelInputRef}
+                    type="file"
+                    accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                    onChange={handleBatchExcelUpload}
+                    sx={{ display: "none" }}
+                />
             </Drawer>
 
             <Menu
@@ -2797,7 +2957,7 @@ export default function TemplateEditor({
             <Dialog
                 open={renderDialogOpen}
                 onClose={() => {
-                    if (renderingExternal || downloadingRenderedFoExternal || batchRenderingExternal || storingCertificateExternal || storingCertificateBatchExternal) return;
+                    if (renderingExternal || downloadingRenderedFoExternal || batchRenderingExternal || storingCertificateExternal || storingCertificateBatchExternal || queueingBatchJobExternal) return;
                     setRenderDialogOpen(false);
                     setRenderDialogError(null);
                 }}
@@ -2819,7 +2979,7 @@ export default function TemplateEditor({
                             <ToggleButton value="form">Form</ToggleButton>
                             <ToggleButton value="json">JSON</ToggleButton>
                         </ToggleButtonGroup>
-                        <Stack direction="row" justifyContent="flex-end">
+                        <Stack direction={{ xs: "column", sm: "row" }} spacing={1} justifyContent="space-between">
                             <AntBtn
                                 antType="default"
                                 startIcon={<DownloadIcon />}
@@ -2828,6 +2988,29 @@ export default function TemplateEditor({
                             >
                                 {downloadingBulkTemplateExternal ? "Preparing template..." : "Download Excel Template"}
                             </AntBtn>
+                            {onQueueCertificateBatchJob && (
+                                <Stack direction="row" spacing={1}>
+                                    <AntBtn onClick={() => batchExcelInputRef.current?.click()}>
+                                        Upload Excel and Queue
+                                    </AntBtn>
+                                    <AntBtn
+                                        antType="primary"
+                                        onClick={() => {
+                                            const parsedData = parseRenderDialogData();
+                                            if (parsedData === undefined) return;
+                                            if (!Array.isArray(parsedData)) {
+                                                setRenderDialogError("Queued batch jobs require a JSON array of certificate data.");
+                                                notifications.warning("Batch jobs require a JSON array", { title: "Certificates" });
+                                                return;
+                                            }
+                                            void handleQueueCertificateBatchJobAction(parsedData);
+                                        }}
+                                        disabled={queueingBatchJobExternal}
+                                    >
+                                        {queueingBatchJobExternal ? "Queueing..." : queueCertificateBatchJobLabel}
+                                    </AntBtn>
+                                </Stack>
+                            )}
                         </Stack>
                         {renderDataMode === "form" ? (
                             <Stack spacing={1}>
@@ -2873,6 +3056,57 @@ export default function TemplateEditor({
                                 helperText="Use a JSON object for one certificate or a JSON array for batch generation."
                             />
                         )}
+                        {onListCertificateBatchJobs && (
+                            <Stack spacing={1} sx={{ pt: 1 }}>
+                                <Divider />
+                                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                                    <Typography variant="subtitle2">Batch Jobs</Typography>
+                                    <AntBtn antType="text" onClick={() => void refreshCertificateBatchJobs(false)} disabled={loadingBatchJobs}>
+                                        {loadingBatchJobs ? "Refreshing..." : "Refresh"}
+                                    </AntBtn>
+                                </Stack>
+                                {loadingBatchJobs ? (
+                                    <Typography variant="caption" color="text.secondary">Loading batches...</Typography>
+                                ) : batchJobs.length === 0 ? (
+                                    <Typography variant="caption" color="text.secondary">
+                                        No batch jobs yet. Upload Excel or queue a JSON array to start one.
+                                    </Typography>
+                                ) : (
+                                    <Stack spacing={0.75}>
+                                        {batchJobs.map((batch) => (
+                                            <Box key={batch.id} sx={{ p: 1, border: `1px solid ${theme.palette.divider}`, borderRadius: 1 }}>
+                                                <Stack direction="row" justifyContent="space-between" spacing={1} alignItems="center">
+                                                    <Box>
+                                                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                                            {batch.templateName} · {batch.status}
+                                                        </Typography>
+                                                        <Typography variant="caption" color="text.secondary">
+                                                            {batch.processedCount}/{batch.requestedCount} processed · {batch.successCount} success · {batch.failureCount} failed
+                                                        </Typography>
+                                                        <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                                                            Created: {formatTimestamp(batch.createdAt)} · Completed: {formatTimestamp(batch.completedAt)}
+                                                        </Typography>
+                                                        {batch.errorMessage && (
+                                                            <Typography variant="caption" color="error" sx={{ display: "block" }}>
+                                                                {batch.errorMessage}
+                                                            </Typography>
+                                                        )}
+                                                    </Box>
+                                                    {onDownloadCertificateBatchZip && (batch.status === "COMPLETED" || batch.status === "COMPLETED_WITH_ERRORS") && (
+                                                        <AntBtn
+                                                            onClick={() => void handleDownloadBatchJobZip(batch)}
+                                                            disabled={downloadingBatchJobId === batch.id || !batch.zipFileName}
+                                                        >
+                                                            {downloadingBatchJobId === batch.id ? "Downloading..." : "Download ZIP"}
+                                                        </AntBtn>
+                                                    )}
+                                                </Stack>
+                                            </Box>
+                                        ))}
+                                    </Stack>
+                                )}
+                            </Stack>
+                        )}
                     </Stack>
                     {renderDialogError && (
                         <Typography color="error" variant="body2" sx={{ mt: 1 }}>
@@ -2887,14 +3121,14 @@ export default function TemplateEditor({
                             setRenderDialogOpen(false);
                             setRenderDialogError(null);
                         }}
-                        disabled={renderingExternal || downloadingRenderedFoExternal || batchRenderingExternal || storingCertificateExternal || storingCertificateBatchExternal}
+                        disabled={renderingExternal || downloadingRenderedFoExternal || batchRenderingExternal || storingCertificateExternal || storingCertificateBatchExternal || queueingBatchJobExternal}
                     >
                         Cancel
                     </AntBtn>
                     {onStoreCertificate && (
                         <AntBtn
                             onClick={handleStoreCertificateAction}
-                            disabled={renderingExternal || downloadingRenderedFoExternal || batchRenderingExternal || storingCertificateExternal || storingCertificateBatchExternal}
+                            disabled={renderingExternal || downloadingRenderedFoExternal || batchRenderingExternal || storingCertificateExternal || storingCertificateBatchExternal || queueingBatchJobExternal}
                         >
                             {storingCertificateExternal ? "Storing..." : storeCertificateLabel}
                         </AntBtn>
@@ -2902,7 +3136,7 @@ export default function TemplateEditor({
                     {onStoreCertificateBatch && (
                         <AntBtn
                             onClick={handleStoreCertificateBatchAction}
-                            disabled={renderingExternal || downloadingRenderedFoExternal || batchRenderingExternal || storingCertificateExternal || storingCertificateBatchExternal}
+                            disabled={renderingExternal || downloadingRenderedFoExternal || batchRenderingExternal || storingCertificateExternal || storingCertificateBatchExternal || queueingBatchJobExternal}
                         >
                             {storingCertificateBatchExternal ? "Storing batch..." : storeCertificateBatchLabel}
                         </AntBtn>
@@ -2910,7 +3144,7 @@ export default function TemplateEditor({
                     {onBatchRenderCertificates && (
                         <AntBtn
                             onClick={handleBatchRenderAction}
-                            disabled={renderingExternal || downloadingRenderedFoExternal || batchRenderingExternal || storingCertificateExternal || storingCertificateBatchExternal}
+                            disabled={renderingExternal || downloadingRenderedFoExternal || batchRenderingExternal || storingCertificateExternal || storingCertificateBatchExternal || queueingBatchJobExternal}
                         >
                             {batchRenderingExternal ? "Generating batch..." : batchRenderButtonLabel}
                         </AntBtn>
@@ -2918,12 +3152,12 @@ export default function TemplateEditor({
                     {onDownloadRenderedFo && (
                         <AntBtn
                             onClick={handleDownloadRenderedFoAction}
-                            disabled={renderingExternal || downloadingRenderedFoExternal || batchRenderingExternal || storingCertificateExternal || storingCertificateBatchExternal}
+                            disabled={renderingExternal || downloadingRenderedFoExternal || batchRenderingExternal || storingCertificateExternal || storingCertificateBatchExternal || queueingBatchJobExternal}
                         >
                             {downloadingRenderedFoExternal ? "Downloading FO..." : downloadRenderedFoLabel}
                         </AntBtn>
                     )}
-                    <AntBtn antType="primary" onClick={handleRenderAction} disabled={renderingExternal}>
+                    <AntBtn antType="primary" onClick={handleRenderAction} disabled={renderingExternal || queueingBatchJobExternal}>
                         {renderingExternal ? "Generating..." : renderButtonLabel}
                     </AntBtn>
                 </DialogActions>

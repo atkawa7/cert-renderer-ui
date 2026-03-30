@@ -193,6 +193,11 @@ export default function CertificatesPage() {
                                         <Typography variant="body2" color="text.secondary">
                                             Organization: {item.organizationName || "-"} | Template: {item.templateName}
                                         </Typography>
+                                        {item.batchId && (
+                                            <Typography variant="body2" color="text.secondary">
+                                                Batch: {item.batchId}
+                                            </Typography>
+                                        )}
                                         <Typography variant="caption" color="text.secondary">
                                             Created: {formatDate(item.createdAt)}
                                         </Typography>
@@ -243,6 +248,11 @@ export default function CertificatesPage() {
                             <Typography variant="body2">
                                 File: {detail.fileName}
                             </Typography>
+                            {detail.batchId && (
+                                <Typography variant="body2">
+                                    Batch: {detail.batchId}
+                                </Typography>
+                            )}
                             <Divider />
                             <Typography variant="subtitle2">Verified credential</Typography>
                             {credentialLoading ? (

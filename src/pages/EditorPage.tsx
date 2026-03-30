@@ -10,13 +10,11 @@ import {
     deleteTemplateById,
     downloadTemplate,
     downloadTemplateById,
-    generateCertificateBatch,
     generateCertificatePdf,
     getDesignById,
     getTemplateById,
     renderTemplateFo,
     storeCertificate,
-    storeCertificateBatch,
     updateTemplateById,
     type TemplateDetail,
 } from "../templateApi";
@@ -123,9 +121,7 @@ export default function EditorPage({
     const [loading, setLoading] = useState(mode === "edit" || (mode === "new" && Boolean(designId)));
     const [saving, setSaving] = useState(false);
     const [rendering, setRendering] = useState(false);
-    const [batchRendering, setBatchRendering] = useState(false);
     const [storingCertificate, setStoringCertificate] = useState(false);
-    const [storingBatchCertificates, setStoringBatchCertificates] = useState(false);
     const [downloadingRenderedFo, setDownloadingRenderedFo] = useState(false);
     const [downloading, setDownloading] = useState(false);
     const [deleting, setDeleting] = useState(false);
@@ -289,24 +285,6 @@ export default function EditorPage({
         }
     }
 
-    async function handleBatchRenderCertificates(next: Template, data: unknown[]) {
-        setBatchRendering(true);
-        try {
-            const file = await generateCertificateBatch({
-                template: next,
-                certificates: data,
-                assetBaseUrl: appConfig.assetBaseUrl,
-                fileName: (next.name || "certificates").trim(),
-            });
-            downloadBlob(file.fileName, file.blob);
-            notifications.success("Certificate batch generated");
-        } catch (err: any) {
-            notifications.error(err?.message || "Failed to generate certificate batch", { title: "Certificates" });
-        } finally {
-            setBatchRendering(false);
-        }
-    }
-
     async function handleStoreCertificate(next: Template, data: unknown) {
         setStoringCertificate(true);
         try {
@@ -322,24 +300,6 @@ export default function EditorPage({
             notifications.error(err?.message || "Failed to store certificate", { title: "Certificates" });
         } finally {
             setStoringCertificate(false);
-        }
-    }
-
-    async function handleStoreCertificateBatch(next: Template, data: unknown[]) {
-        setStoringBatchCertificates(true);
-        try {
-            const created = await storeCertificateBatch({
-                template: next,
-                certificates: data,
-                assetBaseUrl: appConfig.assetBaseUrl,
-                fileName: (next.name || "certificates").trim(),
-            });
-            notifications.success(`${created.length} certificates stored`);
-            navigate("/certificates");
-        } catch (err: any) {
-            notifications.error(err?.message || "Failed to store certificate batch", { title: "Certificates" });
-        } finally {
-            setStoringBatchCertificates(false);
         }
     }
 
@@ -464,12 +424,10 @@ export default function EditorPage({
                 saveButtonLabel={saving ? "Saving..." : "Save to backend"}
                 onRenderTemplate={exportAllowed ? handleRenderTemplate : undefined}
                 renderButtonLabel={rendering ? "Generating..." : "Generate certificate PDF"}
-                onBatchRenderCertificates={exportAllowed ? handleBatchRenderCertificates : undefined}
-                batchRenderButtonLabel={batchRendering ? "Generating batch..." : "Generate batch ZIP"}
                 onStoreCertificate={handleStoreCertificate}
                 storeCertificateLabel={storingCertificate ? "Storing..." : "Generate and store"}
-                onStoreCertificateBatch={handleStoreCertificateBatch}
-                storeCertificateBatchLabel={storingBatchCertificates ? "Storing batch..." : "Store batch"}
+                onOpenBatchCreator={templateId ? () => navigate(`/templates/${templateId}/batch-creator`) : undefined}
+                openBatchCreatorLabel="Open batch creator"
                 onDownloadRenderedFo={exportAllowed ? handleDownloadRenderedFo : undefined}
                 downloadRenderedFoLabel={downloadingRenderedFo ? "Downloading FO..." : "Download rendered FO"}
                 onDownloadTemplate={exportAllowed ? handleDownloadTemplate : undefined}

@@ -15,6 +15,7 @@ import DesignsPage from "./pages/DesignsPage";
 import DesignDetailsPage from "./pages/DesignDetailsPage";
 import EditorPage from "./pages/EditorPage";
 import TemplatesListPage from "./pages/TemplatesListPage";
+import TemplateBatchCreatorPage from "./pages/TemplateBatchCreatorPage";
 import SignaturePage from "./pages/SignaturePage";
 import Base64ImageViewerPage from "./pages/Base64ImageViewerPage";
 import QrDecoderPage from "./pages/QrDecoderPage";
@@ -600,6 +601,7 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                             />
                         }
                     />
+                    <Route path="/templates/:id/batch-creator" element={<TemplateBatchCreatorPage />} />
                 </Routes>
             </Box>
             <Dialog
