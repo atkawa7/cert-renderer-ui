@@ -1,7 +1,23 @@
 import { useEffect, useState } from "react";
 import { Alert, Box, Checkbox, CircularProgress, FormControlLabel, Stack, TextField, Typography } from "@mui/material";
 import AntBtn from "../components/AntBtn";
-import { appSetupStatus, createInvitation, currentUser, getCurrentApiKey, getCurrentAuthMode, getCurrentWorkspaceId, updateMyEmail, verifyMyEmail } from "../templateApi";
+import {
+    appSetupStatus,
+    beginTwoFactorSetup,
+    confirmTwoFactorSetup,
+    createInvitation,
+    currentUser,
+    getCurrentApiKey,
+    getCurrentAuthMode,
+    getCurrentWorkspaceId,
+    getTwoFactorStatus,
+    listTwoFactorDevices,
+    regenerateTwoFactorBackupCodes,
+    removeTwoFactorDevice,
+    type TwoFactorDevice,
+    updateMyEmail,
+    verifyMyEmail,
+} from "../templateApi";
 import { useNotifications } from "../components/NotificationsProvider";
 
 export default function ProfilePage() {
@@ -21,6 +37,16 @@ export default function ProfilePage() {
     const [sendInviteEmail, setSendInviteEmail] = useState(false);
     const [inviteeEmail, setInviteeEmail] = useState("");
     const [inviteLink, setInviteLink] = useState("");
+    const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+    const [twoFactorDevices, setTwoFactorDevices] = useState<TwoFactorDevice[]>([]);
+    const [backupCodesRemaining, setBackupCodesRemaining] = useState(0);
+    const [twoFactorLabel, setTwoFactorLabel] = useState("My Authenticator");
+    const [twoFactorSetupDeviceId, setTwoFactorSetupDeviceId] = useState<string | null>(null);
+    const [twoFactorSetupSecret, setTwoFactorSetupSecret] = useState("");
+    const [twoFactorSetupUri, setTwoFactorSetupUri] = useState("");
+    const [twoFactorSetupCode, setTwoFactorSetupCode] = useState("");
+    const [twoFactorBusy, setTwoFactorBusy] = useState(false);
+    const [generatedBackupCodes, setGeneratedBackupCodes] = useState<string[]>([]);
 
     const apiKey = getCurrentApiKey() || "";
     const currentAuthMode = getCurrentAuthMode();
@@ -40,6 +66,10 @@ export default function ProfilePage() {
             const setup = await appSetupStatus();
             setRegistrationMode(setup.registrationMode);
             setPreferredAuthMode(setup.preferredAuthMode || "API_KEY");
+            const [status, devices] = await Promise.all([getTwoFactorStatus(), listTwoFactorDevices()]);
+            setTwoFactorEnabled(Boolean(status.enabled));
+            setBackupCodesRemaining(status.backupCodesRemaining || 0);
+            setTwoFactorDevices(devices);
         } catch (err: any) {
             notifications.error(err?.message || "Failed to load profile", { title: "Profile" });
         } finally {
@@ -94,6 +124,75 @@ export default function ProfilePage() {
             notifications.error(err?.message || "Failed to verify email", { title: "Profile" });
         } finally {
             setEmailBusy(false);
+        }
+    }
+
+    async function startTwoFactorSetup() {
+        if (!twoFactorLabel.trim()) return;
+        setTwoFactorBusy(true);
+        try {
+            const setup = await beginTwoFactorSetup(twoFactorLabel.trim());
+            setTwoFactorSetupDeviceId(setup.deviceId);
+            setTwoFactorSetupSecret(setup.secretBase32);
+            setTwoFactorSetupUri(setup.otpauthUri);
+            setTwoFactorSetupCode("");
+            notifications.success("2FA device created. Add it to your authenticator app, then confirm code.", { title: "2FA" });
+        } catch (err: any) {
+            notifications.error(err?.message || "Failed to start 2FA setup", { title: "2FA" });
+        } finally {
+            setTwoFactorBusy(false);
+        }
+    }
+
+    async function confirmSetupCode() {
+        if (!twoFactorSetupDeviceId || !twoFactorSetupCode.trim()) return;
+        setTwoFactorBusy(true);
+        try {
+            await confirmTwoFactorSetup(twoFactorSetupDeviceId, twoFactorSetupCode.trim());
+            const [status, devices] = await Promise.all([getTwoFactorStatus(), listTwoFactorDevices()]);
+            setTwoFactorEnabled(Boolean(status.enabled));
+            setBackupCodesRemaining(status.backupCodesRemaining || 0);
+            setTwoFactorDevices(devices);
+            setTwoFactorSetupDeviceId(null);
+            setTwoFactorSetupSecret("");
+            setTwoFactorSetupUri("");
+            setTwoFactorSetupCode("");
+            notifications.success("2FA enabled for this device", { title: "2FA" });
+        } catch (err: any) {
+            notifications.error(err?.message || "Failed to confirm 2FA code", { title: "2FA" });
+        } finally {
+            setTwoFactorBusy(false);
+        }
+    }
+
+    async function removeDevice(deviceId: string) {
+        setTwoFactorBusy(true);
+        try {
+            await removeTwoFactorDevice(deviceId);
+            const [status, devices] = await Promise.all([getTwoFactorStatus(), listTwoFactorDevices()]);
+            setTwoFactorEnabled(Boolean(status.enabled));
+            setBackupCodesRemaining(status.backupCodesRemaining || 0);
+            setTwoFactorDevices(devices);
+            notifications.success("2FA device removed", { title: "2FA" });
+        } catch (err: any) {
+            notifications.error(err?.message || "Failed to remove 2FA device", { title: "2FA" });
+        } finally {
+            setTwoFactorBusy(false);
+        }
+    }
+
+    async function regenerateCodes() {
+        setTwoFactorBusy(true);
+        try {
+            const response = await regenerateTwoFactorBackupCodes();
+            setGeneratedBackupCodes(response.codes || []);
+            const status = await getTwoFactorStatus();
+            setBackupCodesRemaining(status.backupCodesRemaining || 0);
+            notifications.success("Backup codes regenerated. Save them now.", { title: "2FA" });
+        } catch (err: any) {
+            notifications.error(err?.message || "Failed to regenerate backup codes", { title: "2FA" });
+        } finally {
+            setTwoFactorBusy(false);
         }
     }
 
@@ -161,6 +260,8 @@ export default function ProfilePage() {
                         <TextField fullWidth size="small" label="Current Session Auth" value={currentAuthMode} InputProps={{ readOnly: true }} />
                         <TextField fullWidth size="small" label="Session Token" value={maskedToken} InputProps={{ readOnly: true }} />
                         <TextField fullWidth size="small" label="Active Workspace" value={workspaceId} InputProps={{ readOnly: true }} />
+                        <TextField fullWidth size="small" label="2FA Status" value={twoFactorEnabled ? "Enabled" : "Disabled"} InputProps={{ readOnly: true }} />
+                        <TextField fullWidth size="small" label="Backup Codes Remaining" value={String(backupCodesRemaining)} InputProps={{ readOnly: true }} />
                         <Alert severity="info">
                             Use Workspaces page to switch workspace. Session auth is applied automatically.
                         </Alert>
@@ -169,6 +270,77 @@ export default function ProfilePage() {
                                 Refresh
                             </AntBtn>
                         </Box>
+                        <Stack spacing={1.2}>
+                            <Typography variant="subtitle2">Two-factor authentication</Typography>
+                            <TextField
+                                fullWidth
+                                size="small"
+                                label="New Device Label"
+                                value={twoFactorLabel}
+                                onChange={(e) => setTwoFactorLabel(e.target.value)}
+                            />
+                            <Box>
+                                <AntBtn onClick={() => void startTwoFactorSetup()} disabled={twoFactorBusy || !twoFactorLabel.trim()}>
+                                    Add 2FA Device
+                                </AntBtn>
+                            </Box>
+                            {twoFactorSetupDeviceId ? (
+                                <Stack spacing={1}>
+                                    <Alert severity="info">
+                                        Add this secret/URI to your authenticator app, then enter the 6-digit code.
+                                    </Alert>
+                                    <TextField fullWidth size="small" label="Secret (Base32)" value={twoFactorSetupSecret} InputProps={{ readOnly: true }} />
+                                    <TextField fullWidth size="small" label="OTPAuth URI" value={twoFactorSetupUri} InputProps={{ readOnly: true }} />
+                                    <TextField
+                                        fullWidth
+                                        size="small"
+                                        label="Authenticator Code"
+                                        value={twoFactorSetupCode}
+                                        onChange={(e) => setTwoFactorSetupCode(e.target.value)}
+                                    />
+                                    <Box>
+                                        <AntBtn onClick={() => void confirmSetupCode()} disabled={twoFactorBusy || !twoFactorSetupCode.trim()}>
+                                            Confirm Device
+                                        </AntBtn>
+                                    </Box>
+                                </Stack>
+                            ) : null}
+                            {twoFactorDevices.length > 0 ? (
+                                <Stack spacing={1}>
+                                    <Typography variant="subtitle2">Linked devices</Typography>
+                                    {twoFactorDevices.map((device) => (
+                                        <Stack key={device.deviceId} direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "center" }}>
+                                            <TextField
+                                                fullWidth
+                                                size="small"
+                                                label={device.label}
+                                                value={`${device.active ? "Active" : "Pending"} | Added ${new Date(device.createdAt).toLocaleString()}`}
+                                                InputProps={{ readOnly: true }}
+                                            />
+                                            <AntBtn onClick={() => void removeDevice(device.deviceId)} disabled={twoFactorBusy}>
+                                                Remove
+                                            </AntBtn>
+                                        </Stack>
+                                    ))}
+                                </Stack>
+                            ) : null}
+                            <Box>
+                                <AntBtn onClick={() => void regenerateCodes()} disabled={twoFactorBusy}>
+                                    Regenerate Backup Codes
+                                </AntBtn>
+                            </Box>
+                            {generatedBackupCodes.length > 0 ? (
+                                <TextField
+                                    fullWidth
+                                    size="small"
+                                    label="Backup Codes (save now)"
+                                    value={generatedBackupCodes.join("\n")}
+                                    multiline
+                                    minRows={4}
+                                    InputProps={{ readOnly: true }}
+                                />
+                            ) : null}
+                        </Stack>
                         {admin && registrationMode === "invitation" && (
                             <Stack spacing={1.2}>
                                 <Typography variant="subtitle2">Create invitation</Typography>

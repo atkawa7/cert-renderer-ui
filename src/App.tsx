@@ -4,6 +4,7 @@ import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import CollectionsOutlinedIcon from "@mui/icons-material/CollectionsOutlined";
 import WorkspacePremiumOutlinedIcon from "@mui/icons-material/WorkspacePremiumOutlined";
 import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
+import ManageAccountsOutlinedIcon from "@mui/icons-material/ManageAccountsOutlined";
 import MenuIcon from "@mui/icons-material/Menu";
 import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeOutlinedIcon from "@mui/icons-material/LightModeOutlined";
@@ -34,6 +35,8 @@ import LogoutPage from "./pages/LogoutPage";
 import ProfilePage from "./pages/ProfilePage";
 import AppSetupPage from "./pages/AppSetupPage";
 import AuditLogsPage from "./pages/AuditLogsPage";
+import UsersPage from "./pages/UsersPage";
+import SwaggerDocsPage from "./pages/SwaggerDocsPage";
 import AntBtn from "./components/AntBtn";
 import { currentUser, ensureActiveWorkspace, getAuthPreferences, getCurrentApiKey, getCurrentUserId, getCurrentWorkspaceId, listWorkspaces, setCurrentApiKey, setCurrentUserId, subscribeSessionChange, subscribeSqlStats, updateAuthPreferences, type SqlStats } from "./templateApi";
 
@@ -141,6 +144,7 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
     const [sqlPanelMinimized, setSqlPanelMinimized] = useState(() => window.localStorage.getItem(SQL_PANEL_MINIMIZED_KEY) === "true");
     const [sqlPanelClosed, setSqlPanelClosed] = useState(() => window.localStorage.getItem(SQL_PANEL_CLOSED_KEY) === "true");
     const [activeWorkspaceLabel, setActiveWorkspaceLabel] = useState<string>("none");
+    const [currentUserAdmin, setCurrentUserAdmin] = useState(false);
     const effectiveSidebarWidth = sidebarHidden ? 0 : sidebarWidth;
     const activeUserId = getCurrentUserId();
     const activeWorkspaceId = getCurrentWorkspaceId();
@@ -213,18 +217,21 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
         async function prepareWorkspace() {
             if (!isAuthenticated) {
                 setWorkspaceReady(false);
+                setCurrentUserAdmin(false);
                 return;
             }
             setWorkspaceReady(false);
             try {
                 const profile = await currentUser();
                 setCurrentUserId(profile.userId);
+                setCurrentUserAdmin(Boolean(profile.admin));
                 await ensureActiveWorkspace();
                 if (!cancelled) {
                     setWorkspaceReady(true);
                 }
             } catch {
                 if (!cancelled) {
+                    setCurrentUserAdmin(false);
                     setCurrentApiKey(null);
                 }
             }
@@ -386,6 +393,15 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                         primaryTypographyProps={{ fontSize: isCompactNav ? "0.9rem" : "1rem" }}
                     />
                 </ListItemButton>
+                {currentUserAdmin ? (
+                    <ListItemButton component={RouterLink} to="/users" onClick={() => setMobileNavOpen(false)}>
+                        <ManageAccountsOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
+                        <ListItemText
+                            primary="Users"
+                            primaryTypographyProps={{ fontSize: isCompactNav ? "0.9rem" : "1rem" }}
+                        />
+                    </ListItemButton>
+                ) : null}
             </List>
         </>
     );
@@ -480,6 +496,11 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                         <MenuItem component={RouterLink} to="/workspaces" onClick={() => setProfileMenuAnchor(null)}>
                             Workspaces
                         </MenuItem>
+                        {currentUserAdmin ? (
+                            <MenuItem component={RouterLink} to="/users" onClick={() => setProfileMenuAnchor(null)}>
+                                Users
+                            </MenuItem>
+                        ) : null}
                         <MenuItem component={RouterLink} to="/logout" onClick={() => setProfileMenuAnchor(null)}>
                             Logout
                         </MenuItem>
@@ -541,6 +562,18 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                         >
                             Signature
                         </MenuItem>
+                        {isDevMode ? (
+                            <MenuItem
+                                component={RouterLink}
+                                to="/dev/swagger"
+                                onClick={() => {
+                                    setToolsMenuAnchor(null);
+                                    setProfileMenuAnchor(null);
+                                }}
+                            >
+                                Swagger
+                            </MenuItem>
+                        ) : null}
                     </Menu>
                 </Box>
                 {isOverlayNav && (
@@ -569,6 +602,7 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                     <Route path="/certificates" element={<CertificatesPage />} />
                     <Route path="/portal/certificates" element={<CredentialHolderCertificatesPage />} />
                     <Route path="/institutions" element={<InstitutionsPage />} />
+                    <Route path="/users" element={<UsersPage />} />
                     <Route path="/workspaces" element={<WorkspacesPage />} />
                     <Route path="/profile" element={<ProfilePage />} />
                     <Route path="/audits" element={<AuditLogsPage />} />
@@ -579,6 +613,7 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                     <Route path="/qr-decoder" element={<QrDecoderPage />} />
                     <Route path="/password-generator" element={<PasswordGeneratorPage />} />
                     <Route path="/svg-to-png" element={<SvgToPngPage />} />
+                    <Route path="/dev/swagger" element={isDevMode ? <SwaggerDocsPage /> : <Navigate to="/templates" replace />} />
                     <Route
                         path="/templates/new"
                         element={

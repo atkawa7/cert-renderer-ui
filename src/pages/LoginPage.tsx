@@ -10,10 +10,17 @@ export default function LoginPage() {
     const notifications = useNotifications();
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
+    const [twoFactorCode, setTwoFactorCode] = useState("");
+    const [twoFactorRequired, setTwoFactorRequired] = useState(false);
+    const [twoFactorChallengeToken, setTwoFactorChallengeToken] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [preferredAuthMode, setPreferredAuthMode] = useState<PreferredAuthMode>("API_KEY");
     const [setupStatus, setSetupStatus] = useState<AppSetupStatus | null>(null);
     const [setupStatusLoaded, setSetupStatusLoaded] = useState(false);
+    const isDevMode = import.meta.env.DEV;
+    const swaggerUiUrl = `${window.location.origin}${import.meta.env.BASE_URL}api/swagger-ui/index.html`;
+    const openApiUrl = `${window.location.origin}${import.meta.env.BASE_URL}api/v3/api-docs`;
+    const verifyEmailLinkExample = `${window.location.origin}${import.meta.env.BASE_URL}verify-email?token=<token>`;
 
     useEffect(() => {
         let cancelled = false;
@@ -48,7 +55,18 @@ export default function LoginPage() {
     async function submit() {
         setLoading(true);
         try {
-            await login({ username, password }, preferredAuthMode);
+            const response = await login({
+                username,
+                password,
+                twoFactorCode: twoFactorRequired ? twoFactorCode : undefined,
+                twoFactorChallengeToken: twoFactorRequired ? (twoFactorChallengeToken || undefined) : undefined,
+            }, preferredAuthMode);
+            if (response.requiresTwoFactor) {
+                setTwoFactorRequired(true);
+                setTwoFactorChallengeToken(response.twoFactorChallengeToken || null);
+                notifications.info("2FA is enabled. Enter authenticator or backup code.", { title: "Auth" });
+                return;
+            }
             await ensureActiveWorkspace();
             notifications.success("Signed in");
             navigate("/templates", { replace: true });
@@ -68,6 +86,11 @@ export default function LoginPage() {
                         <Typography variant="body2" color="text.secondary">
                             Login with your username and password. Preferred auth mode is applied automatically.
                         </Typography>
+                        {twoFactorRequired ? (
+                            <Typography variant="body2" color="warning.main">
+                                Enter your 2FA code to complete sign-in.
+                            </Typography>
+                        ) : null}
                         <Box sx={{ mt: 1 }}>
                             <Chip size="small" label={`Auth Mode: ${setupStatusLoaded ? preferredAuthMode : "..."}`} />
                         </Box>
@@ -90,8 +113,20 @@ export default function LoginPage() {
                             if (e.key === "Enter") void submit();
                         }}
                     />
+                    {twoFactorRequired ? (
+                        <TextField
+                            fullWidth
+                            label="2FA Code or Backup Code"
+                            size="small"
+                            value={twoFactorCode}
+                            onChange={(e) => setTwoFactorCode(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter") void submit();
+                            }}
+                        />
+                    ) : null}
                     <AntBtn antType="primary" onClick={() => void submit()} disabled={loading}>
-                        {loading ? "Signing in..." : "Login"}
+                        {loading ? "Signing in..." : twoFactorRequired ? "Verify 2FA" : "Login"}
                     </AntBtn>
                     <Typography variant="body2" color="text.secondary">
                         New here?{" "}
@@ -107,6 +142,31 @@ export default function LoginPage() {
                             </>
                         ) : null}
                     </Typography>
+                    {isDevMode ? (
+                        <Paper variant="outlined" sx={{ p: 1.5, bgcolor: "background.default" }}>
+                            <Stack spacing={0.7}>
+                                <Typography variant="subtitle2">Dev Tools</Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                    Swagger and email verification helpers are shown only in dev mode.
+                                </Typography>
+                                <Typography variant="body2">
+                                    <Link href={swaggerUiUrl} target="_blank" rel="noreferrer">
+                                        Swagger UI
+                                    </Link>
+                                    {" | "}
+                                    <Link href={openApiUrl} target="_blank" rel="noreferrer">
+                                        OpenAPI JSON
+                                    </Link>
+                                </Typography>
+                                <Typography variant="body2" sx={{ wordBreak: "break-all" }}>
+                                    Email verify page: <Link component={RouterLink} to="/verify-email">/verify-email</Link>
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary" sx={{ wordBreak: "break-all" }}>
+                                    Example verify link format: {verifyEmailLinkExample}
+                                </Typography>
+                            </Stack>
+                        </Paper>
+                    ) : null}
                 </Stack>
             </Paper>
         </Box>

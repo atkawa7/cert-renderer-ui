@@ -210,6 +210,8 @@ export type AuthLoginResponse = {
     apiKey?: string | null;
     accessToken?: string | null;
     expiresAt?: string | null;
+    requiresTwoFactor?: boolean;
+    twoFactorChallengeToken?: string | null;
 };
 
 export type AuthUser = {
@@ -220,6 +222,17 @@ export type AuthUser = {
     admin: boolean;
     subscriptionTier: "FREE" | "PRO" | string;
     createdAt: string;
+};
+
+export type AdminUser = {
+    userId: string;
+    username: string;
+    email?: string | null;
+    active: boolean;
+    admin: boolean;
+    subscriptionTier: "FREE" | "PRO" | string;
+    createdAt: string;
+    updatedAt: string;
 };
 
 export type AuthEmailStatus = {
@@ -237,6 +250,48 @@ export type CreateInvitationPayload = {
     username: string;
     inviteeEmail?: string;
     sendEmail?: boolean;
+};
+
+export type CreateAdminUserPayload = {
+    username: string;
+    password: string;
+    email?: string;
+    admin?: boolean;
+    subscriptionTier?: "FREE" | "PRO" | string;
+};
+
+export type UpdateAdminUserPayload = {
+    username: string;
+    email?: string;
+    admin?: boolean;
+    active?: boolean;
+    subscriptionTier?: "FREE" | "PRO" | string;
+};
+
+export type TwoFactorStatus = {
+    enabled: boolean;
+    deviceCount: number;
+    activeDeviceCount: number;
+    backupCodesRemaining: number;
+};
+
+export type TwoFactorDevice = {
+    deviceId: string;
+    label: string;
+    active: boolean;
+    lastUsedAt?: string | null;
+    createdAt: string;
+};
+
+export type TwoFactorSetupResponse = {
+    deviceId: string;
+    label: string;
+    secretBase32: string;
+    otpauthUri: string;
+};
+
+export type TwoFactorBackupCodesResponse = {
+    codes: string[];
 };
 
 export type AppSetupStatus = {
@@ -1461,7 +1516,13 @@ export async function register(payload: { username: string; password: string; in
 }
 
 export async function login(
-    payload: { username: string; password: string; captchaToken?: string },
+    payload: {
+        username: string;
+        password: string;
+        captchaToken?: string;
+        twoFactorCode?: string;
+        twoFactorChallengeToken?: string;
+    },
     preferredMode?: PreferredAuthMode
 ): Promise<AuthLoginResponse> {
     const preferred = normalizePreferredAuthMode(preferredMode ?? null);
@@ -1482,6 +1543,9 @@ export async function login(
         throw new Error(await parseErrorMessage(response, `Login failed (${response.status})`));
     }
     const auth = (await response.json()) as AuthLoginResponse;
+    if (auth.requiresTwoFactor) {
+        return auth;
+    }
     if (auth.accessToken && auth.tokenType?.toUpperCase() === "DPOP") {
         setSessionAuth(auth.accessToken, "DPOP", auth.userId);
     } else if (auth.accessToken) {
@@ -1677,5 +1741,76 @@ export async function searchWorkspaceMemberCandidates(
 export async function removeWorkspaceMember(workspaceId: string, userId: string): Promise<void> {
     await apiFetch<void>(`/workspaces/${workspaceId}/members/${encodeURIComponent(userId)}`, {
         method: "DELETE",
+    });
+}
+
+export async function listAdminUsers(): Promise<AdminUser[]> {
+    return await apiFetch<AdminUser[]>("/admin/users");
+}
+
+export async function createAdminUser(payload: CreateAdminUserPayload): Promise<AdminUser> {
+    return await apiFetch<AdminUser>("/admin/users", {
+        method: "POST",
+        body: JSON.stringify(payload),
+    });
+}
+
+export async function updateAdminUser(userId: string, payload: UpdateAdminUserPayload): Promise<AdminUser> {
+    return await apiFetch<AdminUser>(`/admin/users/${encodeURIComponent(userId)}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+    });
+}
+
+export async function resetAdminUserPassword(userId: string, password: string): Promise<AdminUser> {
+    return await apiFetch<AdminUser>(`/admin/users/${encodeURIComponent(userId)}/reset-password`, {
+        method: "POST",
+        body: JSON.stringify({ password }),
+    });
+}
+
+export async function disableAdminUser(userId: string): Promise<AdminUser> {
+    return await apiFetch<AdminUser>(`/admin/users/${encodeURIComponent(userId)}/disable`, {
+        method: "POST",
+    });
+}
+
+export async function enableAdminUser(userId: string): Promise<AdminUser> {
+    return await apiFetch<AdminUser>(`/admin/users/${encodeURIComponent(userId)}/enable`, {
+        method: "POST",
+    });
+}
+
+export async function getTwoFactorStatus(): Promise<TwoFactorStatus> {
+    return await apiFetch<TwoFactorStatus>("/auth/2fa/status");
+}
+
+export async function listTwoFactorDevices(): Promise<TwoFactorDevice[]> {
+    return await apiFetch<TwoFactorDevice[]>("/auth/2fa/devices");
+}
+
+export async function beginTwoFactorSetup(label: string): Promise<TwoFactorSetupResponse> {
+    return await apiFetch<TwoFactorSetupResponse>("/auth/2fa/devices/setup", {
+        method: "POST",
+        body: JSON.stringify({ label }),
+    });
+}
+
+export async function confirmTwoFactorSetup(deviceId: string, code: string): Promise<TwoFactorDevice> {
+    return await apiFetch<TwoFactorDevice>(`/auth/2fa/devices/${encodeURIComponent(deviceId)}/confirm`, {
+        method: "POST",
+        body: JSON.stringify({ code }),
+    });
+}
+
+export async function removeTwoFactorDevice(deviceId: string): Promise<void> {
+    await apiFetch<void>(`/auth/2fa/devices/${encodeURIComponent(deviceId)}`, {
+        method: "DELETE",
+    });
+}
+
+export async function regenerateTwoFactorBackupCodes(): Promise<TwoFactorBackupCodesResponse> {
+    return await apiFetch<TwoFactorBackupCodesResponse>("/auth/2fa/backup-codes/regenerate", {
+        method: "POST",
     });
 }
