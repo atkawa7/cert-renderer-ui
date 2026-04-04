@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Alert, Box, Link, MenuItem, Paper, Stack, TextField, Typography } from "@mui/material";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import AntBtn from "../components/AntBtn";
-import { appSetupStatus, ensureActiveWorkspace, initializeAppSetup } from "../templateApi";
+import { appSetupStatus, ensureActiveWorkspace, initializeAppSetup, type PreferredAuthMode } from "../templateApi";
 import { useNotifications } from "../components/NotificationsProvider";
 
 export default function AppSetupPage() {
@@ -13,6 +13,7 @@ export default function AppSetupPage() {
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const [registrationMode, setRegistrationMode] = useState<"self" | "invitation">("self");
+    const [preferredAuthMode, setPreferredAuthMode] = useState<PreferredAuthMode>("API_KEY");
     const [setupEnabled, setSetupEnabled] = useState(false);
     const [setupCompleted, setSetupCompleted] = useState(false);
 
@@ -26,6 +27,11 @@ export default function AppSetupPage() {
                 setRegistrationMode("invitation");
             } else {
                 setRegistrationMode("self");
+            }
+            if (status.preferredAuthMode === "JWT" || status.preferredAuthMode === "DPOP" || status.preferredAuthMode === "API_KEY") {
+                setPreferredAuthMode(status.preferredAuthMode);
+            } else {
+                setPreferredAuthMode("API_KEY");
             }
         } catch (err: any) {
             notifications.error(err?.message || "Failed to load setup status", { title: "Setup" });
@@ -42,7 +48,7 @@ export default function AppSetupPage() {
     async function submit() {
         setLoading(true);
         try {
-            await initializeAppSetup({ username, password, registrationMode });
+            await initializeAppSetup({ username, password, registrationMode, preferredAuthMode });
             await ensureActiveWorkspace();
             notifications.success("App setup complete. Admin created.");
             navigate("/templates", { replace: true });
@@ -97,6 +103,18 @@ export default function AppSetupPage() {
                             >
                                 <MenuItem value="self">self</MenuItem>
                                 <MenuItem value="invitation">invitation</MenuItem>
+                            </TextField>
+                            <TextField
+                                select
+                                fullWidth
+                                label="Preferred Auth Mode"
+                                size="small"
+                                value={preferredAuthMode}
+                                onChange={(e) => setPreferredAuthMode((e.target.value as PreferredAuthMode) || "API_KEY")}
+                            >
+                                <MenuItem value="API_KEY">API_KEY</MenuItem>
+                                <MenuItem value="JWT">JWT</MenuItem>
+                                <MenuItem value="DPOP">DPOP</MenuItem>
                             </TextField>
                             <AntBtn antType="primary" onClick={() => void submit()} disabled={loading}>
                                 {loading ? "Setting up..." : "Initialize App"}

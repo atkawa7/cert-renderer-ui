@@ -201,6 +201,16 @@ export type AuthResponse = {
     tokenType: string;
 };
 
+export type AuthJwtResponse = {
+    userId: string;
+    username: string;
+    admin: boolean;
+    subscriptionTier: "FREE" | "PRO" | string;
+    accessToken: string;
+    tokenType: "Bearer" | "DPoP" | string;
+    expiresAt: string;
+};
+
 export type AuthUser = {
     userId: string;
     username: string;
@@ -232,6 +242,7 @@ export type AppSetupStatus = {
     setupEnabled: boolean;
     setupCompleted: boolean;
     registrationMode: "self" | "invitation" | string;
+    preferredAuthMode: "API_KEY" | "JWT" | "DPOP" | string;
 };
 
 export type AuthUserPreferences = {
@@ -245,9 +256,16 @@ const API_BASE = appConfig.rendererApiBase;
 const USER_ID_KEY = "renderer:userId";
 const WORKSPACE_ID_KEY = "renderer:workspaceId";
 const API_KEY_KEY = "renderer:apiKey";
+const AUTH_MODE_KEY = "renderer:authMode";
 const SESSION_EVENT = "renderer:session-changed";
 const SQL_STATS_EVENT = "renderer:sql-stats";
 const MY_CERTIFICATES_DEDUPE_MS = 1500;
+const DPOP_DB_NAME = "renderer-auth";
+const DPOP_DB_VERSION = 1;
+const DPOP_STORE = "dpop";
+const DPOP_KEY_ID = "default";
+
+export type PreferredAuthMode = "API_KEY" | "JWT" | "DPOP";
 
 export type SqlStats = {
     statements: number;
@@ -313,6 +331,23 @@ export function getCurrentApiKey(): string | null {
     return raw || null;
 }
 
+export function getCurrentAuthMode(): PreferredAuthMode {
+    const raw = window.localStorage.getItem(AUTH_MODE_KEY)?.trim().toUpperCase();
+    if (raw === "JWT" || raw === "DPOP" || raw === "API_KEY") {
+        return raw;
+    }
+    return "API_KEY";
+}
+
+export function setCurrentAuthMode(mode: PreferredAuthMode): void {
+    const normalized = normalizePreferredAuthMode(mode);
+    if (getCurrentAuthMode() === normalized) {
+        return;
+    }
+    window.localStorage.setItem(AUTH_MODE_KEY, normalized);
+    emitSessionChanged();
+}
+
 export function setCurrentApiKey(apiKey: string | null): void {
     const nextValue = apiKey?.trim() || null;
     const currentValue = getCurrentApiKey();
@@ -326,6 +361,194 @@ export function setCurrentApiKey(apiKey: string | null): void {
         window.localStorage.removeItem(USER_ID_KEY);
     }
     emitSessionChanged();
+}
+
+function setSessionAuth(token: string | null, mode: PreferredAuthMode, userId: string | null) {
+    setCurrentAuthMode(mode);
+    setCurrentApiKey(token);
+    if (userId) {
+        setCurrentUserId(userId);
+    }
+}
+
+function normalizePreferredAuthMode(mode: string | null | undefined): PreferredAuthMode {
+    const normalized = (mode ?? "").trim().toUpperCase();
+    if (normalized === "JWT" || normalized === "DPOP" || normalized === "API_KEY") {
+        return normalized;
+    }
+    return "API_KEY";
+}
+
+type DpopKeyRecord = {
+    id: string;
+    privateKey: CryptoKey;
+    publicKey: CryptoKey;
+    publicJwk: JsonWebKey;
+    jkt: string;
+};
+
+function openDpopDb(): Promise<IDBDatabase> {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DPOP_DB_NAME, DPOP_DB_VERSION);
+        request.onupgradeneeded = () => {
+            const db = request.result;
+            if (!db.objectStoreNames.contains(DPOP_STORE)) {
+                db.createObjectStore(DPOP_STORE, { keyPath: "id" });
+            }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error ?? new Error("Failed to open IndexedDB"));
+    });
+}
+
+async function loadDpopKeyRecord(): Promise<DpopKeyRecord | null> {
+    const db = await openDpopDb();
+    return await new Promise((resolve, reject) => {
+        const tx = db.transaction(DPOP_STORE, "readonly");
+        const store = tx.objectStore(DPOP_STORE);
+        const req = store.get(DPOP_KEY_ID);
+        req.onsuccess = () => resolve((req.result as DpopKeyRecord | undefined) ?? null);
+        req.onerror = () => reject(req.error ?? new Error("Failed to read DPoP key"));
+        tx.oncomplete = () => db.close();
+    });
+}
+
+async function saveDpopKeyRecord(record: DpopKeyRecord): Promise<void> {
+    const db = await openDpopDb();
+    await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(DPOP_STORE, "readwrite");
+        tx.objectStore(DPOP_STORE).put(record);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error ?? new Error("Failed to save DPoP key"));
+        tx.onabort = () => reject(tx.error ?? new Error("Failed to save DPoP key"));
+    });
+    db.close();
+}
+
+function toBase64Url(value: Uint8Array): string {
+    let binary = "";
+    for (const byte of value) binary += String.fromCharCode(byte);
+    return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function utf8Bytes(value: string): Uint8Array {
+    return new TextEncoder().encode(value);
+}
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+    return new Uint8Array(bytes).buffer;
+}
+
+async function sha256Base64Url(value: string): Promise<string> {
+    const digest = await crypto.subtle.digest("SHA-256", toArrayBuffer(utf8Bytes(value)));
+    return toBase64Url(new Uint8Array(digest));
+}
+
+async function computeJwkThumbprintBase64Url(jwk: JsonWebKey): Promise<string> {
+    const required = {
+        crv: jwk.crv,
+        kty: jwk.kty,
+        x: jwk.x,
+        y: jwk.y,
+    };
+    if (!required.crv || !required.kty || !required.x || !required.y) {
+        throw new Error("Invalid DPoP public key");
+    }
+    const canonical = JSON.stringify(required);
+    return await sha256Base64Url(canonical);
+}
+
+async function ensureDpopKeyRecord(): Promise<DpopKeyRecord> {
+    const existing = await loadDpopKeyRecord();
+    if (existing?.privateKey && existing?.publicJwk?.kty && existing?.jkt) {
+        return existing;
+    }
+
+    // Generate temporary exportable pair so we can create portable public JWK,
+    // then re-import private key as non-extractable for IndexedDB persistence.
+    const tempPair = (await crypto.subtle.generateKey(
+        { name: "ECDSA", namedCurve: "P-256" },
+        true,
+        ["sign", "verify"]
+    )) as CryptoKeyPair;
+
+    const publicJwk = (await crypto.subtle.exportKey("jwk", tempPair.publicKey)) as JsonWebKey;
+    const pkcs8 = await crypto.subtle.exportKey("pkcs8", tempPair.privateKey);
+    const privateKey = await crypto.subtle.importKey(
+        "pkcs8",
+        pkcs8,
+        { name: "ECDSA", namedCurve: "P-256" },
+        false,
+        ["sign"]
+    );
+    const publicKey = await crypto.subtle.importKey(
+        "jwk",
+        publicJwk,
+        { name: "ECDSA", namedCurve: "P-256" },
+        true,
+        ["verify"]
+    );
+    const jkt = await computeJwkThumbprintBase64Url(publicJwk);
+    const created: DpopKeyRecord = { id: DPOP_KEY_ID, privateKey, publicKey, publicJwk, jkt };
+    await saveDpopKeyRecord(created);
+    return created;
+}
+
+function base64UrlJson(value: unknown): string {
+    return toBase64Url(utf8Bytes(JSON.stringify(value)));
+}
+
+function derToJose(signatureDer: Uint8Array, joseLength: number): Uint8Array {
+    if (signatureDer.length === joseLength) {
+        return signatureDer;
+    }
+    if (signatureDer.length < 8 || signatureDer[0] !== 0x30) {
+        throw new Error("Invalid ECDSA signature format");
+    }
+    let offset = 2;
+    if (signatureDer[offset] !== 0x02) throw new Error("Invalid ECDSA signature format");
+    const rLen = signatureDer[offset + 1];
+    const r = signatureDer.slice(offset + 2, offset + 2 + rLen);
+    offset = offset + 2 + rLen;
+    if (signatureDer[offset] !== 0x02) throw new Error("Invalid ECDSA signature format");
+    const sLen = signatureDer[offset + 1];
+    const s = signatureDer.slice(offset + 2, offset + 2 + sLen);
+
+    const out = new Uint8Array(joseLength);
+    const half = joseLength / 2;
+    out.set(r.slice(Math.max(0, r.length - half)), half - Math.min(half, r.length));
+    out.set(s.slice(Math.max(0, s.length - half)), joseLength - Math.min(half, s.length));
+    return out;
+}
+
+async function buildDpopProof(method: string, htu: string, accessToken?: string): Promise<string> {
+    const record = await ensureDpopKeyRecord();
+    const header = {
+        typ: "dpop+jwt",
+        alg: "ES256",
+        jwk: record.publicJwk,
+    };
+    const payload: Record<string, unknown> = {
+        jti: crypto.randomUUID(),
+        iat: Math.floor(Date.now() / 1000),
+        htm: method.toUpperCase(),
+        htu,
+    };
+    if (accessToken) {
+        payload.ath = await sha256Base64Url(accessToken);
+    }
+    const encodedHeader = base64UrlJson(header);
+    const encodedPayload = base64UrlJson(payload);
+    const signingInput = `${encodedHeader}.${encodedPayload}`;
+    const derSignature = new Uint8Array(
+        await crypto.subtle.sign(
+            { name: "ECDSA", hash: "SHA-256" },
+            record.privateKey,
+            toArrayBuffer(utf8Bytes(signingInput))
+        )
+    );
+    const joseSignature = derToJose(derSignature, 64);
+    return `${signingInput}.${toBase64Url(joseSignature)}`;
 }
 
 export function setCurrentWorkspaceId(workspaceId: string | null): void {
@@ -458,12 +681,19 @@ function decodeSqlStatements(raw: string | null): Array<{ sql: string; elapsedMs
 
 async function trackedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
     const method = init?.method || "GET";
+    const url = resolveRequestUrl(input);
+    const baseHeaders = headersToRecord(init?.headers);
+    const authHeaders = await resolveAuthHeaders(method, url, baseHeaders);
+    const mergedHeaders = { ...baseHeaders, ...authHeaders };
     const requestTrace = {
-        url: resolveRequestUrl(input),
-        headers: headersToRecord(init?.headers),
+        url,
+        headers: mergedHeaders,
         body: bodyToTraceString(init?.body),
     };
-    const response = await fetch(input, init);
+    const response = await fetch(input, {
+        ...init,
+        headers: mergedHeaders,
+    });
     await emitSqlStats(response, method, requestTrace);
     return response;
 }
@@ -531,11 +761,6 @@ function workspaceHeaders(requireWorkspace = true): Record<string, string> {
     const headers: Record<string, string> = {
         "X-User-Id": getCurrentUserId(),
     };
-    const apiKey = getCurrentApiKey();
-    if (apiKey) {
-        headers["X-API-Key"] = apiKey;
-        headers["Authorization"] = `Bearer ${apiKey}`;
-    }
     const workspaceId = getCurrentWorkspaceId();
     if (workspaceId) {
         headers["X-Workspace-Id"] = workspaceId;
@@ -543,6 +768,49 @@ function workspaceHeaders(requireWorkspace = true): Record<string, string> {
         throw new Error("Select an org workspace first in the Workspaces page.");
     }
     return headers;
+}
+
+async function resolveAuthHeaders(method: string, url: string, existing: Record<string, string>): Promise<Record<string, string>> {
+    if (isPublicAuthBootstrapRequest(url)) {
+        return {};
+    }
+    if (existing.Authorization || existing.authorization || existing["X-API-Key"] || existing["x-api-key"]) {
+        return {};
+    }
+    const token = getCurrentApiKey();
+    if (!token) {
+        return {};
+    }
+    const mode = getCurrentAuthMode();
+    if (mode === "JWT") {
+        return { Authorization: `Bearer ${token}` };
+    }
+    if (mode === "DPOP") {
+        const dpopProof = await buildDpopProof(method, url, token);
+        return {
+            Authorization: `DPoP ${token}`,
+            DPoP: dpopProof,
+        };
+    }
+    return {
+        "X-API-Key": token,
+        Authorization: `Bearer ${token}`,
+    };
+}
+
+function isPublicAuthBootstrapRequest(url: string): boolean {
+    try {
+        const parsed = new URL(url, window.location.origin);
+        const path = parsed.pathname;
+        return path === "/auth/login"
+            || path === "/auth/login/jwt"
+            || path === "/auth/login/dpop"
+            || path === "/auth/register"
+            || path === "/app/setup"
+            || path === "/app/setup/status";
+    } catch {
+        return false;
+    }
 }
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
@@ -1177,12 +1445,45 @@ export async function register(payload: { username: string; password: string; in
         throw new Error(await parseErrorMessage(response, `Register failed (${response.status})`));
     }
     const auth = (await response.json()) as AuthResponse;
-    setCurrentApiKey(auth.apiKey);
-    setCurrentUserId(auth.userId);
+    setSessionAuth(auth.apiKey, "API_KEY", auth.userId);
     return auth;
 }
 
-export async function login(payload: { username: string; password: string }): Promise<AuthResponse> {
+export async function login(payload: { username: string; password: string }): Promise<AuthResponse | AuthJwtResponse> {
+    const setup = await appSetupStatus();
+    const preferred = normalizePreferredAuthMode(setup.preferredAuthMode);
+
+    if (preferred === "JWT") {
+        const response = await trackedFetch(`${API_BASE}/auth/login/jwt`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        });
+        if (!response.ok) {
+            throw new Error(await parseErrorMessage(response, `Login failed (${response.status})`));
+        }
+        const auth = (await response.json()) as AuthJwtResponse;
+        setSessionAuth(auth.accessToken, "JWT", auth.userId);
+        return auth;
+    }
+
+    if (preferred === "DPOP") {
+        const dpop = await ensureDpopKeyRecord();
+        const loginUrl = `${API_BASE}/auth/login/dpop`;
+        const loginProof = await buildDpopProof("POST", loginUrl);
+        const response = await trackedFetch(loginUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", DPoP: loginProof },
+            body: JSON.stringify({ ...payload, dpopJkt: dpop.jkt }),
+        });
+        if (!response.ok) {
+            throw new Error(await parseErrorMessage(response, `Login failed (${response.status})`));
+        }
+        const auth = (await response.json()) as AuthJwtResponse;
+        setSessionAuth(auth.accessToken, "DPOP", auth.userId);
+        return auth;
+    }
+
     const response = await trackedFetch(`${API_BASE}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1192,21 +1493,20 @@ export async function login(payload: { username: string; password: string }): Pr
         throw new Error(await parseErrorMessage(response, `Login failed (${response.status})`));
     }
     const auth = (await response.json()) as AuthResponse;
-    setCurrentApiKey(auth.apiKey);
-    setCurrentUserId(auth.userId);
+    setSessionAuth(auth.apiKey, "API_KEY", auth.userId);
     return auth;
 }
 
 export async function logout(): Promise<void> {
-    const apiKey = getCurrentApiKey();
-    if (!apiKey) return;
+    const token = getCurrentApiKey();
+    if (!token) return;
     const response = await trackedFetch(`${API_BASE}/auth/logout`, {
         method: "POST",
-        headers: { "X-API-Key": apiKey, Authorization: `Bearer ${apiKey}` },
     });
     if (!response.ok) {
         throw new Error(await parseErrorMessage(response, `Logout failed (${response.status})`));
     }
+    setCurrentAuthMode("API_KEY");
     setCurrentApiKey(null);
     setCurrentWorkspaceId(null);
 }
@@ -1227,11 +1527,10 @@ export async function ensureActiveWorkspace(): Promise<string> {
 }
 
 export async function currentUser(): Promise<AuthUser> {
-    const apiKey = getCurrentApiKey();
-    if (!apiKey) throw new Error("No API key set");
+    const token = getCurrentApiKey();
+    if (!token) throw new Error("No auth token set");
     const response = await trackedFetch(`${API_BASE}/auth/me`, {
         method: "GET",
-        headers: { "X-API-Key": apiKey, Authorization: `Bearer ${apiKey}` },
     });
     if (!response.ok) {
         throw new Error(await parseErrorMessage(response, `Auth check failed (${response.status})`));
@@ -1279,6 +1578,7 @@ export async function initializeAppSetup(payload: {
     username: string;
     password: string;
     registrationMode: "self" | "invitation";
+    preferredAuthMode: PreferredAuthMode;
 }): Promise<AuthResponse> {
     const response = await trackedFetch(`${API_BASE}/app/setup`, {
         method: "POST",
@@ -1289,23 +1589,18 @@ export async function initializeAppSetup(payload: {
         throw new Error(await parseErrorMessage(response, `Setup initialization failed (${response.status})`));
     }
     const auth = (await response.json()) as AuthResponse;
-    setCurrentApiKey(auth.apiKey);
-    setCurrentUserId(auth.userId);
+    setSessionAuth(auth.apiKey, "API_KEY", auth.userId);
     return auth;
 }
 
 export async function createInvitation(payload: CreateInvitationPayload): Promise<AuthInvitation> {
-    const apiKey = getCurrentApiKey();
-    if (!apiKey) throw new Error("No API key set");
+    const token = getCurrentApiKey();
+    if (!token) throw new Error("No auth token set");
     const username = payload.username.trim();
     const inviteeEmail = payload.inviteeEmail?.trim();
     const response = await trackedFetch(`${API_BASE}/auth/invitations`, {
         method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "X-API-Key": apiKey,
-            Authorization: `Bearer ${apiKey}`,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
             username,
             inviteeEmail: inviteeEmail || undefined,

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Alert, Box, Checkbox, CircularProgress, FormControlLabel, Stack, TextField, Typography } from "@mui/material";
 import AntBtn from "../components/AntBtn";
-import { appSetupStatus, createInvitation, currentUser, getCurrentApiKey, getCurrentWorkspaceId, updateMyEmail, verifyMyEmail } from "../templateApi";
+import { appSetupStatus, createInvitation, currentUser, getCurrentApiKey, getCurrentAuthMode, getCurrentWorkspaceId, updateMyEmail, verifyMyEmail } from "../templateApi";
 import { useNotifications } from "../components/NotificationsProvider";
 
 export default function ProfilePage() {
@@ -16,14 +16,16 @@ export default function ProfilePage() {
     const [verificationCode, setVerificationCode] = useState("");
     const [emailBusy, setEmailBusy] = useState(false);
     const [registrationMode, setRegistrationMode] = useState("");
+    const [preferredAuthMode, setPreferredAuthMode] = useState("");
     const [inviteUsername, setInviteUsername] = useState("");
     const [sendInviteEmail, setSendInviteEmail] = useState(false);
     const [inviteeEmail, setInviteeEmail] = useState("");
     const [inviteLink, setInviteLink] = useState("");
 
     const apiKey = getCurrentApiKey() || "";
+    const currentAuthMode = getCurrentAuthMode();
     const workspaceId = getCurrentWorkspaceId() || "";
-    const maskedApiKey = apiKey ? `${apiKey.slice(0, 8)}...${apiKey.slice(-6)}` : "";
+    const maskedToken = apiKey ? `${apiKey.slice(0, 8)}...${apiKey.slice(-6)}` : "";
 
     async function loadProfile() {
         setLoading(true);
@@ -37,6 +39,7 @@ export default function ProfilePage() {
             setVerifiedEmail(Boolean(profile.verifiedEmail));
             const setup = await appSetupStatus();
             setRegistrationMode(setup.registrationMode);
+            setPreferredAuthMode(setup.preferredAuthMode || "API_KEY");
         } catch (err: any) {
             notifications.error(err?.message || "Failed to load profile", { title: "Profile" });
         } finally {
@@ -154,10 +157,12 @@ export default function ProfilePage() {
                             ) : null}
                         </Stack>
                         <TextField fullWidth size="small" label="Registration Mode" value={registrationMode} InputProps={{ readOnly: true }} />
-                        <TextField fullWidth size="small" label="API Key" value={maskedApiKey} InputProps={{ readOnly: true }} />
+                        <TextField fullWidth size="small" label="Preferred Auth Mode" value={preferredAuthMode || "API_KEY"} InputProps={{ readOnly: true }} />
+                        <TextField fullWidth size="small" label="Current Session Auth" value={currentAuthMode} InputProps={{ readOnly: true }} />
+                        <TextField fullWidth size="small" label="Session Token" value={maskedToken} InputProps={{ readOnly: true }} />
                         <TextField fullWidth size="small" label="Active Workspace" value={workspaceId} InputProps={{ readOnly: true }} />
                         <Alert severity="info">
-                            Use Workspaces page to switch workspace. Current API key is sent automatically.
+                            Use Workspaces page to switch workspace. Session auth is applied automatically.
                         </Alert>
                         <Box>
                             <AntBtn onClick={() => void loadProfile()} disabled={loading}>
