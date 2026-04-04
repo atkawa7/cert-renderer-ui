@@ -201,14 +201,15 @@ export type AuthResponse = {
     tokenType: string;
 };
 
-export type AuthJwtResponse = {
+export type AuthLoginResponse = {
     userId: string;
     username: string;
     admin: boolean;
     subscriptionTier: "FREE" | "PRO" | string;
-    accessToken: string;
-    tokenType: "Bearer" | "DPoP" | string;
-    expiresAt: string;
+    tokenType: "ApiKey" | "Bearer" | "DPoP" | string;
+    apiKey?: string | null;
+    accessToken?: string | null;
+    expiresAt?: string | null;
 };
 
 export type AuthUser = {
@@ -803,8 +804,6 @@ function isPublicAuthBootstrapRequest(url: string): boolean {
         const parsed = new URL(url, window.location.origin);
         const path = parsed.pathname;
         return path === "/auth/login"
-            || path === "/auth/login/jwt"
-            || path === "/auth/login/dpop"
             || path === "/auth/register"
             || path === "/app/setup"
             || path === "/app/setup/status";
@@ -1449,51 +1448,33 @@ export async function register(payload: { username: string; password: string; in
     return auth;
 }
 
-export async function login(payload: { username: string; password: string }): Promise<AuthResponse | AuthJwtResponse> {
+export async function login(payload: { username: string; password: string }): Promise<AuthLoginResponse> {
     const setup = await appSetupStatus();
     const preferred = normalizePreferredAuthMode(setup.preferredAuthMode);
-
-    if (preferred === "JWT") {
-        const response = await trackedFetch(`${API_BASE}/auth/login/jwt`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-        });
-        if (!response.ok) {
-            throw new Error(await parseErrorMessage(response, `Login failed (${response.status})`));
-        }
-        const auth = (await response.json()) as AuthJwtResponse;
-        setSessionAuth(auth.accessToken, "JWT", auth.userId);
-        return auth;
-    }
+    const loginUrl = `${API_BASE}/auth/login`;
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
 
     if (preferred === "DPOP") {
-        const dpop = await ensureDpopKeyRecord();
-        const loginUrl = `${API_BASE}/auth/login/dpop`;
-        const loginProof = await buildDpopProof("POST", loginUrl);
-        const response = await trackedFetch(loginUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", DPoP: loginProof },
-            body: JSON.stringify({ ...payload, dpopJkt: dpop.jkt }),
-        });
-        if (!response.ok) {
-            throw new Error(await parseErrorMessage(response, `Login failed (${response.status})`));
-        }
-        const auth = (await response.json()) as AuthJwtResponse;
-        setSessionAuth(auth.accessToken, "DPOP", auth.userId);
-        return auth;
+        await ensureDpopKeyRecord();
+        headers.DPoP = await buildDpopProof("POST", loginUrl);
     }
 
-    const response = await trackedFetch(`${API_BASE}/auth/login`, {
+    const response = await trackedFetch(loginUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(payload),
     });
     if (!response.ok) {
         throw new Error(await parseErrorMessage(response, `Login failed (${response.status})`));
     }
-    const auth = (await response.json()) as AuthResponse;
-    setSessionAuth(auth.apiKey, "API_KEY", auth.userId);
+    const auth = (await response.json()) as AuthLoginResponse;
+    if (auth.accessToken && auth.tokenType?.toUpperCase() === "DPOP") {
+        setSessionAuth(auth.accessToken, "DPOP", auth.userId);
+    } else if (auth.accessToken) {
+        setSessionAuth(auth.accessToken, "JWT", auth.userId);
+    } else {
+        setSessionAuth(auth.apiKey || null, "API_KEY", auth.userId);
+    }
     return auth;
 }
 

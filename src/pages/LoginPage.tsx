@@ -1,8 +1,8 @@
-import { useState } from "react";
-import { Box, Link, Paper, Stack, TextField, Typography } from "@mui/material";
+import { useEffect, useState } from "react";
+import { Box, Chip, Link, Paper, Stack, TextField, Typography } from "@mui/material";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import AntBtn from "../components/AntBtn";
-import { ensureActiveWorkspace, login } from "../templateApi";
+import { appSetupStatus, ensureActiveWorkspace, login, type PreferredAuthMode } from "../templateApi";
 import { useNotifications } from "../components/NotificationsProvider";
 
 export default function LoginPage() {
@@ -11,6 +11,33 @@ export default function LoginPage() {
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const [loading, setLoading] = useState(false);
+    const [preferredAuthMode, setPreferredAuthMode] = useState<PreferredAuthMode>("API_KEY");
+
+    useEffect(() => {
+        let cancelled = false;
+        async function loadPreferredAuthMode() {
+            try {
+                const status = await appSetupStatus();
+                const mode = (status.preferredAuthMode ?? "").toUpperCase();
+                if (cancelled) {
+                    return;
+                }
+                if (mode === "JWT" || mode === "DPOP" || mode === "API_KEY") {
+                    setPreferredAuthMode(mode);
+                } else {
+                    setPreferredAuthMode("API_KEY");
+                }
+            } catch {
+                if (!cancelled) {
+                    setPreferredAuthMode("API_KEY");
+                }
+            }
+        }
+        void loadPreferredAuthMode();
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     async function submit() {
         setLoading(true);
@@ -33,8 +60,11 @@ export default function LoginPage() {
                     <Box>
                         <Typography variant="h5">Sign In</Typography>
                         <Typography variant="body2" color="text.secondary">
-                            Login with your username and password.
+                            Login with your username and password. Preferred auth mode is applied automatically.
                         </Typography>
+                        <Box sx={{ mt: 1 }}>
+                            <Chip size="small" label={`Auth Mode: ${preferredAuthMode}`} />
+                        </Box>
                     </Box>
                     <TextField
                         fullWidth
