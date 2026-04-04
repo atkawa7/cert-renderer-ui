@@ -79,6 +79,8 @@ export type CertificateSummary = {
     institutionId?: string | null;
     institutionDomain?: string | null;
     issueUrl?: string | null;
+    vcExpiresAt?: string | null;
+    vcPermanent?: boolean;
     fileName: string;
     createdAt: string;
     updatedAt: string;
@@ -1091,6 +1093,19 @@ export async function downloadMyCertificateById(id: string, fallbackName = "cert
 export async function sendCertificateEmailById(id: string): Promise<void> {
     await apiFetch<void>(`/certificates/${id}/send-email`, {
         method: "POST",
+    });
+}
+
+export async function updateCertificateExpirationById(
+    id: string,
+    payload: {
+        expiresAt?: string | null;
+        permanent?: boolean | null;
+    }
+): Promise<CertificateDetail> {
+    return await apiFetch<CertificateDetail>(`/certificates/${id}/expiration`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
     });
 }
 

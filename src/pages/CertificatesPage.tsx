@@ -14,6 +14,14 @@ function formatDate(value?: string): string {
     return d.toLocaleString();
 }
 
+function formatExpiration(expiresAt?: string | null, permanent?: boolean): string {
+    if (permanent) return "Permanent";
+    if (!expiresAt) return "-";
+    const d = new Date(expiresAt);
+    if (Number.isNaN(d.getTime())) return expiresAt;
+    return d.toLocaleString();
+}
+
 export default function CertificatesPage() {
     const theme = useTheme();
     const navigate = useNavigate();
@@ -193,6 +201,9 @@ export default function CertificatesPage() {
                                         <Typography variant="body2" color="text.secondary">
                                             Organization: {item.organizationName || "-"} | Template: {item.templateName}
                                         </Typography>
+                                        <Typography variant="body2" color="text.secondary">
+                                            Expires: {formatExpiration(item.vcExpiresAt, item.vcPermanent)}
+                                        </Typography>
                                         {item.batchId && (
                                             <Typography variant="body2" color="text.secondary">
                                                 Batch: {item.batchId}
@@ -247,6 +258,9 @@ export default function CertificatesPage() {
                             </Typography>
                             <Typography variant="body2">
                                 File: {detail.fileName}
+                            </Typography>
+                            <Typography variant="body2">
+                                Expires: {formatExpiration(detail.vcExpiresAt, detail.vcPermanent)}
                             </Typography>
                             {detail.batchId && (
                                 <Typography variant="body2">

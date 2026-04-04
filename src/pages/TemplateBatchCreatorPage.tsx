@@ -21,6 +21,8 @@ const DEFAULT_BULK_CERTIFICATE_COLUMNS = [
     "certificate.uuid",
     "certificate.reference",
     "certificate.issued_on",
+    "certificate.expires_on",
+    "certificate.permanent",
     "program.name",
     "program.code",
     "institution.domain",

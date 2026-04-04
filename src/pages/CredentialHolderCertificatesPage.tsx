@@ -14,6 +14,14 @@ function formatDate(value?: string): string {
     return d.toLocaleString();
 }
 
+function formatExpiration(expiresAt?: string | null, permanent?: boolean): string {
+    if (permanent) return "Permanent";
+    if (!expiresAt) return "-";
+    const d = new Date(expiresAt);
+    if (Number.isNaN(d.getTime())) return expiresAt;
+    return d.toLocaleString();
+}
+
 export default function CredentialHolderCertificatesPage() {
     const theme = useTheme();
     const navigate = useNavigate();
@@ -157,6 +165,9 @@ export default function CredentialHolderCertificatesPage() {
                                         <Typography variant="body2" color="text.secondary">
                                             Email: {item.recipientEmail || "-"} | Organization: {item.organizationName || "-"}
                                         </Typography>
+                                        <Typography variant="body2" color="text.secondary">
+                                            Expires: {formatExpiration(item.vcExpiresAt, item.vcPermanent)}
+                                        </Typography>
                                         <Typography variant="caption" color="text.secondary">
                                             Created: {formatDate(item.createdAt)}
                                         </Typography>
@@ -206,6 +217,9 @@ export default function CredentialHolderCertificatesPage() {
                             </Typography>
                             <Typography variant="body2">
                                 File: {detail.fileName}
+                            </Typography>
+                            <Typography variant="body2">
+                                Expires: {formatExpiration(detail.vcExpiresAt, detail.vcPermanent)}
                             </Typography>
                             <Divider />
                             <Typography variant="subtitle2">Verified credential</Typography>
