@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Box, Chip, Link, Paper, Stack, TextField, Typography } from "@mui/material";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import AntBtn from "../components/AntBtn";
-import { appSetupStatus, ensureActiveWorkspace, login, type PreferredAuthMode } from "../templateApi";
+import { appSetupStatus, ensureActiveWorkspace, login, type AppSetupStatus, type PreferredAuthMode } from "../templateApi";
 import { useNotifications } from "../components/NotificationsProvider";
 
 export default function LoginPage() {
@@ -12,6 +12,8 @@ export default function LoginPage() {
     const [password, setPassword] = useState("");
     const [loading, setLoading] = useState(false);
     const [preferredAuthMode, setPreferredAuthMode] = useState<PreferredAuthMode>("API_KEY");
+    const [setupStatus, setSetupStatus] = useState<AppSetupStatus | null>(null);
+    const [setupStatusLoaded, setSetupStatusLoaded] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -27,9 +29,13 @@ export default function LoginPage() {
                 } else {
                     setPreferredAuthMode("API_KEY");
                 }
+                setSetupStatus(status);
+                setSetupStatusLoaded(true);
             } catch {
                 if (!cancelled) {
                     setPreferredAuthMode("API_KEY");
+                    setSetupStatus(null);
+                    setSetupStatusLoaded(true);
                 }
             }
         }
@@ -42,7 +48,7 @@ export default function LoginPage() {
     async function submit() {
         setLoading(true);
         try {
-            await login({ username, password });
+            await login({ username, password }, preferredAuthMode);
             await ensureActiveWorkspace();
             notifications.success("Signed in");
             navigate("/templates", { replace: true });
@@ -63,7 +69,7 @@ export default function LoginPage() {
                             Login with your username and password. Preferred auth mode is applied automatically.
                         </Typography>
                         <Box sx={{ mt: 1 }}>
-                            <Chip size="small" label={`Auth Mode: ${preferredAuthMode}`} />
+                            <Chip size="small" label={`Auth Mode: ${setupStatusLoaded ? preferredAuthMode : "..."}`} />
                         </Box>
                     </Box>
                     <TextField
@@ -92,10 +98,14 @@ export default function LoginPage() {
                         <Link component={RouterLink} to="/register">
                             Create account
                         </Link>
-                        {" | "}
-                        <Link component={RouterLink} to="/app/setup">
-                            Setup app
-                        </Link>
+                        {setupStatus?.setupEnabled && !setupStatus?.setupCompleted ? (
+                            <>
+                                {" | "}
+                                <Link component={RouterLink} to="/app/setup">
+                                    Setup app
+                                </Link>
+                            </>
+                        ) : null}
                     </Typography>
                 </Stack>
             </Paper>

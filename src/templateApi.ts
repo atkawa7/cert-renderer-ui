@@ -306,6 +306,8 @@ type MyCertificatesCache = {
 };
 
 let myCertificatesCache: MyCertificatesCache | null = null;
+let appSetupStatusInFlight: Promise<AppSetupStatus> | null = null;
+let appSetupStatusCache: AppSetupStatus | null = null;
 
 export function getCurrentUserId(): string {
     const raw = window.localStorage.getItem(USER_ID_KEY)?.trim();
@@ -552,6 +554,16 @@ async function buildDpopProof(method: string, htu: string, accessToken?: string)
     return `${signingInput}.${toBase64Url(joseSignature)}`;
 }
 
+function toDpopHtu(url: string): string {
+    try {
+        const parsed = new URL(url, window.location.origin);
+        return `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
+    } catch {
+        const withoutFragment = url.split("#", 1)[0];
+        return withoutFragment.split("?", 1)[0];
+    }
+}
+
 export function setCurrentWorkspaceId(workspaceId: string | null): void {
     const nextValue = workspaceId?.trim() || null;
     const currentValue = getCurrentWorkspaceId();
@@ -787,7 +799,7 @@ async function resolveAuthHeaders(method: string, url: string, existing: Record<
         return { Authorization: `Bearer ${token}` };
     }
     if (mode === "DPOP") {
-        const dpopProof = await buildDpopProof(method, url, token);
+        const dpopProof = await buildDpopProof(method, toDpopHtu(url), token);
         return {
             Authorization: `DPoP ${token}`,
             DPoP: dpopProof,
@@ -1434,7 +1446,7 @@ export async function listAuditEvents(params?: {
     };
 }
 
-export async function register(payload: { username: string; password: string; invitationToken?: string }): Promise<AuthResponse> {
+export async function register(payload: { username: string; password: string; invitationToken?: string; captchaToken?: string }): Promise<AuthResponse> {
     const response = await trackedFetch(`${API_BASE}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1448,15 +1460,17 @@ export async function register(payload: { username: string; password: string; in
     return auth;
 }
 
-export async function login(payload: { username: string; password: string }): Promise<AuthLoginResponse> {
-    const setup = await appSetupStatus();
-    const preferred = normalizePreferredAuthMode(setup.preferredAuthMode);
+export async function login(
+    payload: { username: string; password: string; captchaToken?: string },
+    preferredMode?: PreferredAuthMode
+): Promise<AuthLoginResponse> {
+    const preferred = normalizePreferredAuthMode(preferredMode ?? null);
     const loginUrl = `${API_BASE}/auth/login`;
     const headers: Record<string, string> = { "Content-Type": "application/json" };
 
     if (preferred === "DPOP") {
         await ensureDpopKeyRecord();
-        headers.DPoP = await buildDpopProof("POST", loginUrl);
+        headers.DPoP = await buildDpopProof("POST", toDpopHtu(loginUrl));
     }
 
     const response = await trackedFetch(loginUrl, {
@@ -1545,14 +1559,29 @@ export async function verifyEmailByLink(token: string): Promise<AuthEmailStatus>
 }
 
 export async function appSetupStatus(): Promise<AppSetupStatus> {
-    const response = await trackedFetch(`${API_BASE}/app/setup/status`, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-    });
-    if (!response.ok) {
-        throw new Error(await parseErrorMessage(response, `Setup status failed (${response.status})`));
+    if (appSetupStatusCache) {
+        return appSetupStatusCache;
     }
-    return (await response.json()) as AppSetupStatus;
+    if (appSetupStatusInFlight) {
+        return await appSetupStatusInFlight;
+    }
+    appSetupStatusInFlight = (async () => {
+        const response = await trackedFetch(`${API_BASE}/app/setup/status`, {
+            method: "GET",
+            headers: { "Content-Type": "application/json" },
+        });
+        if (!response.ok) {
+            throw new Error(await parseErrorMessage(response, `Setup status failed (${response.status})`));
+        }
+        const status = (await response.json()) as AppSetupStatus;
+        appSetupStatusCache = status;
+        return status;
+    })();
+    try {
+        return await appSetupStatusInFlight;
+    } finally {
+        appSetupStatusInFlight = null;
+    }
 }
 
 export async function initializeAppSetup(payload: {
@@ -1560,6 +1589,7 @@ export async function initializeAppSetup(payload: {
     password: string;
     registrationMode: "self" | "invitation";
     preferredAuthMode: PreferredAuthMode;
+    captchaToken?: string;
 }): Promise<AuthResponse> {
     const response = await trackedFetch(`${API_BASE}/app/setup`, {
         method: "POST",
@@ -1570,6 +1600,12 @@ export async function initializeAppSetup(payload: {
         throw new Error(await parseErrorMessage(response, `Setup initialization failed (${response.status})`));
     }
     const auth = (await response.json()) as AuthResponse;
+    appSetupStatusCache = {
+        setupEnabled: false,
+        setupCompleted: true,
+        registrationMode: payload.registrationMode,
+        preferredAuthMode: payload.preferredAuthMode,
+    };
     setSessionAuth(auth.apiKey, "API_KEY", auth.userId);
     return auth;
 }
