@@ -29,6 +29,7 @@ import CredentialHolderCertificateViewerPage from "./pages/CredentialHolderCerti
 import InstitutionsPage from "./pages/InstitutionsPage";
 import WorkspacesPage from "./pages/WorkspacesPage";
 import LoginPage from "./pages/LoginPage";
+import MagicLinkLoginPage from "./pages/MagicLinkLoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import VerifyEmailPage from "./pages/VerifyEmailPage";
 import LogoutPage from "./pages/LogoutPage";
@@ -310,6 +311,7 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                 </Box>
                 <Routes>
                     <Route path="/login" element={<LoginPage />} />
+                    <Route path="/magic-login" element={<MagicLinkLoginPage />} />
                     <Route path="/register" element={<RegisterPage />} />
                     <Route path="/verify-email" element={<VerifyEmailPage />} />
                     <Route path="/app/setup" element={<AppSetupPage />} />
@@ -592,6 +594,7 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                 <Routes>
                     <Route path="/" element={<Navigate to="/templates" replace />} />
                     <Route path="/login" element={<Navigate to="/templates" replace />} />
+                    <Route path="/magic-login" element={<Navigate to="/templates" replace />} />
                     <Route path="/register" element={<Navigate to="/templates" replace />} />
                     <Route path="/verify-email" element={<VerifyEmailPage />} />
                     <Route path="/app/setup" element={<Navigate to="/templates" replace />} />

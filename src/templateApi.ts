@@ -871,6 +871,8 @@ function isPublicAuthBootstrapRequest(url: string): boolean {
         const parsed = new URL(url, window.location.origin);
         const path = parsed.pathname;
         return path === "/auth/login"
+            || path === "/auth/magic-link/request"
+            || path === "/auth/magic-link/consume"
             || path === "/auth/register"
             || path === "/app/setup"
             || path === "/app/setup/status";
@@ -880,8 +882,9 @@ function isPublicAuthBootstrapRequest(url: string): boolean {
 }
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-    const requireWorkspace = !path.startsWith("/workspaces");
-    const res = await trackedFetch(`${API_BASE}${path}`, {
+    const url = `${API_BASE}${path}`;
+    const requireWorkspace = !path.startsWith("/workspaces") && !isPublicAuthBootstrapRequest(url);
+    const res = await trackedFetch(url, {
         headers: { "Content-Type": "application/json", ...workspaceHeaders(requireWorkspace), ...(init?.headers ?? {}) },
         ...init,
     });
@@ -1543,6 +1546,51 @@ export async function login(
     });
     if (!response.ok) {
         throw new Error(await parseErrorMessage(response, `Login failed (${response.status})`));
+    }
+    const auth = (await response.json()) as AuthLoginResponse;
+    if (auth.requiresTwoFactor) {
+        return auth;
+    }
+    if (auth.accessToken && auth.tokenType?.toUpperCase() === "DPOP") {
+        setSessionAuth(auth.accessToken, "DPOP", auth.userId);
+    } else if (auth.accessToken) {
+        setSessionAuth(auth.accessToken, "JWT", auth.userId);
+    } else {
+        setSessionAuth(auth.apiKey || null, "API_KEY", auth.userId);
+    }
+    return auth;
+}
+
+export async function requestMagicLink(payload: { usernameOrEmail: string; captchaToken?: string }): Promise<{ accepted: boolean; message: string }> {
+    return await apiFetch<{ accepted: boolean; message: string }>("/auth/magic-link/request", {
+        method: "POST",
+        body: JSON.stringify(payload),
+    });
+}
+
+export async function consumeMagicLink(
+    payload: {
+        token: string;
+        captchaToken?: string;
+        twoFactorCode?: string;
+        twoFactorChallengeToken?: string;
+    },
+    preferredMode?: PreferredAuthMode
+): Promise<AuthLoginResponse> {
+    const preferred = normalizePreferredAuthMode(preferredMode ?? null);
+    const url = `${API_BASE}/auth/magic-link/consume`;
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (preferred === "DPOP") {
+        await ensureDpopKeyRecord();
+        headers.DPoP = await buildDpopProof("POST", toDpopHtu(url));
+    }
+    const response = await trackedFetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+        throw new Error(await parseErrorMessage(response, `Magic link failed (${response.status})`));
     }
     const auth = (await response.json()) as AuthLoginResponse;
     if (auth.requiresTwoFactor) {
