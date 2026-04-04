@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Alert, Box, Checkbox, CircularProgress, FormControlLabel, Stack, TextField, Typography } from "@mui/material";
+import QRCode from "qrcode";
 import AntBtn from "../components/AntBtn";
 import {
     appSetupStatus,
@@ -44,6 +45,7 @@ export default function ProfilePage() {
     const [twoFactorSetupDeviceId, setTwoFactorSetupDeviceId] = useState<string | null>(null);
     const [twoFactorSetupSecret, setTwoFactorSetupSecret] = useState("");
     const [twoFactorSetupUri, setTwoFactorSetupUri] = useState("");
+    const [twoFactorSetupQr, setTwoFactorSetupQr] = useState("");
     const [twoFactorSetupCode, setTwoFactorSetupCode] = useState("");
     const [twoFactorBusy, setTwoFactorBusy] = useState(false);
     const [generatedBackupCodes, setGeneratedBackupCodes] = useState<string[]>([]);
@@ -135,6 +137,12 @@ export default function ProfilePage() {
             setTwoFactorSetupDeviceId(setup.deviceId);
             setTwoFactorSetupSecret(setup.secretBase32);
             setTwoFactorSetupUri(setup.otpauthUri);
+            try {
+                const qr = await QRCode.toDataURL(setup.otpauthUri, { margin: 1, width: 240 });
+                setTwoFactorSetupQr(qr);
+            } catch {
+                setTwoFactorSetupQr("");
+            }
             setTwoFactorSetupCode("");
             notifications.success("2FA device created. Add it to your authenticator app, then confirm code.", { title: "2FA" });
         } catch (err: any) {
@@ -156,6 +164,7 @@ export default function ProfilePage() {
             setTwoFactorSetupDeviceId(null);
             setTwoFactorSetupSecret("");
             setTwoFactorSetupUri("");
+            setTwoFactorSetupQr("");
             setTwoFactorSetupCode("");
             notifications.success("2FA enabled for this device", { title: "2FA" });
         } catch (err: any) {
@@ -287,8 +296,24 @@ export default function ProfilePage() {
                             {twoFactorSetupDeviceId ? (
                                 <Stack spacing={1}>
                                     <Alert severity="info">
-                                        Add this secret/URI to your authenticator app, then enter the 6-digit code.
+                                        Scan this QR code (or use secret/URI) in your authenticator app, then enter the 6-digit code.
                                     </Alert>
+                                    {twoFactorSetupQr ? (
+                                        <Box
+                                            component="img"
+                                            src={twoFactorSetupQr}
+                                            alt="2FA QR code"
+                                            sx={{
+                                                width: 220,
+                                                height: 220,
+                                                border: "1px solid",
+                                                borderColor: "divider",
+                                                borderRadius: 1,
+                                                p: 1,
+                                                bgcolor: "background.paper",
+                                            }}
+                                        />
+                                    ) : null}
                                     <TextField fullWidth size="small" label="Secret (Base32)" value={twoFactorSetupSecret} InputProps={{ readOnly: true }} />
                                     <TextField fullWidth size="small" label="OTPAuth URI" value={twoFactorSetupUri} InputProps={{ readOnly: true }} />
                                     <TextField

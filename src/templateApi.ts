@@ -891,7 +891,9 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     }
 
     if (res.status === 204) return undefined as T;
-    return (await res.json()) as T;
+    const raw = await res.text();
+    if (!raw.trim()) return undefined as T;
+    return JSON.parse(raw) as T;
 }
 
 async function parseErrorMessage(response: Response, fallback: string): Promise<string> {
