@@ -950,7 +950,75 @@ export default function SvgPathEditorPage() {
         const selectedSet = new Set(selectedIds);
         setShapes((prev) => [...prev.filter((shape) => !selectedSet.has(shape.id)), merged]);
         setSelectedIds([merged.id]);
-        setMessage("Merged selected shapes.");
+        setMessage("Merged selected shapes (union).");
+        setMessageType("success");
+    }
+
+    function mergeSelectedKeepOutlines() {
+        if (selectedShapes.length < 2) {
+            setMessage("Select at least two shapes to merge.");
+            setMessageType("error");
+            return;
+        }
+        const unsupported = selectedShapes.filter((shape) => shape.type === "path" || shape.type === "text");
+        if (unsupported.length > 0) {
+            setMessage("Merge currently supports geometric shapes/lines only (not text/path).");
+            setMessageType("error");
+            return;
+        }
+
+        const rings: Array<Array<[number, number]>> = selectedShapes
+            .map((shape) => {
+                const points = sampleShapePolygon(shape);
+                if (!points || points.length < 3) return null;
+                const ring: Array<[number, number]> = points.map((point) => [point.x, point.y]);
+                const first = ring[0];
+                const last = ring[ring.length - 1];
+                if (first && last && (first[0] !== last[0] || first[1] !== last[1])) {
+                    ring.push([first[0], first[1]]);
+                }
+                return ring;
+            })
+            .filter((ring): ring is Array<[number, number]> => Array.isArray(ring) && ring.length >= 3);
+
+        if (rings.length < 2) {
+            setMessage("Unable to merge selected shapes.");
+            setMessageType("error");
+            return;
+        }
+
+        const allPoints = rings.flat();
+        const minX = Math.min(...allPoints.map((point) => point[0]));
+        const maxX = Math.max(...allPoints.map((point) => point[0]));
+        const minY = Math.min(...allPoints.map((point) => point[1]));
+        const maxY = Math.max(...allPoints.map((point) => point[1]));
+        const cx = (minX + maxX) / 2;
+        const cy = (minY + maxY) / 2;
+        const d = ringsToRelativePath(rings, cx, cy);
+        const base = selectedShapes[0];
+        const mergedWidth = round2(Math.max(8, maxX - minX));
+        const mergedHeight = round2(Math.max(8, maxY - minY));
+        const merged: SvgShape = {
+            ...createShape("path", vb),
+            id: uid(),
+            x: round2(cx),
+            y: round2(cy),
+            width: mergedWidth,
+            height: mergedHeight,
+            rotation: 0,
+            fill: base.fill,
+            stroke: base.stroke,
+            strokeWidth: base.strokeWidth,
+            fillRule: "nonzero",
+            pathBaseWidth: mergedWidth,
+            pathBaseHeight: mergedHeight,
+            d,
+        };
+
+        const selectedSet = new Set(selectedIds);
+        setShapes((prev) => [...prev.filter((shape) => !selectedSet.has(shape.id)), merged]);
+        setSelectedIds([merged.id]);
+        setMessage("Merged selected shapes (keep outlines).");
         setMessageType("success");
     }
 
@@ -1350,7 +1418,8 @@ export default function SvgPathEditorPage() {
                                 anchorReference="anchorPosition"
                                 anchorPosition={menuAnchor ? { top: menuAnchor.mouseY, left: menuAnchor.mouseX } : undefined}
                             >
-                                <MenuItem onClick={() => { mergeSelectedShapes(); closeContextMenu(); }}>Merge Selected</MenuItem>
+                                <MenuItem onClick={() => { mergeSelectedShapes(); closeContextMenu(); }}>Merge Selected (Union)</MenuItem>
+                                <MenuItem onClick={() => { mergeSelectedKeepOutlines(); closeContextMenu(); }}>Merge Selected (Keep Outlines)</MenuItem>
                                 <MenuItem onClick={() => { duplicateSelected(); closeContextMenu(); }}>Duplicate</MenuItem>
                                 <MenuItem onClick={() => { removeSelected(); closeContextMenu(); }}>Delete</MenuItem>
                                 <MenuItem onClick={() => { bringForward(); closeContextMenu(); }}>Bring Forward</MenuItem>
