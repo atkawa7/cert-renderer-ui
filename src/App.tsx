@@ -21,6 +21,7 @@ import SignaturePage from "./pages/SignaturePage";
 import Base64ImageViewerPage from "./pages/Base64ImageViewerPage";
 import QrDecoderPage from "./pages/QrDecoderPage";
 import SvgToPngPage from "./pages/SvgToPngPage";
+import SvgPathEditorPage from "./pages/SvgPathEditorPage";
 import PasswordGeneratorPage from "./pages/PasswordGeneratorPage";
 import CertificatesPage from "./pages/CertificatesPage";
 import CertificateViewerPage from "./pages/CertificateViewerPage";
@@ -47,6 +48,7 @@ const SQL_PANEL_POS_KEY = "renderer:sql-panel-pos";
 const SQL_PANEL_SIZE_KEY = "renderer:sql-panel-size";
 const SQL_PANEL_MINIMIZED_KEY = "renderer:sql-panel-minimized";
 const SQL_PANEL_CLOSED_KEY = "renderer:sql-panel-closed";
+const SQL_STATS_CAPTURE_LIMIT = 30;
 type AppProps = {
     themeMode: PaletteMode;
     onToggleTheme: () => void;
@@ -182,7 +184,7 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
     useEffect(() => {
         if (!isDevMode) return;
         return subscribeSqlStats((stats) => {
-            setSqlStatsFeed((prev) => [stats, ...prev].slice(0, 60));
+            setSqlStatsFeed((prev) => [stats, ...prev].slice(0, SQL_STATS_CAPTURE_LIMIT));
             setSelectedSqlIndex(0);
         });
     }, [isDevMode]);
@@ -556,6 +558,16 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                         </MenuItem>
                         <MenuItem
                             component={RouterLink}
+                            to="/svg-path-editor"
+                            onClick={() => {
+                                setToolsMenuAnchor(null);
+                                setProfileMenuAnchor(null);
+                            }}
+                        >
+                            SVG Path Editor
+                        </MenuItem>
+                        <MenuItem
+                            component={RouterLink}
                             to="/signature"
                             onClick={() => {
                                 setToolsMenuAnchor(null);
@@ -616,6 +628,7 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                     <Route path="/qr-decoder" element={<QrDecoderPage />} />
                     <Route path="/password-generator" element={<PasswordGeneratorPage />} />
                     <Route path="/svg-to-png" element={<SvgToPngPage />} />
+                    <Route path="/svg-path-editor" element={<SvgPathEditorPage />} />
                     <Route path="/dev/swagger" element={isDevMode ? <SwaggerDocsPage /> : <Navigate to="/templates" replace />} />
                     <Route
                         path="/templates/new"

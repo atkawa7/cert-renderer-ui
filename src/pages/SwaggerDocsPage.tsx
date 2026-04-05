@@ -1,4 +1,4 @@
-import { Box, Link, Paper, Stack, Typography } from "@mui/material";
+import { Box, Paper } from "@mui/material";
 import SwaggerUI from "swagger-ui-react";
 import "swagger-ui-react/swagger-ui.css";
 import { appConfig } from "../appConfig";
@@ -25,22 +25,9 @@ function resolveSwaggerUrls() {
 }
 
 export default function SwaggerDocsPage() {
-    const { swaggerUiUrl, openApiJsonUrl } = resolveSwaggerUrls();
+    const { openApiJsonUrl } = resolveSwaggerUrls();
     return (
-        <Box sx={{ p: 2, minHeight: "calc(100vh - 120px)", display: "flex", flexDirection: "column", gap: 1.5 }}>
-            <Paper variant="outlined" sx={{ p: 1.5 }}>
-                <Stack spacing={0.5}>
-                    <Typography variant="h6">Swagger (Dev)</Typography>
-                    <Typography variant="body2" color="text.secondary">
-                        Embedded API docs for local development.
-                    </Typography>
-                    <Typography variant="body2">
-                        <Link href={swaggerUiUrl} target="_blank" rel="noreferrer">Open Swagger in new tab</Link>
-                        {" | "}
-                        <Link href={openApiJsonUrl} target="_blank" rel="noreferrer">OpenAPI JSON</Link>
-                    </Typography>
-                </Stack>
-            </Paper>
+        <Box sx={{ p: 2, minHeight: "calc(100vh - 120px)" }}>
             <Paper variant="outlined" sx={{ p: 1, overflow: "auto" }}>
                 <SwaggerUI url={openApiJsonUrl} />
             </Paper>
