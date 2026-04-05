@@ -1,4 +1,5 @@
 import type { Template } from "./TemplateEditor";
+import { resolveAssetUrl } from "./assetUrl";
 
 export type DesignDefinition = {
     id: string;
@@ -22,22 +23,11 @@ export type DesignCreateDraft = {
     template: Template;
 };
 
-function isAbsoluteUrl(value: string): boolean {
-    return /^https?:\/\//i.test(value);
-}
-
-function joinUrl(base: string, path: string): string {
-    if (!base) return path;
-    const safeBase = base.endsWith("/") ? base : `${base}/`;
-    const safePath = path.startsWith("/") ? path.slice(1) : path;
-    return `${safeBase}${safePath}`;
-}
-
 function resolveThumbnailUrl(template: Template, assetBaseUrl?: string): string {
     const bg = (template.pages?.[0]?.background ?? template.background) as any;
     const raw = (bg?.type === "image" ? bg.url : "").trim();
     if (!raw) return "";
-    return isAbsoluteUrl(raw) ? raw : joinUrl(assetBaseUrl ?? "", raw);
+    return resolveAssetUrl(raw, assetBaseUrl ?? "");
 }
 
 export function convertTemplateToDesignDraft(

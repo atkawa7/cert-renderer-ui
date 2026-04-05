@@ -3,6 +3,7 @@ import { Alert, Box, Checkbox, CircularProgress, FormControlLabel, Stack, TextFi
 import QRCode from "qrcode";
 import AntBtn from "../components/AntBtn";
 import {
+    getMyReferralDashboard,
     appSetupStatus,
     beginTwoFactorSetup,
     confirmTwoFactorSetup,
@@ -15,6 +16,7 @@ import {
     listTwoFactorDevices,
     regenerateTwoFactorBackupCodes,
     removeTwoFactorDevice,
+    type ReferralDashboard,
     type TwoFactorDevice,
     updateMyEmail,
     verifyMyEmail,
@@ -49,6 +51,7 @@ export default function ProfilePage() {
     const [twoFactorSetupCode, setTwoFactorSetupCode] = useState("");
     const [twoFactorBusy, setTwoFactorBusy] = useState(false);
     const [generatedBackupCodes, setGeneratedBackupCodes] = useState<string[]>([]);
+    const [referralDashboard, setReferralDashboard] = useState<ReferralDashboard | null>(null);
 
     const apiKey = getCurrentApiKey() || "";
     const currentAuthMode = getCurrentAuthMode();
@@ -72,6 +75,8 @@ export default function ProfilePage() {
             setTwoFactorEnabled(Boolean(status.enabled));
             setBackupCodesRemaining(status.backupCodesRemaining || 0);
             setTwoFactorDevices(devices);
+            const referral = await getMyReferralDashboard();
+            setReferralDashboard(referral);
         } catch (err: any) {
             notifications.error(err?.message || "Failed to load profile", { title: "Profile" });
         } finally {
@@ -205,6 +210,16 @@ export default function ProfilePage() {
         }
     }
 
+    async function copyReferralLink() {
+        if (!referralDashboard?.referralLink) return;
+        try {
+            await navigator.clipboard.writeText(referralDashboard.referralLink);
+            notifications.success("Referral link copied", { title: "Referrals" });
+        } catch {
+            notifications.error("Could not copy referral link", { title: "Referrals" });
+        }
+    }
+
     useEffect(() => {
         void loadProfile();
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -269,6 +284,57 @@ export default function ProfilePage() {
                         <TextField fullWidth size="small" label="Current Session Auth" value={currentAuthMode} InputProps={{ readOnly: true }} />
                         <TextField fullWidth size="small" label="Session Token" value={maskedToken} InputProps={{ readOnly: true }} />
                         <TextField fullWidth size="small" label="Active Workspace" value={workspaceId} InputProps={{ readOnly: true }} />
+                        <Typography variant="subtitle2">Referrals</Typography>
+                        <TextField
+                            fullWidth
+                            size="small"
+                            label="Referral Code"
+                            value={referralDashboard?.referralCode || ""}
+                            InputProps={{ readOnly: true }}
+                        />
+                        <TextField
+                            fullWidth
+                            size="small"
+                            label="Referral Link"
+                            value={referralDashboard?.referralLink || ""}
+                            InputProps={{ readOnly: true }}
+                        />
+                        <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                            <TextField
+                                fullWidth
+                                size="small"
+                                label="Earned"
+                                value={
+                                    referralDashboard
+                                        ? `${(referralDashboard.totalEarnedCents / 100).toFixed(2)} ${referralDashboard.currency}`
+                                        : "0.00 USD"
+                                }
+                                InputProps={{ readOnly: true }}
+                            />
+                            <TextField
+                                fullWidth
+                                size="small"
+                                label="Paid Out"
+                                value={
+                                    referralDashboard
+                                        ? `${(referralDashboard.totalPaidCents / 100).toFixed(2)} ${referralDashboard.currency}`
+                                        : "0.00 USD"
+                                }
+                                InputProps={{ readOnly: true }}
+                            />
+                        </Stack>
+                        <TextField
+                            fullWidth
+                            size="small"
+                            label="Referred Users"
+                            value={String(referralDashboard?.referrals?.length ?? 0)}
+                            InputProps={{ readOnly: true }}
+                        />
+                        <Box>
+                            <AntBtn onClick={() => void copyReferralLink()} disabled={!referralDashboard?.referralLink}>
+                                Copy Referral Link
+                            </AntBtn>
+                        </Box>
                         <TextField fullWidth size="small" label="2FA Status" value={twoFactorEnabled ? "Enabled" : "Disabled"} InputProps={{ readOnly: true }} />
                         <TextField fullWidth size="small" label="Backup Codes Remaining" value={String(backupCodesRemaining)} InputProps={{ readOnly: true }} />
                         <Alert severity="info">

@@ -20,7 +20,11 @@ import ChangeHistoryIcon from "@mui/icons-material/ChangeHistory";
 import StopIcon from "@mui/icons-material/Stop";
 import HorizontalRuleIcon from "@mui/icons-material/HorizontalRule";
 import TimelineIcon from "@mui/icons-material/Timeline";
+import PolylineIcon from "@mui/icons-material/Polyline";
+import ShowChartIcon from "@mui/icons-material/ShowChart";
+import CreateIcon from "@mui/icons-material/Create";
 import TextFieldsIcon from "@mui/icons-material/TextFields";
+import HexagonIcon from "@mui/icons-material/Hexagon";
 import SaveIcon from "@mui/icons-material/Save";
 import SettingsBackupRestoreIcon from "@mui/icons-material/SettingsBackupRestore";
 import polygonClipping from "polygon-clipping";
@@ -29,7 +33,8 @@ const STORAGE_KEY = "renderer_svg_editor_state_v1";
 const STORAGE_SNAPSHOT_KEY = "renderer_svg_editor_snapshot_v1";
 const DEFAULT_VIEWBOX = "0 0 1200 1200";
 
-type ShapeType = "rect" | "square" | "circle" | "ellipse" | "triangle" | "octagon" | "line" | "path" | "text";
+type ShapeType = "rect" | "square" | "circle" | "ellipse" | "triangle" | "octagon" | "polygon" | "line" | "path" | "text";
+type PathPreset = "blob" | "quadratic" | "polyline";
 
 type SvgShape = {
     id: string;
@@ -49,6 +54,7 @@ type SvgShape = {
     fillRule: "nonzero" | "evenodd";
     pathBaseWidth: number;
     pathBaseHeight: number;
+    polygonSides: number;
 };
 
 type DragState = {
@@ -83,6 +89,7 @@ type MarqueeState = {
 };
 
 type ViewBox = { x: number; y: number; width: number; height: number };
+type CanvasPoint = { x: number; y: number };
 
 type EditorDoc = {
     viewBox: string;
@@ -107,27 +114,63 @@ function round2(v: number): number {
     return Math.round(v * 100) / 100;
 }
 
-function createShape(type: ShapeType, vb: ViewBox): SvgShape {
+function pathPresetData(preset: PathPreset): { d: string; fill: string; stroke: string; strokeWidth: number; width: number; height: number; fillRule: "nonzero" | "evenodd" } {
+    if (preset === "quadratic") {
+        return {
+            d: "M -120 30 Q 0 -130 120 30 Q 60 120 -60 120 Z",
+            fill: "#e3f2fd",
+            stroke: "#0d47a1",
+            strokeWidth: 8,
+            width: 260,
+            height: 250,
+            fillRule: "nonzero",
+        };
+    }
+    if (preset === "polyline") {
+        return {
+            d: "M -130 40 L -80 -80 L -20 -20 L 40 -100 L 120 40",
+            fill: "none",
+            stroke: "#0d47a1",
+            strokeWidth: 8,
+            width: 260,
+            height: 180,
+            fillRule: "nonzero",
+        };
+    }
+    return {
+        d: "M0 -120 C-75 -120 -120 -70 -120 0 C-120 75 0 150 0 150 C0 150 120 75 120 0 C120 -70 75 -120 0 -120 Z",
+        fill: "#e3f2fd",
+        stroke: "#0d47a1",
+        strokeWidth: 8,
+        width: 260,
+        height: 180,
+        fillRule: "nonzero",
+    };
+}
+
+function createShape(type: ShapeType, vb: ViewBox, pathPreset: PathPreset = "blob"): SvgShape {
     const cx = vb.x + vb.width / 2;
     const cy = vb.y + vb.height / 2;
+    const preset = pathPresetData(pathPreset);
     const base: SvgShape = {
         id: uid(),
         type,
         x: cx,
         y: cy,
-        width: 260,
-        height: 180,
+        width: preset.width,
+        height: preset.height,
         radius: 110,
-        fill: "#e3f2fd",
-        stroke: "#0d47a1",
-        strokeWidth: 8,
+        fill: preset.fill,
+        stroke: preset.stroke,
+        strokeWidth: preset.strokeWidth,
         rotation: 0,
         text: "Text",
         fontSize: 64,
-        d: "M0 -120 C-75 -120 -120 -70 -120 0 C-120 75 0 150 0 150 C0 150 120 75 120 0 C120 -70 75 -120 0 -120 Z",
-        fillRule: "nonzero",
-        pathBaseWidth: 260,
-        pathBaseHeight: 180,
+        d: preset.d,
+        fillRule: preset.fillRule,
+        pathBaseWidth: preset.width,
+        pathBaseHeight: preset.height,
+        polygonSides: 6,
     };
 
     if (type === "line") {
@@ -148,6 +191,11 @@ function createShape(type: ShapeType, vb: ViewBox): SvgShape {
     if (type === "square") {
         base.width = 220;
         base.height = 220;
+    }
+    if (type === "polygon") {
+        base.width = 220;
+        base.height = 220;
+        base.polygonSides = 6;
     }
     return base;
 }
@@ -175,6 +223,20 @@ function octagonPoints(shape: SvgShape): string {
         `${x - s},${y + k}`,
         `${x - s},${y - k}`,
     ].join(" ");
+}
+
+function polygonPoints(shape: SvgShape): string {
+    const sides = Math.min(24, Math.max(3, Math.round(shape.polygonSides || 6)));
+    const rx = Math.max(6, shape.width / 2);
+    const ry = Math.max(6, shape.height / 2);
+    const cx = shape.x;
+    const cy = shape.y;
+    const points: string[] = [];
+    for (let i = 0; i < sides; i += 1) {
+        const t = -Math.PI / 2 + (Math.PI * 2 * i) / sides;
+        points.push(`${round2(cx + Math.cos(t) * rx)},${round2(cy + Math.sin(t) * ry)}`);
+    }
+    return points.join(" ");
 }
 
 function rotateAround(x: number, y: number, cx: number, cy: number, angleDeg: number) {
@@ -263,6 +325,8 @@ function sampleShapePolygon(shape: SvgShape): Array<{ x: number; y: number }> | 
         points = parsePointList(trianglePoints(shape));
     } else if (shape.type === "octagon") {
         points = parsePointList(octagonPoints(shape));
+    } else if (shape.type === "polygon") {
+        points = parsePointList(polygonPoints(shape));
     } else if (shape.type === "line") {
         const x1 = cx - shape.width / 2;
         const y1 = cy - shape.height / 2;
@@ -343,6 +407,9 @@ function shapeMarkup(shape: SvgShape): string {
     if (shape.type === "octagon") {
         return `<polygon points="${octagonPoints(shape)}" ${common} ${transform} />`;
     }
+    if (shape.type === "polygon") {
+        return `<polygon points="${polygonPoints(shape)}" ${common} ${transform} />`;
+    }
     if (shape.type === "line") {
         const x1 = round2(shape.x - shape.width / 2);
         const y1 = round2(shape.y - shape.height / 2);
@@ -406,6 +473,9 @@ function shapeRenderer(
     }
     if (shape.type === "octagon") {
         return <polygon points={octagonPoints(shape)} {...common} />;
+    }
+    if (shape.type === "polygon") {
+        return <polygon points={polygonPoints(shape)} {...common} />;
     }
     if (shape.type === "line") {
         return (
@@ -486,6 +556,8 @@ export default function SvgPathEditorPage() {
     const svgRef = useRef<SVGSVGElement | null>(null);
     const prevDocRef = useRef<EditorDoc | null>(null);
     const applyingHistoryRef = useRef(false);
+    const shapeClipboardRef = useRef<SvgShape[]>([]);
+    const pasteCounterRef = useRef(0);
     const [viewBox, setViewBox] = useState(DEFAULT_VIEWBOX);
     const [shapes, setShapes] = useState<SvgShape[]>([]);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -497,6 +569,9 @@ export default function SvgPathEditorPage() {
     const [marquee, setMarquee] = useState<MarqueeState | null>(null);
     const [menuAnchor, setMenuAnchor] = useState<{ mouseX: number; mouseY: number } | null>(null);
     const [toolbarExpanded, setToolbarExpanded] = useState(true);
+    const [penMode, setPenMode] = useState(false);
+    const [penPoints, setPenPoints] = useState<CanvasPoint[]>([]);
+    const [penHoverPoint, setPenHoverPoint] = useState<CanvasPoint | null>(null);
     const [message, setMessage] = useState("");
     const [messageType, setMessageType] = useState<"success" | "error">("success");
 
@@ -511,6 +586,7 @@ export default function SvgPathEditorPage() {
             fillRule: shape.fillRule ?? "nonzero",
             pathBaseWidth: Math.max(1, shape.pathBaseWidth ?? 260),
             pathBaseHeight: Math.max(1, shape.pathBaseHeight ?? 180),
+            polygonSides: Math.min(24, Math.max(3, Math.round(shape.polygonSides ?? 6))),
         }));
     }
 
@@ -651,8 +727,91 @@ export default function SvgPathEditorPage() {
         };
     }
 
+    function clearPenDraft() {
+        setPenPoints([]);
+        setPenHoverPoint(null);
+    }
+
+    function commitPenPath(closePath: boolean, sourcePoints?: CanvasPoint[]) {
+        const points = sourcePoints ?? penPoints;
+        if (points.length < 2) {
+            clearPenDraft();
+            return;
+        }
+        const all = points;
+        const minX = Math.min(...all.map((point) => point.x));
+        const maxX = Math.max(...all.map((point) => point.x));
+        const minY = Math.min(...all.map((point) => point.y));
+        const maxY = Math.max(...all.map((point) => point.y));
+        const cx = (minX + maxX) / 2;
+        const cy = (minY + maxY) / 2;
+        const width = round2(Math.max(8, maxX - minX));
+        const height = round2(Math.max(8, maxY - minY));
+        const dParts: string[] = [`M ${round2(all[0].x - cx)} ${round2(all[0].y - cy)}`];
+        for (let i = 1; i < all.length; i += 1) {
+            dParts.push(`L ${round2(all[i].x - cx)} ${round2(all[i].y - cy)}`);
+        }
+        if (closePath && all.length >= 3) dParts.push("Z");
+        const next = createShape("path", vb);
+        const created: SvgShape = {
+            ...next,
+            x: round2(cx),
+            y: round2(cy),
+            width,
+            height,
+            pathBaseWidth: width,
+            pathBaseHeight: height,
+            d: dParts.join(" "),
+            fill: closePath ? next.fill : "none",
+            stroke: next.stroke,
+            strokeWidth: next.strokeWidth,
+            fillRule: closePath ? "nonzero" : "nonzero",
+        };
+        setShapes((prev) => [...prev, created]);
+        setSelectedIds([created.id]);
+        setMessage(closePath ? "Closed path created." : "Path created.");
+        setMessageType("success");
+        clearPenDraft();
+    }
+
+    function addPenPointAtClient(clientX: number, clientY: number) {
+        const svg = svgRef.current;
+        if (!svg) return;
+        const rect = svg.getBoundingClientRect();
+        const pt = clientToSvg(clientX, clientY);
+        if (!pt || rect.width <= 0 || rect.height <= 0) return;
+        const closeThreshold = (12 / rect.width) * vb.width;
+        setPenPoints((prev) => {
+            if (prev.length >= 3) {
+                const first = prev[0];
+                const distance = Math.hypot(first.x - pt.x, first.y - pt.y);
+                if (distance <= closeThreshold) {
+                    queueMicrotask(() => commitPenPath(true, prev));
+                    return prev;
+                }
+            }
+            return [...prev, { x: round2(pt.x), y: round2(pt.y) }];
+        });
+    }
+
+    function togglePenMode() {
+        setPenMode((prev) => {
+            const next = !prev;
+            if (!next) clearPenDraft();
+            else setMessage("Pen tool active: click canvas to add points, Enter to finish, click first point to close.");
+            setMessageType("success");
+            return next;
+        });
+    }
+
     function addShape(type: ShapeType) {
         const next = createShape(type, vb);
+        setShapes((prev) => [...prev, next]);
+        setSelectedIds([next.id]);
+    }
+
+    function addPathPreset(preset: PathPreset) {
+        const next = createShape("path", vb, preset);
         setShapes((prev) => [...prev, next]);
         setSelectedIds([next.id]);
     }
@@ -676,8 +835,28 @@ export default function SvgPathEditorPage() {
         setShapes((prev) => prev.map((shape) => (shape.id === selectedId ? { ...shape, ...patch } : shape)));
     }
 
+    function applyPathPresetToSelected(preset: PathPreset) {
+        if (!selectedShape || selectedShape.type !== "path") return;
+        const data = pathPresetData(preset);
+        updateSelected({
+            d: data.d,
+            fill: data.fill,
+            stroke: data.stroke,
+            strokeWidth: data.strokeWidth,
+            fillRule: data.fillRule,
+            width: data.width,
+            height: data.height,
+            pathBaseWidth: data.width,
+            pathBaseHeight: data.height,
+        });
+    }
+
     function beginDrag(id: string, event: React.PointerEvent) {
         event.stopPropagation();
+        if (penMode) {
+            addPenPointAtClient(event.clientX, event.clientY);
+            return;
+        }
         if (resize || marquee) return;
         const shape = shapes.find((s) => s.id === id);
         if (!shape) return;
@@ -692,6 +871,10 @@ export default function SvgPathEditorPage() {
     function beginResize(id: string, handle: ResizeHandle, event: React.PointerEvent) {
         event.stopPropagation();
         event.preventDefault();
+        if (penMode) {
+            addPenPointAtClient(event.clientX, event.clientY);
+            return;
+        }
         if (marquee) return;
         const shape = shapes.find((s) => s.id === id);
         if (!shape) return;
@@ -778,6 +961,11 @@ export default function SvgPathEditorPage() {
 
     function beginMarquee(event: React.PointerEvent) {
         if (event.button !== 0) return;
+        if (penMode) {
+            event.preventDefault();
+            addPenPointAtClient(event.clientX, event.clientY);
+            return;
+        }
         if (drag || resize) return;
         const pt = clientToSvg(event.clientX, event.clientY);
         if (!pt) return;
@@ -854,6 +1042,38 @@ export default function SvgPathEditorPage() {
         }));
         setShapes((prev) => [...prev, ...copies]);
         setSelectedIds(copies.map((shape) => shape.id));
+    }
+
+    function copySelectedShapes() {
+        if (selectedShapes.length === 0) {
+            setMessage("Select shape(s) to copy.");
+            setMessageType("error");
+            return;
+        }
+        shapeClipboardRef.current = selectedShapes.map((shape) => ({ ...shape }));
+        pasteCounterRef.current = 0;
+        setMessage(`Copied ${selectedShapes.length} shape${selectedShapes.length === 1 ? "" : "s"}.`);
+        setMessageType("success");
+    }
+
+    function pasteCopiedShapes() {
+        if (shapeClipboardRef.current.length === 0) {
+            setMessage("Clipboard is empty. Copy shape(s) first.");
+            setMessageType("error");
+            return;
+        }
+        const offset = 24 + pasteCounterRef.current * 12;
+        const copies = shapeClipboardRef.current.map((shape) => ({
+            ...shape,
+            id: uid(),
+            x: round2(shape.x + offset),
+            y: round2(shape.y + offset),
+        }));
+        setShapes((prev) => [...prev, ...copies]);
+        setSelectedIds(copies.map((shape) => shape.id));
+        pasteCounterRef.current += 1;
+        setMessage(`Pasted ${copies.length} shape${copies.length === 1 ? "" : "s"}.`);
+        setMessageType("success");
     }
 
     function mergeSelectedShapes() {
@@ -1120,6 +1340,7 @@ export default function SvgPathEditorPage() {
     }
 
     function openContextMenu(id: string, event: React.MouseEvent) {
+        if (penMode) return;
         if (!selectedIds.includes(id)) {
             setSelectedIds([id]);
         }
@@ -1127,6 +1348,7 @@ export default function SvgPathEditorPage() {
     }
 
     function openContextMenuForSelection(event: React.MouseEvent) {
+        if (penMode) return;
         event.preventDefault();
         if (selectedIds.length === 0) return;
         setMenuAnchor({ mouseX: event.clientX + 2, mouseY: event.clientY - 6 });
@@ -1149,6 +1371,33 @@ export default function SvgPathEditorPage() {
             if (isEditable) return;
 
             const step = event.shiftKey ? 10 : 1;
+            const withMeta = event.ctrlKey || event.metaKey;
+            const keyLower = event.key.toLowerCase();
+            if (penMode && event.key === "Escape") {
+                event.preventDefault();
+                clearPenDraft();
+                return;
+            }
+            if (penMode && event.key === "Enter") {
+                event.preventDefault();
+                commitPenPath(false);
+                return;
+            }
+            if (withMeta && keyLower === "c") {
+                event.preventDefault();
+                copySelectedShapes();
+                return;
+            }
+            if (withMeta && keyLower === "v") {
+                event.preventDefault();
+                pasteCopiedShapes();
+                return;
+            }
+            if (withMeta && keyLower === "d") {
+                event.preventDefault();
+                duplicateSelected();
+                return;
+            }
             if ((event.key === "Delete" || event.key === "Backspace") && selectedIds.length > 0) {
                 event.preventDefault();
                 removeSelected();
@@ -1177,7 +1426,7 @@ export default function SvgPathEditorPage() {
 
         window.addEventListener("keydown", onKeyDown);
         return () => window.removeEventListener("keydown", onKeyDown);
-    }, [selectedIds]);
+    }, [selectedIds, selectedShapes, penMode, penPoints]);
 
     function editSelectedText(id: string) {
         const target = shapes.find((shape) => shape.id === id);
@@ -1277,8 +1526,16 @@ export default function SvgPathEditorPage() {
                             <Tooltip title="Add Ellipse"><IconButton size="small" onClick={() => addShape("ellipse")}><PanoramaFishEyeIcon fontSize="small" /></IconButton></Tooltip>
                             <Tooltip title="Add Triangle"><IconButton size="small" onClick={() => addShape("triangle")}><ChangeHistoryIcon fontSize="small" /></IconButton></Tooltip>
                             <Tooltip title="Add Octagon"><IconButton size="small" onClick={() => addShape("octagon")}><StopIcon fontSize="small" /></IconButton></Tooltip>
+                            <Tooltip title="Add Polygon"><IconButton size="small" onClick={() => addShape("polygon")}><HexagonIcon fontSize="small" /></IconButton></Tooltip>
                             <Tooltip title="Add Line"><IconButton size="small" onClick={() => addShape("line")}><HorizontalRuleIcon fontSize="small" /></IconButton></Tooltip>
-                            <Tooltip title="Add Path"><IconButton size="small" onClick={() => addShape("path")}><TimelineIcon fontSize="small" /></IconButton></Tooltip>
+                            <Tooltip title="Pen Tool (click to add connected points)">
+                                <IconButton size="small" color={penMode ? "primary" : "default"} onClick={togglePenMode}>
+                                    <CreateIcon fontSize="small" />
+                                </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Add Path"><IconButton size="small" onClick={() => addPathPreset("blob")}><TimelineIcon fontSize="small" /></IconButton></Tooltip>
+                            <Tooltip title="Add Quadratic Path"><IconButton size="small" onClick={() => addPathPreset("quadratic")}><ShowChartIcon fontSize="small" /></IconButton></Tooltip>
+                            <Tooltip title="Add Polyline Path"><IconButton size="small" onClick={() => addPathPreset("polyline")}><PolylineIcon fontSize="small" /></IconButton></Tooltip>
                             <Tooltip title="Add Text"><IconButton size="small" onClick={() => addShape("text")}><TextFieldsIcon fontSize="small" /></IconButton></Tooltip>
                             <Tooltip title="Copy SVG"><IconButton size="small" onClick={() => void copySvg()}><ContentCopyIcon fontSize="small" /></IconButton></Tooltip>
                             <Tooltip title="Download SVG"><IconButton size="small" onClick={downloadSvg}><FileDownloadIcon fontSize="small" /></IconButton></Tooltip>
@@ -1304,6 +1561,11 @@ export default function SvgPathEditorPage() {
                     <Paper elevation={0} sx={{ flex: 1, minWidth: 0, p: 2, border: "1px solid rgba(0,0,0,0.12)", borderRadius: 2 }}>
                         <Stack spacing={1.5}>
                             <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>Canvas</Typography>
+                            {penMode ? (
+                                <Typography variant="caption" color="primary.main">
+                                    Pen mode: click to add points, click first point to close, Enter to finish open path, Esc to cancel.
+                                </Typography>
+                            ) : null}
                             <Box
                                 sx={{
                                     width: "100%",
@@ -1322,8 +1584,22 @@ export default function SvgPathEditorPage() {
                                 <svg
                                     ref={svgRef}
                                     viewBox={`${vb.x} ${vb.y} ${vb.width} ${vb.height}`}
-                                    style={{ width: "100%", height: "100%", touchAction: "none", cursor: drag || resize ? "grabbing" : marquee ? "crosshair" : "default" }}
+                                    style={{ width: "100%", height: "100%", touchAction: "none", cursor: penMode ? "crosshair" : drag || resize ? "grabbing" : marquee ? "crosshair" : "default" }}
                                     onPointerDown={beginMarquee}
+                                    onPointerMove={(event) => {
+                                        if (!penMode) return;
+                                        const pt = clientToSvg(event.clientX, event.clientY);
+                                        if (!pt) return;
+                                        setPenHoverPoint({ x: round2(pt.x), y: round2(pt.y) });
+                                    }}
+                                    onPointerLeave={() => {
+                                        if (!penMode) return;
+                                        setPenHoverPoint(null);
+                                    }}
+                                    onDoubleClick={() => {
+                                        if (!penMode) return;
+                                        commitPenPath(false);
+                                    }}
                                     onClick={() => closeContextMenu()}
                                     onContextMenu={openContextMenuForSelection}
                                 >
@@ -1334,6 +1610,7 @@ export default function SvgPathEditorPage() {
                                                 selectedIds.includes(shape.id),
                                                 (event) => beginDrag(shape.id, event),
                                                 (event) => {
+                                                    if (penMode) return;
                                                     if (event.shiftKey || event.ctrlKey || event.metaKey) {
                                                         toggleSelection(shape.id);
                                                     } else {
@@ -1345,6 +1622,28 @@ export default function SvgPathEditorPage() {
                                             )}
                                         </g>
                                     ))}
+                                    {penPoints.length > 0 ? (
+                                        <g pointerEvents="none">
+                                            <polyline
+                                                points={[...penPoints, ...(penHoverPoint ? [penHoverPoint] : [])].map((point) => `${point.x},${point.y}`).join(" ")}
+                                                fill="none"
+                                                stroke="#1e88e5"
+                                                strokeWidth={3}
+                                                strokeDasharray="6 4"
+                                            />
+                                            {penPoints.map((point, idx) => (
+                                                <circle
+                                                    key={`pen-point-${idx}`}
+                                                    cx={point.x}
+                                                    cy={point.y}
+                                                    r={idx === 0 ? 7 : 5}
+                                                    fill={idx === 0 ? "#ef6c00" : "#7e57c2"}
+                                                    stroke="#ffffff"
+                                                    strokeWidth={2}
+                                                />
+                                            ))}
+                                        </g>
+                                    ) : null}
                                     {marquee ? (
                                         <rect
                                             x={Math.min(marquee.startX, marquee.currentX)}
@@ -1481,15 +1780,36 @@ export default function SvgPathEditorPage() {
                             </Paper>
 
                             <Stack direction="row" spacing={1} flexWrap="wrap">
-                                <TextField select label="Add" size="small" value="" onChange={(e) => addShape(e.target.value as ShapeType)} sx={{ minWidth: 130 }}>
+                                <TextField
+                                    select
+                                    label="Add"
+                                    size="small"
+                                    value=""
+                                    onChange={(e) => {
+                                        const value = e.target.value;
+                                        if (value === "path-quadratic") {
+                                            addPathPreset("quadratic");
+                                            return;
+                                        }
+                                        if (value === "path-polyline") {
+                                            addPathPreset("polyline");
+                                            return;
+                                        }
+                                        addShape(value as ShapeType);
+                                    }}
+                                    sx={{ minWidth: 160 }}
+                                >
                                     <MenuItem value="rect">Rectangle</MenuItem>
                                     <MenuItem value="square">Square</MenuItem>
                                     <MenuItem value="circle">Circle</MenuItem>
                                     <MenuItem value="ellipse">Ellipse</MenuItem>
                                     <MenuItem value="triangle">Triangle</MenuItem>
                                     <MenuItem value="octagon">Octagon</MenuItem>
+                                    <MenuItem value="polygon">Polygon</MenuItem>
                                     <MenuItem value="line">Line</MenuItem>
                                     <MenuItem value="path">Path</MenuItem>
+                                    <MenuItem value="path-quadratic">Path (Quadratic)</MenuItem>
+                                    <MenuItem value="path-polyline">Path (Polyline)</MenuItem>
                                     <MenuItem value="text">Text</MenuItem>
                                 </TextField>
                             </Stack>
@@ -1509,6 +1829,16 @@ export default function SvgPathEditorPage() {
                                         <TextField label="Radius" size="small" type="number" value={selectedShape.radius} onChange={(e) => updateSelected({ radius: Math.max(1, Number(e.target.value) || 1) })} fullWidth />
                                         <TextField label="Rotation" size="small" type="number" value={selectedShape.rotation} onChange={(e) => updateSelected({ rotation: Number(e.target.value) || 0 })} fullWidth />
                                     </Stack>
+                                    {selectedShape.type === "polygon" ? (
+                                        <TextField
+                                            label="Sides"
+                                            size="small"
+                                            type="number"
+                                            value={selectedShape.polygonSides}
+                                            onChange={(e) => updateSelected({ polygonSides: Math.min(24, Math.max(3, Math.round(Number(e.target.value) || 3))) })}
+                                            fullWidth
+                                        />
+                                    ) : null}
                                     <TextField label="Fill" size="small" value={selectedShape.fill} onChange={(e) => updateSelected({ fill: e.target.value })} fullWidth />
                                     <TextField label="Stroke" size="small" value={selectedShape.stroke} onChange={(e) => updateSelected({ stroke: e.target.value })} fullWidth />
                                     <TextField label="Stroke Width" size="small" type="number" value={selectedShape.strokeWidth} onChange={(e) => updateSelected({ strokeWidth: Math.max(0, Number(e.target.value) || 0) })} fullWidth />
@@ -1521,7 +1851,22 @@ export default function SvgPathEditorPage() {
                                     ) : null}
 
                                     {selectedShape.type === "path" ? (
-                                        <TextField label="Path d" size="small" value={selectedShape.d} onChange={(e) => updateSelected({ d: e.target.value })} fullWidth multiline minRows={4} maxRows={8} />
+                                        <>
+                                            <TextField
+                                                select
+                                                label="Path Preset"
+                                                size="small"
+                                                value=""
+                                                onChange={(e) => applyPathPresetToSelected(e.target.value as PathPreset)}
+                                                fullWidth
+                                            >
+                                                <MenuItem value="" disabled>Choose preset</MenuItem>
+                                                <MenuItem value="blob">Blob</MenuItem>
+                                                <MenuItem value="quadratic">Quadratic</MenuItem>
+                                                <MenuItem value="polyline">Polyline</MenuItem>
+                                            </TextField>
+                                            <TextField label="Path d" size="small" value={selectedShape.d} onChange={(e) => updateSelected({ d: e.target.value })} fullWidth multiline minRows={4} maxRows={8} />
+                                        </>
                                     ) : null}
                                 </>
                             ) : (

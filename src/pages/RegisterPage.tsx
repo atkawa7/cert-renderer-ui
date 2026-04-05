@@ -12,12 +12,18 @@ export default function RegisterPage() {
     const [username, setUsername] = useState(searchParams.get("username") || "");
     const [password, setPassword] = useState("");
     const [invitationToken, setInvitationToken] = useState(searchParams.get("invitationToken") || "");
+    const [referralCode, setReferralCode] = useState(searchParams.get("ref") || searchParams.get("referralCode") || "");
     const [loading, setLoading] = useState(false);
 
     async function submit() {
         setLoading(true);
         try {
-            await register({ username, password, invitationToken: invitationToken.trim() || undefined });
+            await register({
+                username,
+                password,
+                invitationToken: invitationToken.trim() || undefined,
+                referralCode: referralCode.trim() || undefined,
+            });
             await ensureActiveWorkspace();
             notifications.success("Account created");
             navigate("/templates", { replace: true });
@@ -62,6 +68,13 @@ export default function RegisterPage() {
                         size="small"
                         value={invitationToken}
                         onChange={(e) => setInvitationToken(e.target.value)}
+                    />
+                    <TextField
+                        fullWidth
+                        label="Referral Code (optional)"
+                        size="small"
+                        value={referralCode}
+                        onChange={(e) => setReferralCode(e.target.value)}
                     />
                     <AntBtn antType="primary" onClick={() => void submit()} disabled={loading}>
                         {loading ? "Creating..." : "Register"}

@@ -33,6 +33,7 @@ import type {
     TableCellStyle,
     TextBlock,
 } from "../../TemplateEditor";
+import { resolveAssetUrl } from "../../assetUrl";
 
 function clampNum(n: number, min: number, max: number) {
     return Math.max(min, Math.min(max, n));
@@ -131,10 +132,6 @@ function isDataUrl(value?: string): boolean {
     return /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(String(value ?? "").trim());
 }
 
-function isAbsoluteUrl(value?: string): boolean {
-    return /^(https?:)?\/\//i.test(String(value ?? "").trim());
-}
-
 function toImageRawSrc(value: unknown): string {
     if (typeof value === "string") return value.trim();
     if (!value || typeof value !== "object") return "";
@@ -180,8 +177,8 @@ export function resolveImageSrc(value: unknown, assetBaseUrl = ""): string {
     if (src.includes("<svg")) {
         return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(src)}`;
     }
-    if (isDataUrl(src) || isAbsoluteUrl(src)) return src;
-    return `${assetBaseUrl}${encodeURI(src)}`;
+    if (isDataUrl(src)) return src;
+    return resolveAssetUrl(src, assetBaseUrl);
 }
 
 export function BlockRenderer({

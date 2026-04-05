@@ -5,6 +5,7 @@ import CollectionsOutlinedIcon from "@mui/icons-material/CollectionsOutlined";
 import WorkspacePremiumOutlinedIcon from "@mui/icons-material/WorkspacePremiumOutlined";
 import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
 import ManageAccountsOutlinedIcon from "@mui/icons-material/ManageAccountsOutlined";
+import ShareOutlinedIcon from "@mui/icons-material/ShareOutlined";
 import MenuIcon from "@mui/icons-material/Menu";
 import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeOutlinedIcon from "@mui/icons-material/LightModeOutlined";
@@ -38,6 +39,7 @@ import ProfilePage from "./pages/ProfilePage";
 import AppSetupPage from "./pages/AppSetupPage";
 import AuditLogsPage from "./pages/AuditLogsPage";
 import UsersPage from "./pages/UsersPage";
+import ReferralsPage from "./pages/ReferralsPage";
 import SwaggerDocsPage from "./pages/SwaggerDocsPage";
 import AntBtn from "./components/AntBtn";
 import { currentUser, ensureActiveWorkspace, getAuthPreferences, getCurrentApiKey, getCurrentUserId, getCurrentWorkspaceId, listWorkspaces, setCurrentApiKey, setCurrentUserId, subscribeSessionChange, subscribeSqlStats, updateAuthPreferences, type SqlStats } from "./templateApi";
@@ -406,6 +408,15 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                         />
                     </ListItemButton>
                 ) : null}
+                {currentUserAdmin ? (
+                    <ListItemButton component={RouterLink} to="/referrals" onClick={() => setMobileNavOpen(false)}>
+                        <ShareOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
+                        <ListItemText
+                            primary="Referrals"
+                            primaryTypographyProps={{ fontSize: isCompactNav ? "0.9rem" : "1rem" }}
+                        />
+                    </ListItemButton>
+                ) : null}
             </List>
         </>
     );
@@ -503,6 +514,11 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                         {currentUserAdmin ? (
                             <MenuItem component={RouterLink} to="/users" onClick={() => setProfileMenuAnchor(null)}>
                                 Users
+                            </MenuItem>
+                        ) : null}
+                        {currentUserAdmin ? (
+                            <MenuItem component={RouterLink} to="/referrals" onClick={() => setProfileMenuAnchor(null)}>
+                                Referrals
                             </MenuItem>
                         ) : null}
                         <MenuItem component={RouterLink} to="/logout" onClick={() => setProfileMenuAnchor(null)}>
@@ -618,6 +634,7 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                     <Route path="/portal/certificates" element={<CredentialHolderCertificatesPage />} />
                     <Route path="/institutions" element={<InstitutionsPage />} />
                     <Route path="/users" element={<UsersPage />} />
+                    <Route path="/referrals" element={<ReferralsPage />} />
                     <Route path="/workspaces" element={<WorkspacesPage />} />
                     <Route path="/profile" element={<ProfilePage />} />
                     <Route path="/audits" element={<AuditLogsPage />} />

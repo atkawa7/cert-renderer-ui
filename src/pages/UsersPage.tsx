@@ -24,6 +24,8 @@ import {
 } from "@mui/material";
 import AntBtn from "../components/AntBtn";
 import {
+    adminMarkReferralFullPeriodCompleted,
+    adminMarkReferralSubscriptionPaid,
     createAdminUser,
     currentUser,
     disableAdminUser,
@@ -185,6 +187,30 @@ export default function UsersPage() {
         }
     }
 
+    async function markReferralPaid(user: AdminUser) {
+        setActionUserId(user.userId);
+        try {
+            await adminMarkReferralSubscriptionPaid(user.userId);
+            notifications.success("Referral milestone marked: subscription paid", { title: "Users" });
+        } catch (err: any) {
+            notifications.error(err?.message || "Failed to mark subscription-paid milestone", { title: "Users" });
+        } finally {
+            setActionUserId(null);
+        }
+    }
+
+    async function markReferralFullPeriod(user: AdminUser) {
+        setActionUserId(user.userId);
+        try {
+            await adminMarkReferralFullPeriodCompleted(user.userId);
+            notifications.success("Referral milestone marked: full period completed", { title: "Users" });
+        } catch (err: any) {
+            notifications.error(err?.message || "Failed to mark full-period milestone", { title: "Users" });
+        } finally {
+            setActionUserId(null);
+        }
+    }
+
     return (
         <Box sx={{ p: 3, maxWidth: 980, mx: "auto" }}>
             <Stack spacing={2}>
@@ -246,6 +272,20 @@ export default function UsersPage() {
                                                         disabled={actionUserId === user.userId}
                                                     >
                                                         {user.active ? "Disable" : "Enable"}
+                                                    </AntBtn>
+                                                    <AntBtn
+                                                        antType="default"
+                                                        onClick={() => void markReferralPaid(user)}
+                                                        disabled={actionUserId === user.userId}
+                                                    >
+                                                        Mark Paid
+                                                    </AntBtn>
+                                                    <AntBtn
+                                                        antType="default"
+                                                        onClick={() => void markReferralFullPeriod(user)}
+                                                        disabled={actionUserId === user.userId}
+                                                    >
+                                                        Mark Full Period
                                                     </AntBtn>
                                                 </Stack>
                                             </TableCell>

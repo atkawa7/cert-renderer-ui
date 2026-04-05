@@ -3,6 +3,7 @@ import { Alert, Box, CircularProgress, Stack, Typography } from "@mui/material";
 import AntBtn from "../components/AntBtn";
 import { useNavigate, useParams } from "react-router-dom";
 import { appConfig } from "../appConfig";
+import { resolveAssetUrl } from "../assetUrl";
 import { getDesignById, type DesignDetail } from "../templateApi";
 
 function formatDate(value?: string): string {
@@ -66,7 +67,7 @@ export default function DesignDetailsPage() {
                 <Stack spacing={2}>
                     <Box
                         component="img"
-                        src={`${appConfig.assetBaseUrl}${design.thumbnailUrl}`}
+                        src={resolveAssetUrl(design.thumbnailUrl, appConfig.assetBaseUrl)}
                         alt={design.name}
                         sx={{ width: "100%", maxHeight: 460, objectFit: "contain", bgcolor: "#f1f4f8", borderRadius: 2 }}
                     />
