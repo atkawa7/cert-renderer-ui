@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Alert, Box, Checkbox, CircularProgress, FormControlLabel, Stack, TextField, Typography } from "@mui/material";
+import { Alert, Box, Checkbox, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, Stack, TextField, Typography } from "@mui/material";
 import QRCode from "qrcode";
 import AntBtn from "../components/AntBtn";
 import {
@@ -14,11 +14,12 @@ import {
     getCurrentWorkspaceId,
     getTwoFactorStatus,
     listTwoFactorDevices,
-    regenerateTwoFactorBackupCodes,
-    removeTwoFactorDevice,
+    regenerateTwoFactorBackupCodesWithSudo,
+    removeTwoFactorDeviceWithSudo,
     type ReferralDashboard,
     type TwoFactorDevice,
     updateMyEmail,
+    verifySudoPassword,
     verifyMyEmail,
 } from "../templateApi";
 import { useNotifications } from "../components/NotificationsProvider";
@@ -52,6 +53,11 @@ export default function ProfilePage() {
     const [twoFactorBusy, setTwoFactorBusy] = useState(false);
     const [generatedBackupCodes, setGeneratedBackupCodes] = useState<string[]>([]);
     const [referralDashboard, setReferralDashboard] = useState<ReferralDashboard | null>(null);
+    const [sudoDialogOpen, setSudoDialogOpen] = useState(false);
+    const [sudoPassword, setSudoPassword] = useState("");
+    const [sudoBusy, setSudoBusy] = useState(false);
+    const [sudoError, setSudoError] = useState<string | null>(null);
+    const [pendingSudoAction, setPendingSudoAction] = useState<{ type: "remove-device"; deviceId: string } | { type: "regenerate-codes" } | null>(null);
 
     const apiKey = getCurrentApiKey() || "";
     const currentAuthMode = getCurrentAuthMode();
@@ -179,10 +185,10 @@ export default function ProfilePage() {
         }
     }
 
-    async function removeDevice(deviceId: string) {
+    async function removeDeviceWithSudo(deviceId: string, sudoToken: string) {
         setTwoFactorBusy(true);
         try {
-            await removeTwoFactorDevice(deviceId);
+            await removeTwoFactorDeviceWithSudo(deviceId, sudoToken);
             const [status, devices] = await Promise.all([getTwoFactorStatus(), listTwoFactorDevices()]);
             setTwoFactorEnabled(Boolean(status.enabled));
             setBackupCodesRemaining(status.backupCodesRemaining || 0);
@@ -195,10 +201,10 @@ export default function ProfilePage() {
         }
     }
 
-    async function regenerateCodes() {
+    async function regenerateCodesWithSudo(sudoToken: string) {
         setTwoFactorBusy(true);
         try {
-            const response = await regenerateTwoFactorBackupCodes();
+            const response = await regenerateTwoFactorBackupCodesWithSudo(sudoToken);
             setGeneratedBackupCodes(response.codes || []);
             const status = await getTwoFactorStatus();
             setBackupCodesRemaining(status.backupCodesRemaining || 0);
@@ -207,6 +213,34 @@ export default function ProfilePage() {
             notifications.error(err?.message || "Failed to regenerate backup codes", { title: "2FA" });
         } finally {
             setTwoFactorBusy(false);
+        }
+    }
+
+    function openSudoDialog(action: { type: "remove-device"; deviceId: string } | { type: "regenerate-codes" }) {
+        setPendingSudoAction(action);
+        setSudoPassword("");
+        setSudoError(null);
+        setSudoDialogOpen(true);
+    }
+
+    async function confirmSudoAction() {
+        if (!pendingSudoAction || !sudoPassword.trim()) return;
+        setSudoBusy(true);
+        setSudoError(null);
+        try {
+            const sudo = await verifySudoPassword(sudoPassword.trim());
+            if (pendingSudoAction.type === "remove-device") {
+                await removeDeviceWithSudo(pendingSudoAction.deviceId, sudo.token);
+            } else {
+                await regenerateCodesWithSudo(sudo.token);
+            }
+            setSudoDialogOpen(false);
+            setPendingSudoAction(null);
+            setSudoPassword("");
+        } catch (err: any) {
+            setSudoError(err?.message || "Sudo verification failed");
+        } finally {
+            setSudoBusy(false);
         }
     }
 
@@ -408,7 +442,7 @@ export default function ProfilePage() {
                                                 value={`${device.active ? "Active" : "Pending"} | Added ${new Date(device.createdAt).toLocaleString()}`}
                                                 InputProps={{ readOnly: true }}
                                             />
-                                            <AntBtn onClick={() => void removeDevice(device.deviceId)} disabled={twoFactorBusy}>
+                                            <AntBtn onClick={() => openSudoDialog({ type: "remove-device", deviceId: device.deviceId })} disabled={twoFactorBusy}>
                                                 Remove
                                             </AntBtn>
                                         </Stack>
@@ -416,7 +450,7 @@ export default function ProfilePage() {
                                 </Stack>
                             ) : null}
                             <Box>
-                                <AntBtn onClick={() => void regenerateCodes()} disabled={twoFactorBusy}>
+                                <AntBtn onClick={() => openSudoDialog({ type: "regenerate-codes" })} disabled={twoFactorBusy}>
                                     Regenerate Backup Codes
                                 </AntBtn>
                             </Box>
@@ -474,6 +508,34 @@ export default function ProfilePage() {
                     </Stack>
                 )}
             </Stack>
+            <Dialog open={sudoDialogOpen} onClose={() => !sudoBusy && setSudoDialogOpen(false)} maxWidth="xs" fullWidth>
+                <DialogTitle>Confirm Sensitive Action</DialogTitle>
+                <DialogContent>
+                    <Stack spacing={1.2} sx={{ pt: 1 }}>
+                        <Typography variant="body2" color="text.secondary">
+                            Enter your account password to continue.
+                        </Typography>
+                        <TextField
+                            fullWidth
+                            size="small"
+                            type="password"
+                            label="Password"
+                            value={sudoPassword}
+                            onChange={(e) => setSudoPassword(e.target.value)}
+                            disabled={sudoBusy}
+                        />
+                        {sudoError ? <Alert severity="error">{sudoError}</Alert> : null}
+                    </Stack>
+                </DialogContent>
+                <DialogActions>
+                    <AntBtn antType="text" onClick={() => setSudoDialogOpen(false)} disabled={sudoBusy}>
+                        Cancel
+                    </AntBtn>
+                    <AntBtn antType="primary" onClick={() => void confirmSudoAction()} disabled={sudoBusy || !sudoPassword.trim()}>
+                        {sudoBusy ? "Verifying..." : "Confirm"}
+                    </AntBtn>
+                </DialogActions>
+            </Dialog>
         </Box>
     );
 }

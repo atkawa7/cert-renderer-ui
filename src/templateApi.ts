@@ -373,6 +373,11 @@ export type TwoFactorBackupCodesResponse = {
     codes: string[];
 };
 
+export type AuthSudoResponse = {
+    token: string;
+    expiresAt: string;
+};
+
 export type AppSetupStatus = {
     setupEnabled: boolean;
     setupCompleted: boolean;
@@ -1978,8 +1983,29 @@ export async function removeTwoFactorDevice(deviceId: string): Promise<void> {
     });
 }
 
+export async function removeTwoFactorDeviceWithSudo(deviceId: string, sudoToken: string): Promise<void> {
+    await apiFetch<void>(`/auth/2fa/devices/${encodeURIComponent(deviceId)}`, {
+        method: "DELETE",
+        headers: { "X-Sudo-Token": sudoToken },
+    });
+}
+
 export async function regenerateTwoFactorBackupCodes(): Promise<TwoFactorBackupCodesResponse> {
     return await apiFetch<TwoFactorBackupCodesResponse>("/auth/2fa/backup-codes/regenerate", {
         method: "POST",
+    });
+}
+
+export async function regenerateTwoFactorBackupCodesWithSudo(sudoToken: string): Promise<TwoFactorBackupCodesResponse> {
+    return await apiFetch<TwoFactorBackupCodesResponse>("/auth/2fa/backup-codes/regenerate", {
+        method: "POST",
+        headers: { "X-Sudo-Token": sudoToken },
+    });
+}
+
+export async function verifySudoPassword(password: string): Promise<AuthSudoResponse> {
+    return await apiFetch<AuthSudoResponse>("/auth/sudo", {
+        method: "POST",
+        body: JSON.stringify({ password }),
     });
 }

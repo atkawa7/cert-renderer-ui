@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AppBar, Avatar, Box, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Drawer, IconButton, List, ListItemButton, ListItemText, Menu, MenuItem, Paper, Stack, Tab, Tabs, Toolbar, Tooltip, Typography, useMediaQuery, useTheme, type PaletteMode } from "@mui/material";
+import { AppBar, Avatar, Box, CircularProgress, Collapse, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Drawer, IconButton, List, ListItemButton, ListItemText, Menu, MenuItem, Paper, Stack, Tab, Tabs, Toolbar, Tooltip, Typography, useMediaQuery, useTheme, type PaletteMode } from "@mui/material";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import CollectionsOutlinedIcon from "@mui/icons-material/CollectionsOutlined";
 import WorkspacePremiumOutlinedIcon from "@mui/icons-material/WorkspacePremiumOutlined";
@@ -10,6 +10,8 @@ import MenuIcon from "@mui/icons-material/Menu";
 import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeOutlinedIcon from "@mui/icons-material/LightModeOutlined";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { Link as RouterLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Rnd } from "react-rnd";
 import BrowserTabTitle from "./components/BrowserTabTitle";
@@ -40,6 +42,7 @@ import AppSetupPage from "./pages/AppSetupPage";
 import AuditLogsPage from "./pages/AuditLogsPage";
 import UsersPage from "./pages/UsersPage";
 import ReferralsPage from "./pages/ReferralsPage";
+import MyReferralsPage from "./pages/MyReferralsPage";
 import SwaggerDocsPage from "./pages/SwaggerDocsPage";
 import AntBtn from "./components/AntBtn";
 import { currentUser, ensureActiveWorkspace, getAuthPreferences, getCurrentApiKey, getCurrentUserId, getCurrentWorkspaceId, listWorkspaces, setCurrentApiKey, setCurrentUserId, subscribeSessionChange, subscribeSqlStats, updateAuthPreferences, type SqlStats } from "./templateApi";
@@ -108,6 +111,7 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
     const isCompactNav = useMediaQuery(theme.breakpoints.down("lg"));
     const sidebarWidth = isCompactNav ? SIDEBAR_WIDTH_COMPACT : SIDEBAR_WIDTH;
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
+    const [myMenuOpen, setMyMenuOpen] = useState(location.pathname.startsWith("/portal/"));
     const [sidebarHidden, setSidebarHidden] = useState(false);
     const [, setSessionVersion] = useState(0);
     const [workspaceReady, setWorkspaceReady] = useState(false);
@@ -182,6 +186,12 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
             setSessionVersion((value) => value + 1);
         });
     }, []);
+
+    useEffect(() => {
+        if (location.pathname.startsWith("/portal/")) {
+            setMyMenuOpen(true);
+        }
+    }, [location.pathname]);
 
     useEffect(() => {
         if (!isDevMode) return;
@@ -385,13 +395,42 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                         primaryTypographyProps={{ fontSize: isCompactNav ? "0.9rem" : "1rem" }}
                     />
                 </ListItemButton>
-                <ListItemButton component={RouterLink} to="/portal/certificates" onClick={() => setMobileNavOpen(false)}>
-                    <WorkspacePremiumOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
+                <ListItemButton onClick={() => setMyMenuOpen((v) => !v)}>
+                    <ManageAccountsOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
                     <ListItemText
-                        primary="My Certificates"
+                        primary="My"
                         primaryTypographyProps={{ fontSize: isCompactNav ? "0.9rem" : "1rem" }}
                     />
+                    {myMenuOpen ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
                 </ListItemButton>
+                <Collapse in={myMenuOpen} timeout="auto" unmountOnExit>
+                    <List disablePadding>
+                        <ListItemButton
+                            component={RouterLink}
+                            to="/portal/certificates"
+                            onClick={() => setMobileNavOpen(false)}
+                            sx={{ pl: 4 }}
+                        >
+                            <WorkspacePremiumOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
+                            <ListItemText
+                                primary="Certificates"
+                                primaryTypographyProps={{ fontSize: isCompactNav ? "0.9rem" : "1rem" }}
+                            />
+                        </ListItemButton>
+                        <ListItemButton
+                            component={RouterLink}
+                            to="/portal/referrals"
+                            onClick={() => setMobileNavOpen(false)}
+                            sx={{ pl: 4 }}
+                        >
+                            <ShareOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
+                            <ListItemText
+                                primary="Referrals"
+                                primaryTypographyProps={{ fontSize: isCompactNav ? "0.9rem" : "1rem" }}
+                            />
+                        </ListItemButton>
+                    </List>
+                </Collapse>
                 <ListItemButton component={RouterLink} to="/institutions" onClick={() => setMobileNavOpen(false)}>
                     <BusinessOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
                     <ListItemText
@@ -510,6 +549,9 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                         </MenuItem>
                         <MenuItem component={RouterLink} to="/workspaces" onClick={() => setProfileMenuAnchor(null)}>
                             Workspaces
+                        </MenuItem>
+                        <MenuItem component={RouterLink} to="/portal/referrals" onClick={() => setProfileMenuAnchor(null)}>
+                            My Referrals
                         </MenuItem>
                         {currentUserAdmin ? (
                             <MenuItem component={RouterLink} to="/users" onClick={() => setProfileMenuAnchor(null)}>
@@ -632,6 +674,7 @@ export default function App({ themeMode, onToggleTheme }: AppProps) {
                     <Route path="/signature" element={<SignaturePage />} />
                     <Route path="/certificates" element={<CertificatesPage />} />
                     <Route path="/portal/certificates" element={<CredentialHolderCertificatesPage />} />
+                    <Route path="/portal/referrals" element={<MyReferralsPage />} />
                     <Route path="/institutions" element={<InstitutionsPage />} />
                     <Route path="/users" element={<UsersPage />} />
                     <Route path="/referrals" element={<ReferralsPage />} />
