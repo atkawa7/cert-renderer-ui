@@ -1,6 +1,7 @@
 // TemplateEditor.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+    Alert,
     Box,
     Dialog,
     DialogActions,
@@ -734,7 +735,7 @@ export default function TemplateEditor({
                                            sessionStorageKey,
                                            restoreLocalSession = true,
                                            onPersistSession,
-                                           persistDebounceMs = 1200,
+                                           persistDebounceMs = 60000,
                                            appSidebarHidden = false,
                                            onToggleAppSidebar,
                                        }: TemplateEditorProps) {
@@ -803,6 +804,10 @@ export default function TemplateEditor({
     const prevTemplateRef = useRef<Template>(deepClone(template));
     const suppressHistoryRef = useRef<boolean>(false);
     const skipFirstPersistRef = useRef<boolean>(true);
+    const persistVersionRef = useRef<number>(0);
+    const [backendPersistPending, setBackendPersistPending] = useState<boolean>(false);
+    const [backendPersistInFlight, setBackendPersistInFlight] = useState<boolean>(false);
+    const [backendPersistError, setBackendPersistError] = useState<string | null>(null);
     const [historyTick, setHistoryTick] = useState(0);
     const canUndo = useMemo(() => undoStackRef.current.length > 0, [historyTick]);
     const canRedo = useMemo(() => redoStackRef.current.length > 0, [historyTick]);
@@ -1174,6 +1179,8 @@ export default function TemplateEditor({
         try {
             setSavingExternal(true);
             await onSaveTemplate(deepClone(template));
+            setBackendPersistPending(false);
+            setBackendPersistError(null);
         } finally {
             setSavingExternal(false);
         }
@@ -1939,8 +1946,26 @@ export default function TemplateEditor({
             skipFirstPersistRef.current = false;
             return;
         }
+        const version = persistVersionRef.current + 1;
+        persistVersionRef.current = version;
+        setBackendPersistPending(true);
+        setBackendPersistError(null);
         const handle = window.setTimeout(() => {
-            void onPersistSession(deepClone(template));
+            const persistTemplate = deepClone(template);
+            void (async () => {
+                setBackendPersistInFlight(true);
+                try {
+                    await onPersistSession(persistTemplate);
+                    if (persistVersionRef.current === version) {
+                        setBackendPersistPending(false);
+                    }
+                } catch {
+                    setBackendPersistPending(true);
+                    setBackendPersistError("Saved locally. Backend sync will retry after your next change.");
+                } finally {
+                    setBackendPersistInFlight(false);
+                }
+            })();
         }, persistDebounceMs);
         return () => window.clearTimeout(handle);
     }, [template, onPersistSession, persistDebounceMs]);
@@ -1978,6 +2003,18 @@ export default function TemplateEditor({
                         },
                     }}
                 >
+                    {onPersistSession && (backendPersistPending || backendPersistInFlight || backendPersistError) ? (
+                        <Alert
+                            severity={backendPersistError ? "warning" : "info"}
+                            sx={{ mb: 1, py: 0.2 }}
+                        >
+                            {backendPersistError
+                                ? backendPersistError
+                                : backendPersistInFlight
+                                  ? "Changes are saved locally. Syncing to backend..."
+                                  : "Changes are saved locally. Backend save is scheduled in 1 minute."}
+                        </Alert>
+                    ) : null}
                     <Stack direction="row" spacing={0.5} alignItems="center" sx={{ flexWrap: "wrap", rowGap: 0.5 }}>
                         <Tooltip title={toolbarMinimized ? "Expand Toolbar" : "Minimize Toolbar"}>
                             <IconButton size="small" onClick={() => setToolbarMinimized((v) => !v)}>

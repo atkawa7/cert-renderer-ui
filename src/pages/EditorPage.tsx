@@ -449,6 +449,7 @@ export default function EditorPage({
                 }
                 restoreLocalSession={mode === "new"}
                 onPersistSession={handlePersistSession}
+                persistDebounceMs={60000}
                 appSidebarHidden={appSidebarHidden}
                 onToggleAppSidebar={onToggleAppSidebar}
             />
