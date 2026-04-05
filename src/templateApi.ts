@@ -22,10 +22,16 @@ export type TemplateDetail = {
 
 type PageResponse<T> = {
     content: T[];
-    number: number;
-    size: number;
-    totalElements: number;
-    totalPages: number;
+    number?: number;
+    size?: number;
+    totalElements?: number;
+    totalPages?: number;
+    page?: {
+        number?: number;
+        size?: number;
+        totalElements?: number;
+        totalPages?: number;
+    };
 };
 
 export type PagedResult<T> = {
@@ -36,6 +42,21 @@ export type PagedResult<T> = {
     totalPages: number;
     hasNext: boolean;
 };
+
+function resolvePageMeta<T>(data: PageResponse<T>, fallbackPage: number, fallbackSize: number) {
+    const meta = data.page ?? data;
+    const page = meta.number ?? fallbackPage;
+    const size = meta.size ?? fallbackSize;
+    const totalElements = meta.totalElements ?? 0;
+    const totalPages = meta.totalPages ?? 0;
+    return {
+        page,
+        size,
+        totalElements,
+        totalPages,
+        hasNext: page + 1 < totalPages,
+    };
+}
 
 export type DesignSummary = {
     id: string;
@@ -231,8 +252,66 @@ export type AdminUser = {
     active: boolean;
     admin: boolean;
     subscriptionTier: "FREE" | "PRO" | string;
+    referralCode?: string | null;
+    referralLink?: string | null;
     createdAt: string;
     updatedAt: string;
+};
+
+export type ReferralMilestone = "SIGNUP" | "SUBSCRIPTION_PAID" | "FULL_PERIOD_COMPLETED";
+export type ReferralPayoutStatus = "EARNED" | "PAID";
+
+export type ReferralEntry = {
+    referralId: string;
+    referredUserId: string;
+    referredUsername: string;
+    status: ReferralMilestone;
+    createdAt: string;
+    subscriptionPaidAt?: string | null;
+    fullPeriodCompletedAt?: string | null;
+};
+
+export type ReferralPayout = {
+    payoutId: string;
+    referralId: string;
+    referredUserId: string;
+    milestone: ReferralMilestone;
+    amountCents: number;
+    currency: string;
+    status: ReferralPayoutStatus;
+    earnedAt: string;
+    paidAt?: string | null;
+};
+
+export type ReferralDashboard = {
+    referralCode: string;
+    referralLink: string;
+    totalEarnedCents: number;
+    totalPaidCents: number;
+    currency: string;
+    referrals: ReferralEntry[];
+    payouts: ReferralPayout[];
+};
+
+export type AdminReferralStats = {
+    referrerUserId: string;
+    signupUsers: number;
+    subscriptionPaidUsers: number;
+    fullPeriodCompletedUsers: number;
+    earnedCents: number;
+    paidCents: number;
+    currency: string;
+};
+
+export type AdminReferralUser = {
+    referralId: string;
+    referredUserId: string;
+    referredUsername: string;
+    referredEmail?: string | null;
+    status: ReferralMilestone;
+    createdAt: string;
+    subscriptionPaidAt?: string | null;
+    fullPeriodCompletedAt?: string | null;
 };
 
 export type AuthEmailStatus = {
@@ -974,13 +1053,14 @@ export async function listDesigns(
     params.set("page", String(page));
     params.set("size", String(size));
     const data = await apiFetch<PageResponse<DesignSummary>>(`/designs?${params.toString()}`);
+    const pageMeta = resolvePageMeta(data, page, size);
     return {
         items: data.content ?? [],
-        page: data.number ?? page,
-        size: data.size ?? size,
-        totalElements: data.totalElements ?? 0,
-        totalPages: data.totalPages ?? 0,
-        hasNext: (data.number ?? page) + 1 < (data.totalPages ?? 0),
+        page: pageMeta.page,
+        size: pageMeta.size,
+        totalElements: pageMeta.totalElements,
+        totalPages: pageMeta.totalPages,
+        hasNext: pageMeta.hasNext,
     };
 }
 
@@ -1357,13 +1437,14 @@ export async function listCertificateBatches(params?: {
     query.set("page", String(params?.page ?? 0));
     query.set("size", String(params?.size ?? 50));
     const data = await apiFetch<PageResponse<CertificateBatchSummary>>(`/certificate-batches?${query.toString()}`);
+    const pageMeta = resolvePageMeta(data, params?.page ?? 0, params?.size ?? 50);
     return {
         items: data.content ?? [],
-        page: data.number ?? 0,
-        size: data.size ?? 50,
-        totalElements: data.totalElements ?? 0,
-        totalPages: data.totalPages ?? 0,
-        hasNext: (data.number ?? 0) + 1 < (data.totalPages ?? 0),
+        page: pageMeta.page,
+        size: pageMeta.size,
+        totalElements: pageMeta.totalElements,
+        totalPages: pageMeta.totalPages,
+        hasNext: pageMeta.hasNext,
     };
 }
 
@@ -1496,17 +1577,18 @@ export async function listAuditEvents(params?: {
     query.set("page", String(params?.page ?? 0));
     query.set("size", String(params?.size ?? 50));
     const data = await apiFetch<PageResponse<AuditEventSummary>>(`/audits?${query.toString()}`);
+    const pageMeta = resolvePageMeta(data, params?.page ?? 0, params?.size ?? 50);
     return {
         items: data.content ?? [],
-        page: data.number ?? 0,
-        size: data.size ?? 50,
-        totalElements: data.totalElements ?? 0,
-        totalPages: data.totalPages ?? 0,
-        hasNext: (data.number ?? 0) + 1 < (data.totalPages ?? 0),
+        page: pageMeta.page,
+        size: pageMeta.size,
+        totalElements: pageMeta.totalElements,
+        totalPages: pageMeta.totalPages,
+        hasNext: pageMeta.hasNext,
     };
 }
 
-export async function register(payload: { username: string; password: string; invitationToken?: string; captchaToken?: string }): Promise<AuthResponse> {
+export async function register(payload: { username: string; password: string; invitationToken?: string; referralCode?: string; captchaToken?: string }): Promise<AuthResponse> {
     const response = await trackedFetch(`${API_BASE}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1645,6 +1727,12 @@ export async function currentUser(): Promise<AuthUser> {
         throw new Error(await parseErrorMessage(response, `Auth check failed (${response.status})`));
     }
     return (await response.json()) as AuthUser;
+}
+
+export async function getMyReferralDashboard(): Promise<ReferralDashboard> {
+    return await apiFetch<ReferralDashboard>("/referrals/me", {
+        headers: workspaceHeaders(false),
+    });
 }
 
 export async function updateMyEmail(email: string): Promise<AuthEmailStatus> {
@@ -1829,6 +1917,37 @@ export async function enableAdminUser(userId: string): Promise<AdminUser> {
     return await apiFetch<AdminUser>(`/admin/users/${encodeURIComponent(userId)}/enable`, {
         method: "POST",
     });
+}
+
+export async function adminMarkReferralSubscriptionPaid(userId: string): Promise<void> {
+    await apiFetch<void>(`/admin/referrals/${encodeURIComponent(userId)}/mark-subscription-paid`, {
+        method: "POST",
+    });
+}
+
+export async function adminMarkReferralFullPeriodCompleted(userId: string): Promise<void> {
+    await apiFetch<void>(`/admin/referrals/${encodeURIComponent(userId)}/mark-full-period-completed`, {
+        method: "POST",
+    });
+}
+
+export async function listAdminReferralStats(): Promise<AdminReferralStats[]> {
+    return await apiFetch<AdminReferralStats[]>("/admin/referrals/stats");
+}
+
+export async function listAdminReferralUsers(
+    referrerUserId: string,
+    milestone: ReferralMilestone = "SIGNUP",
+    fromDate?: string,
+    toDate?: string
+): Promise<AdminReferralUser[]> {
+    const params = new URLSearchParams();
+    params.set("milestone", milestone);
+    if (fromDate?.trim()) params.set("fromDate", fromDate.trim());
+    if (toDate?.trim()) params.set("toDate", toDate.trim());
+    return await apiFetch<AdminReferralUser[]>(
+        `/admin/referrals/${encodeURIComponent(referrerUserId)}/users?${params.toString()}`
+    );
 }
 
 export async function getTwoFactorStatus(): Promise<TwoFactorStatus> {

@@ -22,8 +22,11 @@ import AddCircleIcon from "@mui/icons-material/AddCircle";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import { useConfirm } from "../components/ConfirmDialogProvider";
 import { appConfig } from "../appConfig";
+import { resolveAssetUrl } from "../assetUrl";
 import { createDesign, deleteDesignById, listDesigns, type DesignSummary } from "../templateApi";
 import type { Template } from "../TemplateEditor";
+
+const DEFAULT_PAGE_SIZE = 12;
 
 type DesignFormState = {
     name: string;
@@ -81,7 +84,7 @@ function DesignImagePreviewDialog({ imageUrl, title, onClose }: { imageUrl: stri
                 {imageUrl && (
                     <Box
                         component="img"
-                        src={`${appConfig.assetBaseUrl}${imageUrl}`}
+                        src={resolveAssetUrl(imageUrl, appConfig.assetBaseUrl)}
                         alt={title}
                         sx={{ width: "100%", maxHeight: "75vh", objectFit: "contain", display: "block" }}
                     />
@@ -112,7 +115,7 @@ function DesignCardItem({
                 <CardMedia
                     component="img"
                     height="110"
-                    image={`${appConfig.assetBaseUrl}${design.thumbnailUrl}`}
+                    image={resolveAssetUrl(design.thumbnailUrl, appConfig.assetBaseUrl)}
                     alt={design.name}
                     onClick={onPreview}
                     sx={{ objectFit: "cover", bgcolor: "#f1f4f8", cursor: "zoom-in", display: "block" }}
@@ -157,9 +160,9 @@ export default function DesignsPage() {
     const [scope, setScope] = useState<"workspace" | "all">("workspace");
     const [query, setQuery] = useState("");
     const [page, setPage] = useState(0);
-    const [size, setSize] = useState(16);
+    const [size] = useState(DEFAULT_PAGE_SIZE);
     const [totalPages, setTotalPages] = useState(0);
-    const sizeRef = useRef(16);
+    const sizeRef = useRef(DEFAULT_PAGE_SIZE);
     const mountedRef = useRef(false);
     const [loading, setLoading] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -192,35 +195,9 @@ export default function DesignsPage() {
         }
     }
 
-    function computePageSize(): number {
-        const CARD_W = 200;
-        const CARD_H = 150;
-        const GAP = 16;
-        const OVERHEAD = 230;
-        const containerW = window.innerWidth - 48;
-        const cols = Math.max(1, Math.floor((containerW + GAP) / (CARD_W + GAP)));
-        const rows = Math.max(1, Math.floor((window.innerHeight - OVERHEAD + GAP) / (CARD_H + GAP)));
-        return cols * rows;
-    }
-
     useEffect(() => {
-        const initial = computePageSize();
-        sizeRef.current = initial;
-        setSize(initial);
         mountedRef.current = true;
-        void loadDesignPage(0, "", initial);
-
-        function onResize() {
-            const next = computePageSize();
-            if (next !== sizeRef.current) {
-                sizeRef.current = next;
-                setSize(next);
-                void loadDesignPage(0, query, next, scope);
-            }
-        }
-
-        window.addEventListener("resize", onResize);
-        return () => window.removeEventListener("resize", onResize);
+        void loadDesignPage(0, "", DEFAULT_PAGE_SIZE);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
